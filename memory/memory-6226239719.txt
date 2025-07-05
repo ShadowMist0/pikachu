@@ -1,0 +1,13 @@
+- Name: Sifat
+- Age: 26
+- Profession: Student
+- Country: Bangladesh
+- University: RUET
+- Subject: CSE
+- Interest:  Fucking Girl
+- Chemistry score: 18/20
+- EEE score: Bad
+- Working with: Gemini API
+- Learning: Python for Telegram bot
+- Birthday: July 1st
+- Likes: Fighting (verbal sparring, wit, and debate)
