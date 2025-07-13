@@ -39,6 +39,9 @@ app = Flask(__name__)
 @app.route('/')
 def home():
     return "Bot is runnig", 200
+def run_web():
+    app.run(host='0.0.0.0', port=5000)
+threading.Thread(target=run_web).start()
 
 
 
@@ -61,14 +64,6 @@ try:
 except Exception as e:
     print(f"Error Code -{e}")
 
-if TOKEN:
-    try:
-        Application = ApplicationBuilder().token(TOKEN).build()
-    except Exception as e:
-        print(f"Error building telegram application.\n\nError Code-{e}")
-        Application = None
-else:
-    Application = None
 
 #all registered user
 def load_all_user():
@@ -90,6 +85,7 @@ FIREBASE_URL = 'https://last-197cd-default-rtdb.firebaseio.com/routines.json'
 
 
 #function for webhook
+Application = None
 @app.route(f"/webhook/{TOKEN}", methods=["POST"])
 def webhook():
     if Application is not None:
