@@ -4,6 +4,7 @@ import time
 import html
 import sqlite3
 import asyncio
+import warnings
 import threading
 import requests
 from glob import glob
@@ -23,13 +24,18 @@ from telegram.ext import(
     MessageHandler,
     filters,
     ConversationHandler,
-    CallbackQueryHandler
+    CallbackQueryHandler,
 )
 from telegram.constants import ChatAction
 from telegram.error import RetryAfter, TimedOut
+from telegram._utils.warnings import PTBUserWarning
 from google import genai
 from google.genai import types
 
+
+
+#code to ignore warnig about per_message in conv handler
+warnings.filterwarnings("ignore",category=PTBUserWarning)
 
 
 
@@ -53,14 +59,15 @@ channel_id = -1002575042671
 #Loading all gemini model and selecting a model
 try:
     with open("info/gemini_model.txt" , "r") as f:
-        gemini_model_list = [line.strip() for line in f.readlines() if line.strip()]
+        gemini_model_list = tuple(line.strip() for line in f.readlines() if line.strip())
 except Exception as e:
     print(f"Error Code -{e}")
 
 #loading the bot api
 try:
     with open("API/bot_api.txt", "r") as f:
-        TOKEN = f.read()
+        TOKEN_LIST = tuple(line.strip() for line in f.readlines() if line.strip())
+        TOKEN = TOKEN_LIST[0]
 except Exception as e:
     print(f"Error Code -{e}")
 
@@ -72,32 +79,42 @@ def load_all_user():
         cursor = conn.cursor()
         cursor.execute("SELECT user_id from users")
         rows = cursor.fetchall()
-        users = {row[0] for row in rows}
+        users = tuple(row[0] for row in rows)
         conn.close()
         return users
     except Exception as e:
         print(f"Error in load_all_user fnction.\n\n Error code -{e}")
 all_users = load_all_user()
 
+
+#function to load all admin
+def load_admin():
+    try:
+        conn = sqlite3.connect("admin/admin.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT user_id from admin")
+        rows = cursor.fetchall()
+        admins = tuple(row[0] for row in rows)
+        conn.close()
+        return admins
+    except Exception as e:
+        print(f"Error in load_admin function.\n\nError Code - {e}")
+all_admins = load_admin()
+
+
 #ct routine url for cse sec c
 FIREBASE_URL = 'https://last-197cd-default-rtdb.firebaseio.com/routines.json'
 
 
 
-#function for webhook
-Application = None
-@app.route(f"/webhook/{TOKEN}", methods=["POST"])
-def webhook():
-    if Application is not None:
-        return Application.update_webhook(request)
-    return "Bot is not ready", 503
+# #function for webhook
+# Application = None
+# @app.route(f"/webhook/{TOKEN}", methods=["POST"])
+# def webhook():
+#     if Application is not None:
+#         return Application.update_webhook(request)
+#     return "Bot is not ready", 503
 
-
-def run_web():
-    port = int(os.environ.get("PORT", 5000))  # Render sets $PORT automatically
-    app.run(host='0.0.0.0', port=port)
-
-threading.Thread(target=run_web).start()
 
 
 
@@ -132,32 +149,18 @@ def add_escape_character(text):
 
 
 #function to get settings
-def get_settings(user_id,user_name):
+def get_settings(user_id):
     conn = sqlite3.connect("settings/user_settings.db")
     cursor = conn.cursor()
-    cursor.execute("""
-        INSERT OR IGNORE INTO user_settings (
-            id,
-            name,
-            model,
-            thinking_budget,
-            temperature,
-            streaming,
-            persona
-        )
-        VALUES(?,?,?,?,?,?,?)
-        """,
-        (user_id,user_name,1,0,0.7,0,0)
-    )
-    conn.commit()
     cursor.execute("SELECT * FROM user_settings WHERE id = ?", (user_id,))
     row = cursor.fetchone()
+    conn.commit()
     conn.close()
 
     if row:
-        return list(row)
+        return row
     else:
-        return [user_id, user_name, 1, 0, 0.7, 0, 0]
+        return None
 
 
 #gemini response for stream on
@@ -200,8 +203,9 @@ def gemini_non_stream(user_message, api, settings):
 #A function to delete n times convo from conversation history
 def delete_n_convo(user_id, n):
     try:
-        if user_id == 100:
-            with open(f"Conversation/conversation-group.txt", "r+", encoding="utf-8") as f:
+        if user_id < 0:
+            group_id = user_id
+            with open(f"Conversation/conversation-group-{group_id}.txt", "r+", encoding="utf-8") as f:
                 data = f.read()
                 data = data.split("You: ")
                 if len(data) >= n+1:
@@ -226,7 +230,7 @@ def delete_n_convo(user_id, n):
 #creating memory, SPECIAL_NOTE: THIS FUNCTION ALWAYS REWRITE THE WHOLE MEMORY, SO THE MEMORY SIZE IS LIMITED TO THE RESPONSE SIZE OF GEMINI, IT IS DONE THIS WAY BECAUSE OTHERWISE THERE WILL BE DUPLICATE DATA 
 async def create_memory(api, user_id):
     try:
-        if user_id != 100:
+        if user_id > 0:
             with open("persona/memory_persona.txt", "r", encoding="utf-8") as f:
                 instruction = f.read()
             with open(f"memory/memory-{user_id}.txt", "a+", encoding = "utf-8") as f:
@@ -239,15 +243,16 @@ async def create_memory(api, user_id):
                 data += "\n\n***CONVERSATION HISTORY***"
                 data += f.read()
                 data += "\n\n***END OF CONVERSATION***\n\n"
-        elif user_id == 100:
+        elif user_id < 0:
+            group_id = user_id
             with open("persona/memory_persona.txt", "r", encoding="utf-8") as f:
                 instruction = f.read()
-            with open(f"memory/memory-group.txt", "a+", encoding = "utf-8") as f:
+            with open(f"memory/memory-group-{group_id}.txt", "a+", encoding = "utf-8") as f:
                 f.seek(0)
                 data = "***PREVIOUS MEMORY***\n\n"
                 data += f.read()
                 data += "\n\n***END OF MEMORY***\n\n"
-            with open(f"Conversation/conversation-group.txt", "a+", encoding = "utf-8") as f:
+            with open(f"Conversation/conversation-group-{group_id}.txt", "a+", encoding = "utf-8") as f:
                 f.seek(0)
                 data += "\n\n***CONVERSATION HISTORY***"
                 data += f.read()
@@ -262,14 +267,15 @@ async def create_memory(api, user_id):
                 system_instruction =  instruction,
             ),
         )
-        if user_id != 100:
+        if user_id > 0:
             with open(f"memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
                 f.write(response.text)
             delete_n_convo(user_id, 10)
-        elif user_id == 100:
-            with open(f"memory/memory-group.txt", "a+", encoding="utf-8") as f:
+        elif user_id < 0:
+            group_id = user_id
+            with open(f"memory/memory-group-{group_id}.txt", "a+", encoding="utf-8") as f:
                 f.write(response.text)
-            delete_n_convo(100,100)
+            delete_n_convo(group_id,100)
     except Exception as e:
         print(f"Failed to create memory\n Error code-{e}")
 
@@ -298,6 +304,7 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                     asyncio.create_task(background_memory_creation(update, content, user_id))
             return data
         if update.message.chat.type != "private":
+            group_id = update.effective_chat.id
             data = "***RULES***\n"
             with open("info/group-rules.txt", "r" , encoding="utf-8") as f:
                 data += f.read()
@@ -307,11 +314,11 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 data += f.read()
                 data += "******END OF TRAINING DATA******\n\n"
             data += "***MEMORY***\n"
-            with open(f"memory/memory-group.txt", "a+", encoding="utf-8") as f:
+            with open(f"memory/memory-group-{group_id}.txt", "a+", encoding="utf-8") as f:
                 f.seek(0)
                 data += f.read()
                 data += "\n***END OF MEMORY***\n\n\n"
-            with open(f"Conversation/conversation-group.txt", "a+", encoding="utf-8") as f:
+            with open(f"Conversation/conversation-group-{group_id}.txt", "a+", encoding="utf-8") as f:
                 f.seek(0)
                 data += "***CONVERSATION HISTORY***\n\n"
                 data += f.read()
@@ -337,8 +344,9 @@ def save_conversation(user_message : str , gemini_response:str , user_id:int) ->
 #function to save group conversation
 def save_group_conversation(update : Update,user_message, gemini_response):
     try:
+        group_id = update.effective_chat.id
         name = update.effective_user.first_name or "X" +" "+ update.effective_user.last_name or "X"
-        with open(f"Conversation/conversation-group.txt", "a+", encoding="utf-8") as f:
+        with open(f"Conversation/conversation-group-{group_id}.txt", "a+", encoding="utf-8") as f:
             f.write(f"\n{name}: {user_message}\nYou: {gemini_response}\n")
     except Exception as e:
         print(f"Error in saving conversation. \n\n Error Code - {e}")
@@ -615,8 +623,8 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
             for chunk in response:
                 chunks += chunk.text
                 if chunk.text is not None and chunk.text.strip() and len(buffer+chunk.text)<4080:
-                    buffer += chunk.text
-                    sent_message += chunk.text
+                    buffer += chunk.text if chunk.text else "."
+                    sent_message += chunk.text if chunk.text else "."
                     if len(chunks) > 500:
                         for i in range(0,5):
                             try:
@@ -738,8 +746,11 @@ async def start(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             await update.message.reply_text("Hi there, I am your personal assistant. If you need any help feel free to ask me.", reply_markup=reply_markup)
             return
         if user_id not in users:
-            await update.message.reply_text("You are not registerd yet.", reply_markup=reply_markup)
-            all_users = load_all_user()
+            keyboard = [
+                [InlineKeyboardButton("Register", callback_data="c_register"), InlineKeyboardButton("Cancel", callback_data="cancel")]
+            ]
+            markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("You are not registerd yet.", reply_markup=markup)
     except Exception as e:
         print(f"Error in start function. \n Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in start function \n\nError Code -{e}")
@@ -749,19 +760,31 @@ async def start(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
 #function for all other messager that are directly send to bot without any command
 async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        if update.message:
+        bot_name_obj = await content.bot.get_my_name()
+        bot_name = bot_name_obj.name.lower()
+        user_id = update.effective_chat.id
+        if user_id not in all_users:
+            keyboard = [
+                [InlineKeyboardButton("Register", callback_data="c_register"), InlineKeyboardButton("Cancel", callback_data="cancel")]
+            ]
+            markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("You are not registered.", reply_markup=markup)
+            return
+        user_name = f"{update.effective_user.first_name or update.effective_user.last_name or "Unknown"}".strip()
+        user_message = (update.message.text or "...").strip()
+        if (update.message and update.message.chat.type == "private") or (update.message.chat.type != "private" and (f"@{bot_name}" in user_message.lower() or f"{bot_name}" in user_message.lower())):
             await update.message.chat.send_action(action = ChatAction.TYPING)
         gemini_api_keys = load_gemini_api()
-        user_id = update.effective_user.id
-        user_name = f"{update.effective_user.first_name or "X"} {update.effective_user.last_name or "X"}".strip()
-        user_message = (update.message.text or "...").strip()
         if user_message == "ROUTINE":
             await routine_handler(update, content)
+            return
         elif user_message == "SETTINGS":
             await handle_settings(update, content)
             await update.message.delete()
+            return
         elif user_message == "CT":
             await handle_ct(update, content)
+            return
         elif user_message == "RESOURCES":
             keyboard = [
                 [InlineKeyboardButton("Drive", url="https://drive.google.com/drive/folders/1xbyCdj3XQ9AsCCF8ImI13HCo25JEhgUJ"), InlineKeyboardButton("Syllabus", url="https://drive.google.com/file/d/1pVF40-E0Oe8QI-EZp9S7udjnc0_Kquav/view?usp=drive_link")],
@@ -771,10 +794,17 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             resource_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text("All the resources available for CSE SECTION C", reply_markup=resource_markup, parse_mode="Markdown")
             await update.message.delete()
+            return
+        if update.message.chat.type != "private" and (f"@{bot_name}" not in user_message.lower() or f"{bot_name}" not in user_message.lower()):
+            return
         else:
-            settings = get_settings(user_id, user_name)
+            settings = get_settings(user_id)
+            if not settings:
+                update.message.reply_text("You are not registered.")
+                return
             if update.message.chat.type != "private":
-                settings = [100,"group",1,0,0.7,0,4]
+                group_id = update.effective_chat.id
+                settings = {group_id,"group",1,0,0.7,0,4, None}
             prompt = await create_prompt(update, content, user_message, user_id)
             for i in range(len(gemini_api_keys)):
                 try:
@@ -1023,8 +1053,6 @@ async def handle_settings(update : Update, content : ContextTypes.DEFAULT_TYPE) 
         ]
         settings_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("Bot Configuration Menu:", reply_markup=settings_markup)
-        user_name = f"{update.effective_user.first_name or "X"} {update.effective_user.last_name or "X"}".strip()
-        settings = get_settings(update.effective_user.id, user_name)
     except Exception as e:
         await send_to_channel(update, content, channel_id, f"Error in handle_settings function \n\nError Code -{e}")
         print(f"Error in handle_settings function. \n\n Error Code -{e}")
@@ -1058,9 +1086,10 @@ async def background_memory_creation(update: Update,content,user_id):
             with open(f"memory/memory-{user_id}.txt", "rb") as file:
                 await content.bot.send_document(chat_id=channel_id, document = file, caption = "Heres the memory file.")
         elif update.message.chat.type != "private":
-            await create_memory(load_gemini_api()[-1], 100)
+            group_id = update.effective_chat.id
+            await create_memory(load_gemini_api()[-1], group_id)
             await send_to_channel(update, content, channel_id, "Created memory for group")
-            with open(f"memory/memory-group.txt", "r", encoding="utf-8") as f:
+            with open(f"memory/memory-group-{group_id}.txt", "r", encoding="utf-8") as f:
                 await content.bot.send_document(chat_id=channel_id, document=file, caption="Memory for the group.")
     except Exception as e:
         print(f"Error in background_memory_creation function.\n\n Error Code -{e}")
@@ -1074,12 +1103,11 @@ async def background_memory_creation(update: Update,content,user_id):
 #a function for admin call
 async def admin_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        if update.effective_user.id == 6226239719 :
+        user_id = update.effective_user.id
+        if user_id in all_admins:
             keyboard = [
-                [InlineKeyboardButton("Circulate Routine", callback_data="c_circulate_routine")],
-                [InlineKeyboardButton("Circulate Message", callback_data="c_circulate_message")],
-                [InlineKeyboardButton("Toggle Routine", callback_data="c_toggle_routine")],
-                [InlineKeyboardButton("Manage Admin", callback_data="c_manage_admin")],
+                [InlineKeyboardButton("Circulate Routine", callback_data="c_circulate_routine"), InlineKeyboardButton("Circulate Message", callback_data="c_circulate_message")],
+                [InlineKeyboardButton("Toggle Routine", callback_data="c_toggle_routine"), InlineKeyboardButton("Manage Admin", callback_data="c_manage_admin")],
                 [InlineKeyboardButton("cancel", callback_data="cancel")]
             ]
             admin_markup = InlineKeyboardMarkup(keyboard)
@@ -1097,6 +1125,7 @@ async def admin_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) ->
 async def help(update: Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
         keyboard = [
+            [InlineKeyboardButton("Admin Help", callback_data="c_admin_help")],
             [InlineKeyboardButton("Read Documentation", url = "https://github.com/sifat1996120/Phantom_bot")]
         ]
         help_markup = InlineKeyboardMarkup(keyboard)
@@ -1109,173 +1138,657 @@ async def help(update: Update, content : ContextTypes.DEFAULT_TYPE) -> None:
 
 #function to take message for circulate message
 async def message_taker(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
-    keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
-    mt_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.edit_message_text("Enter the message here:", reply_markup=mt_markup)
-    return "CM"
+    try:
+        keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
+        mt_markup = InlineKeyboardMarkup(keyboard)
+        await update.callback_query.edit_message_text("Enter the message here:", reply_markup=mt_markup)
+        return "CM"
+    except Exception as e:
+        print(f"Error in message_taker function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
 
 
 #function to take password for admin function
-async def password_taker(update: Update, content:ContextTypes.DEFAULT_TYPE) -> None:
-    Keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
-    pt_markup = InlineKeyboardMarkup(Keyboard)
-    msg = await update.callback_query.edit_message_text("Password for Admin:", reply_markup=pt_markup)
-    content.user_data["pt_message_id"] = msg.message_id
-    return "MA"
+async def admin_password_taker(update: Update, content:ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        Keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
+        pt_markup = InlineKeyboardMarkup(Keyboard)
+        msg = await update.callback_query.edit_message_text("Password for Admin:", reply_markup=pt_markup)
+        content.user_data["pt_message_id"] = msg.message_id
+        return "MA"
+    except Exception as e:
+        print(f"Error in admin_password_taker function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
 
 
 #function to create background task for circulate message
 async def handle_circulate_message(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
-    asyncio.create_task(circulate_message(update, content))
-    return ConversationHandler.END
+    try:
+        asyncio.create_task(circulate_message(update, content))
+        return ConversationHandler.END
+    except Exception as e:
+        print(f"Error in handle_circulate_message function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
 
 
 #function to manage admin
 async def manage_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
-    msg_id = content.user_data.get("pt_message_id")
     try:
-        await content.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
-    except:
-        pass
-    given_password = update.message.text.strip()
-    with open("admin/admin_password.txt", "r") as file:
-        password = file.read().strip()
-    if password != given_password:
-        await update.message.reply_text("Wrong Password.")
+        msg_id = content.user_data.get("pt_message_id")
+        try:
+            await content.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
+        except:
+            pass
+        given_password = update.message.text.strip()
+        with open("admin/admin_password.txt", "r") as file:
+            password = file.read().strip()
+        if password != given_password:
+            await update.message.reply_text("Wrong Password.")
+            return ConversationHandler.END
+        else:
+            keyboard = [
+                [InlineKeyboardButton("See All Admin", callback_data="see_all_admin")],
+                [InlineKeyboardButton("Add Admin", callback_data="add_admin"), InlineKeyboardButton("Delete Admin", callback_data="delete_admin")],
+                [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
+            ]
+            ma_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("Please chose an option:", reply_markup=ma_markup)
+            await update.message.delete()
+            return "ADMIN_ACTION"
+    except Exception as e:
+        print(f"Error in manage_admin function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
         return ConversationHandler.END
-    else:
-        keyboard = [
-            [InlineKeyboardButton("See All Admin", callback_data="see_all_admin")],
-            [InlineKeyboardButton("Add Admin", callback_data="add_admin"), InlineKeyboardButton("Delete Admin", callback_data="delete_admin")],
-            [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
-        ]
-        ma_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("Please chose an option:", reply_markup=ma_markup)
-        await update.message.delete()
-        return "ADMIN_ACTION"
 
 
 #function to manage admin action
 async def admin_action(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    keyboard = [[InlineKeyboardButton("cancel", callback_data="cancel_conv")]]
-    markup = InlineKeyboardMarkup(keyboard)
-    if query.data == "add_admin":
-        msg = await query.edit_message_text("Enter the user_id to add as admin:", reply_markup=markup)
-        content.user_data["admin_action"] = "add_admin"
-        content.user_data["aa_message_id"] = msg.message_id
-    elif query.data == "delete_admin":
-        msg = await query.edit_message_text("Enter the user_id to delete an admin:", reply_markup=markup)
-        content.user_data["admin_action"] = "delete_admin"
-        content.user_data["aa_message_id"] = msg.message_id
-    elif query.data == "see_all_admin":
-        await query.edit_message_text("ALL ADMIN:")
+    try:
+        query = update.callback_query
+        await query.answer()
+        keyboard = [[InlineKeyboardButton("cancel", callback_data="cancel_conv")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        if query.data == "add_admin":
+            msg = await query.edit_message_text("Enter the user_id to add as admin:", reply_markup=markup)
+            content.user_data["admin_action"] = "add_admin"
+            content.user_data["aa_message_id"] = msg.message_id
+        elif query.data == "delete_admin":
+            msg = await query.edit_message_text("Enter the user_id to delete an admin:", reply_markup=markup)
+            content.user_data["admin_action"] = "delete_admin"
+            content.user_data["aa_message_id"] = msg.message_id
+        elif query.data == "see_all_admin":
+            if all_admins:
+                admin_data = "All Active Admin:\n"
+                for i,admin in enumerate(all_admins):
+                    admin_data += f"{i+1}. {admin}\n"
+                await query.edit_message_text(admin_data)
+                return ConversationHandler.END
+            else:
+                await query.edit_message_text("There is currently no active admin.")
+        return "ENTER_USER_ID"
+    except Exception as e:
+        print(f"Error in manage_admin function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
         return ConversationHandler.END
-    return "ENTER_USER_ID"
 
 
 #function to add or delete admin
 async def add_or_delete_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.message.text.strip()
-    action = content.user_data.get("admin_action")
-    msg_id = content.user_data.get("aa_message_id")
-    await content.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
-    if action == "add_admin":
-        await update.message.reply_text("ADDED")
-        return ConversationHandler.END
-    elif action == "delete_admin":
-        await update.message.reply_text("DELETED")
+    try:
+        user_id = update.message.text.strip()
+        action = content.user_data.get("admin_action")
+        msg_id = content.user_data.get("aa_message_id")
+        await content.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
+        conn = sqlite3.connect("admin/admin.db")
+        cursor = conn.cursor()
+        global all_admins
+        if action == "add_admin":
+            if user_id not in all_admins:
+                cursor.execute("INSERT OR IGNORE INTO admin(user_id) VALUES(?)", (user_id,))
+                conn.commit()
+                conn.close()
+                await update.message.reply_text(f"Successfully added {user_id} user_id as Admin.")
+                all_admins = load_admin()
+            else:
+                await update.message.reply_text(f"{user_id} is already an Admin.")
+                conn.close()
+            return ConversationHandler.END
+        elif action == "delete_admin":
+            if user_id in all_admins:
+                cursor.execute("DELETE FROM admin WHERE user_id=?", (user_id,))
+                await update.message.reply_text(f"Successfully deleted {user_id} from admin.")
+                all_admins = load_admin()
+                conn.commit()
+                conn.close()
+            else:
+                await update.message.reply_text(f"{user_id} is not an Admin.")
+                conn.close()
+            return ConversationHandler.END
+    except Exception as e:
+        print(f"Error in add_or_delete_admin function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
         return ConversationHandler.END
 
+
+#function to register a new user
+async def take_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        if update.callback_query:
+            msg = await update.callback_query.edit_message_text("Enter Your Name: ", reply_markup=markup)
+            content.user_data["tn_message_id"] = msg.message_id
+            return "TG"
+        else:
+            msg = await update.message.reply_text("Enter Your Name: ", reply_markup=markup)
+            content.user_data["tn_message_id"] = msg.message_id
+            return "TG"
+    except Exception as e:
+        print(f"Error in take_name function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
+
+
+#fuction to take gender from user
+async def take_gender(update:Update, content: ContextTypes.DEFAULT_TYPE):
+    try:
+        name = update.message.text.strip()
+        content.user_data["user_name"] = name
+        keyboard = [
+            [InlineKeyboardButton("Male", callback_data="c_male"), InlineKeyboardButton("Female", callback_data="c_female")],
+            [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        msg = await update.message.reply_text("Select Your Gender: ", reply_markup=markup)
+        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tn_message_id"))
+        await update.message.delete()
+        content.user_data["tg_message_id"] = msg.message_id
+        return "TR"
+    except Exception as e:
+        print(f"Error in take_gender function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
+
+
+#function to handle gender action
+async def take_roll(update: Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        query = update.callback_query
+        await query.answer()
+        if query.data == "c_male":
+            content.user_data["gender"] = "male"
+        elif query.data == "c_female":
+            content.user_data["gender"] = "female"
+        keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("Please Enter Your Roll number:", reply_markup=markup)
+        return "RA"
+    except Exception as e:
+        print(f"Error in take_roll function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
+
+
+#function to check if the provided roll is valid
+async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        roll = update.message.text.strip()
+        if len(roll) != 7:
+            msg = await update.message.reply_text("Invalid format. Try again with your full roll number.")
+            content.user_data["tr_message_id"] = msg.message_id
+            await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
+            await update.message.delete()
+            return ConversationHandler.END
+        if not roll.startswith("2403"):
+            msg = await update.message.reply_text("This bot is only available for CSE Section C of 24 series.")
+            content.user_data["tr_message_id"] = msg.message_id
+            await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
+            await update.message.delete()
+            return ConversationHandler.END
+        else:
+            try:
+                roll = int(roll)
+            except:
+                msg = await update.message.reply_text("Invalid Roll Number.")
+                content.user_data["tr_message_id"] = msg.message_id
+                await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
+                await update.message.delete()
+                return ConversationHandler.END
+            if roll<2403120 or roll>2403180:
+                msg = await update.message.reply_text("Sorry you are not allowed to use this bot")
+                content.user_data["tr_message_id"] = msg.message_id
+                await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
+                await update.message.delete()
+                return ConversationHandler.END
+            else:
+                content.user_data["roll"] = roll
+                keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
+                markup = InlineKeyboardMarkup(keyboard)
+                with open("info/getting_api.txt", "r", encoding="utf-8") as file:
+                    help_data = add_escape_character(file.read())
+                msg = await update.message.reply_text(help_data, reply_markup=markup, parse_mode="MarkdownV2")
+                content.user_data["ra_message_id"] = msg.message_id
+                await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
+                await update.message.delete()
+                return "AH"
+    except Exception as e:
+        print(f"Error in roll_action function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
+
+
+#function to handler skip
+async def handle_skip(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
+    markup = InlineKeyboardMarkup(keyboard)
+    if query.data == "c_skip":
+        msg = await query.edit_message_text("You might sometime face problem getting answer. You can always register your api by /api command.\n\nSet Your Password:", reply_markup=markup, parse_mode="Markdown")
+        content.user_data["hac_message_id"] = msg.message_id
+        content.user_data["user_api"] = None
+        return "TP"
+
+
+#function to take api
+async def handle_api_conv(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        with open("API/gemini_api.txt", "r", encoding="utf-8") as f:
+            existing_apis = f.read()
+        existing_apis = set(line.strip() for line in existing_apis.splitlines() if line.strip())
+        user_api = update.message.text.strip()
+        await update.message.chat.send_action(action = ChatAction.TYPING)
+        keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        try:
+            settings = get_settings(update.effective_user.id) or (update.effective_user.id, content.user_data.get("user_name"), 1, 0, 0.7, 1, 0)
+            response = gemini_stream("Checking if the gemini api is working or not", user_api, settings)
+            chunk = next(response)
+            if(
+                user_api.startswith("AIza")
+                and user_api not in existing_apis
+                and " " not in user_api
+                and len(user_api) >= 39
+                and chunk.text
+            ):
+                with open("API/gemini_api.txt", "a") as f:
+                    f.write(f"\n{user_api}")
+                msg = await update.message.reply_text("The API is saved successfully.\nSet you password:", reply_markup=markup)
+                content.user_data["user_api"] = user_api
+                await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ra_message_id"))
+                await update.message.delete()
+                content.user_data["hac_message_id"] = msg.message_id
+                return "TP"
+            elif user_api in existing_apis:
+                msg = await update.message.reply_text("The API already exists, you are excused.\n Set your password:", reply_markup=markup)
+                content.user_data["user_api"] = None
+                await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ra_message_id"))
+                await update.message.delete()
+                content.user_data["hac_message_id"] = msg.message_id
+                return "TP"
+            else:
+                await update.message.reply_text("Sorry, This is an invalid or Duplicate API, try again with a valid API.")
+                await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ra_message_id"))
+                await update.message.delete()
+                return ConversationHandler.END
+        except Exception as e:
+            await update.message.reply_text(f"Sorry, The API didn't work properly.\n Error Code - {e}")
+            await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ra_message_id"))
+            await update.message.delete()
+            return ConversationHandler.END
+    except Exception as e:
+        print(f"Error in handling api. \n Error Code - {e}")
+        await send_to_channel(update, content, channel_id, f"Error in handle_api function \n\nError Code -{e}")
+
+
+
+#function to take password from user
+async def take_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        password = update.message.text.strip()
+        keyboard = [[InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        msg = await update.message.reply_text("Confirm Your password:", reply_markup=markup)
+        content.user_data["password"] = password
+        content.user_data["tp_message_id"] = msg.message_id
+        await content.bot.delete_message(chat_id = update.effective_user.id, message_id=content.user_data.get("hac_message_id"))
+        await update.message.delete()
+        return "CP"
+    except Exception as e:
+        print(f"Error in take_password function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
+
+
+#function to confirm user password
+async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        c_password = update.message.text.strip()
+        password = content.user_data.get("password")
+        if password == c_password:
+            keyboard = [
+                ["ROUTINE", "CT"],
+                ["SETTINGS ", "RESOURCES"]
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
+            try:
+                conn = sqlite3.connect("info/user_data.db")
+                cursor = conn.cursor()
+                user_info = [
+                    update.effective_user.id,
+                    content.user_data.get("user_name"),
+                    content.user_data.get("gender"),
+                    content.user_data.get("roll"),
+                    content.user_data.get("password"),
+                    content.user_data.get("user_api")
+                ]
+                cursor.execute("""
+                    INSERT OR IGNORE INTO users(user_id, name, gender, roll, password, api)
+                    VALUES(?,?,?,?,?,?)
+                """,
+                tuple(info for info in user_info)
+                )
+                conn.commit()
+                conn.close()
+                conn = sqlite3.connect("settings/user_settings.db")
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR IGNORE INTO user_settings
+                        (id, name, model, thinking_budget, temperature, streaming, persona)
+                        VALUES(?,?,?,?,?,?,?)
+                """,
+                (user_info[0], user_info[1], 1, 0, 0.7, 0, 0)
+                )
+                conn.commit()
+                conn.close()
+                global all_users
+                all_users = load_all_user()
+                await update.message.reply_text("Registration Seccessful.", reply_markup=reply_markup)
+                await content.bot.delete_message(chat_id = update.effective_user.id, message_id=content.user_data.get("tp_message_id"))
+                await update.message.delete()
+            except Exception as e:
+                print(f"Error adding user.\n\nError code - {e}")
+            return ConversationHandler.END
+        else:
+            await update.message.reply_text("Passwords are not identical. Try again later.")
+            await content.bot.delete_message(chat_id = update.effective_user.id, message_id=content.user_data.get("tp_message_id"))
+            await update.message.delete()
+            return ConversationHandler.END
+    except Exception as e:
+        print(f"Error in confirm_password function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
+    
+
+#function to enter temperature conversation
+async def temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    settings = get_settings(update.effective_user.id)
+    keyboard = [
+        [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
+    ]
+    markup = InlineKeyboardMarkup(keyboard)
+    query = update.callback_query
+    msg = await query.edit_message_text(f"Temperature represents the creativity of the bots response.\nCurrent Temperature is {settings[4]}\n\nEnter a value between 0.0 to 1.0:", reply_markup=markup)
+    content.user_data["t_message_id"] = msg.message_id
+    return "TT"
+
+
+#function to take temperature
+async def take_temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    data = update.message.text.strip()
+    user_id = update.effective_user.id
+    try:
+        data = round(float(data),1)
+    except:
+        await update.message.reply_text("Invalid Input. Try Again Later.")
+        await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
+        await update.message.delete()
+        return ConversationHandler.END
+    if data > 1.0 or data < 0.0:
+        await update.message.reply_text("Invalid Input. Temperature should be between 0.0 to 1.0")
+        await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
+        await update.message.delete()
+        return ConversationHandler.END
+    else:
+        conn = sqlite3.connect("settings/user_settings.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE user_settings SET temperature = ? WHERE id = ?", (data, user_id))
+        conn.commit()
+        conn.close()
+        await update.message.reply_text(f"Temperature is successfully set to {data}.")
+        await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
+        await update.message.delete()
+        return ConversationHandler.END
+    
+
+#function to enter thinking conversation
+async def thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    settings = get_settings(update.effective_user.id)
+    keyboard = [
+        [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
+    ]
+    markup = InlineKeyboardMarkup(keyboard)
+    query = update.callback_query
+    msg = await query.edit_message_text(f"Thinking represents the thinking budget of the bot measured in token.\nCurrent Thinking budger is {settings[3]}\nAllowed Range - (0 to 244576)\nRecommended Range - (0 to 5000)\n\nEnter a value:", reply_markup=markup)
+    content.user_data["t_message_id"] = msg.message_id
+    return "TT"
+
+
+#function to take temperature
+async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    data = update.message.text.strip()
+    user_id = update.effective_user.id
+    try:
+        data = int(data)
+    except:
+        await update.message.reply_text("Invalid Input. Try Again Later.")
+        await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
+        await update.message.delete()
+        return ConversationHandler.END
+    if data > 244576 or data < 0:
+        await update.message.reply_text("Invalid Input. Temperature should be between 0 to 244576")
+        await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
+        await update.message.delete()
+        return ConversationHandler.END
+    else:
+        conn = sqlite3.connect("settings/user_settings.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
+        conn.commit()
+        conn.close()
+        await update.message.reply_text(f"Thinking Budget is successfully set to {data}.")
+        await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
+        await update.message.delete()
+        return ConversationHandler.END
+    
 
 #function to cancel conversation by cancel button
 async def cancel_conversation(update: Update, content: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.callback_query.delete_message()
-    return ConversationHandler.END
+    try:
+        await update.callback_query.delete_message()
+        return ConversationHandler.END
+    except Exception as e:
+        print(f"Error in cancel_conversation function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
 
 
 #A function to handle button response
 async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    conn = sqlite3.connect('settings/user_settings.db')
-    user_id = update.effective_user.id
-    settings = get_settings(user_id, update.effective_user.last_name)
-    cursor = conn.cursor()
-    if query.data == "c_model":
-        keyboard = [[InlineKeyboardButton(text=model, callback_data=str(i))]
-            for i, model in enumerate(gemini_model_list)
-        ]
-        keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
-        model_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(f"Current Model: {gemini_model_list[settings[2]]}", reply_markup=model_markup)
-    elif query.data == "c_temperature":
-        await query.edit_message_text("Temperature Clicked")
-    elif query.data == "c_thinking":
-        await query.edit_message_text("Thinking Clicked")
-    elif query.data == "c_streaming":
-        await query.edit_message_text("streaming Clicked")
-    elif query.data == "c_persona":
-        await query.edit_message_text("Persona Clicked")
-    elif query.data == "c_memory":
-        keyboard = [
-            [InlineKeyboardButton("Show", callback_data="c_show_memory"), InlineKeyboardButton("Delete", callback_data="c_delete_memory")],
-            [InlineKeyboardButton("Cancel", callback_data="cancel")]
-        ]
-        memory_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("Chose an option:", reply_markup=memory_markup)
-    elif query.data == "c_conv_history":
-        keyboard = [
-            [InlineKeyboardButton("Show", callback_data="c_ch_show"), InlineKeyboardButton("Reset", callback_data="c_ch_reset")],
-            [InlineKeyboardButton("Cancel", callback_data="cancel")]
-        ]
-        ch_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("Choose an option:", reply_markup=ch_markup)
-    elif query.data == "1":
-        await query.edit_message_text("1")
-    elif query.data == "g_classroom":
-        await query.edit_message_text("CSE Google classroom code: ```2o2ea2k3```\n\nMath G. Classroom code: ```aq4vazqi```\n\nChemistry G. Classroom code: ```wnlwjtbg```", parse_mode="Markdown")
-    elif query.data == "c_all_websites":
-        keyboard = [
-            [InlineKeyboardButton("CSE 24 Website", url="https://ruetcse24.vercel.app/")],
-            [InlineKeyboardButton("Facebook", url="https://www.facebook.com/profile.php?id=61574730479807"), InlineKeyboardButton("Profiles", url="https://ruetcse24.vercel.app/profiles")],
-            [InlineKeyboardButton("Cancel", callback_data="cancel")]
-        ]
-        aw_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("CSE 24 RELATED ALL WEBSITES:", reply_markup=aw_markup)
-    elif query.data == "c_circulate_routine":
-        await query.edit_message_text("Please wait while bot is circulating the routine.")
-        asyncio.create_task(circulate_routine(update.callback_query, content))
-    elif query.data == "c_toggle_routine":
-        keyboard = [
-            [InlineKeyboardButton("Sure", callback_data="c_tr_sure"), InlineKeyboardButton("Cancel", callback_data="c_tr_cancel")]
-        ]
-        tr_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("Are you sure you want to toggle the routine?", reply_markup=tr_markup)
-    elif query.data == "c_tr_sure":
-        with open("routine/lab_routine.txt", "w", encoding="utf-8") as f:
-            f.write("second")
-            await query.edit_message_text("Routine Succesfully Toggled.")
-    elif query.data == "c_tr_cancel":
-        await query.edit_message_text("Thanks.")
-    elif query.data == "cancel":
-        await query.delete_message()
-    elif query.data == "c_show_memory":
-        await see_memory(update, content, query)
-    elif query.data == "c_delete_memory":
-        await delete_memory(update, content, query)
-    elif query.data == "c_ch_show":
-        await query.edit_message_text("Your conversation history:")
-        user_id = update.callback_query.from_user.id
-        with open(f"Conversation/conversation-{user_id}.txt", "rb") as file:
-            content = file.read()
-            if not content:
-                await query.message.reply_text("You don't have any conversation history.")
+    try:
+        query = update.callback_query
+        await query.answer()
+        try:
+            user_id = update.effective_user.id
+        except:
+            user_id = query.from_user.id
+        settings = get_settings(user_id)
+        c_model = tuple(f"model{i}" for i in range(len(gemini_model_list)))
+        personas = glob("persona/*txt")
+        c_persona = tuple(f"persona{i}" for i in range(len(personas)))
+
+        if query.data == "c_model":
+            keyboard = []
+            for i in range(0, len(gemini_model_list), 2):
+                row =[]
+                row.append(InlineKeyboardButton(text=gemini_model_list[i], callback_data=f"model{i}"))
+                if i+1 < len(gemini_model_list):
+                    row.append(InlineKeyboardButton(text=gemini_model_list[i+1], callback_data=f"model{i+1}"))
+                keyboard.append(row)
+            keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
+            model_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(f"Current Model: {gemini_model_list[settings[2]]}\nChoose a model:", reply_markup=model_markup, parse_mode="Markdown")
+
+        elif query.data == "c_streaming":
+            keyboard = [
+                [InlineKeyboardButton("ON", callback_data="c_streaming_on"), InlineKeyboardButton("OFF", callback_data="c_streaming_off")]    
+            ]
+            markup = InlineKeyboardMarkup(keyboard)
+            settings = get_settings(user_id)
+            c_s = "ON" if settings[5] == 1 else "OFF"
+            await query.edit_message_text(f"Streaming let you stream the bot response in real time.\nCurrent setting : {c_s}", reply_markup=markup)
+
+        elif query.data == "c_streaming_on":
+            conn = sqlite3.connect("settings/user_settings.db")
+            cursor = conn.cursor()
+            cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (1, user_id))
+            conn.commit()
+            conn.close()
+            await query.edit_message_text("Streaming has turned on.")
+
+        elif query.data == "c_streaming_off":
+            conn = sqlite3.connect("settings/user_settings.db")
+            cursor = conn.cursor()
+            cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (0, user_id))
+            conn.commit()
+            conn.close()
+            await query.edit_message_text("Streaming has turned off.")
+
+        elif query.data == "c_persona":
+            personas = sorted(glob("persona/*txt"))
+            settings = get_settings(user_id)
+            keyboard = []
+            for i in range(0, len(personas), 2):
+                row = []
+                name = os.path.splitext(os.path.basename(personas[i]))[0]
+                if name != "memory_persona":
+                    row.append(InlineKeyboardButton(text=name, callback_data="persona"+str(i)))
+                if i+1 < len(personas):
+                    name = os.path.splitext(os.path.basename(personas[i+1]))[0]
+                    if name != "memory_persona":
+                        row.append(InlineKeyboardButton(text = name, callback_data="persona"+str(i+1)))
+                keyboard.append(row)
+            keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
+            markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("Select a persona:", reply_markup=markup, parse_mode="Markdown")
+
+        elif query.data == "c_memory":
+            keyboard = [
+                [InlineKeyboardButton("Show Memory", callback_data="c_show_memory"), InlineKeyboardButton("Delete Memory", callback_data="c_delete_memory")],
+                [InlineKeyboardButton("Cancel", callback_data="cancel")]
+            ]
+            memory_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("Memory is created based on you conversation history to provide more personalized response.", reply_markup=memory_markup, parse_mode="Markdown")
+
+        elif query.data == "c_conv_history":
+            keyboard = [
+                [InlineKeyboardButton("Show", callback_data="c_ch_show"), InlineKeyboardButton("Reset", callback_data="c_ch_reset")],
+                [InlineKeyboardButton("Cancel", callback_data="cancel")]
+            ]
+            ch_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("Conversation history holds your conversation with the bot.", reply_markup=ch_markup, parse_mode="Markdown")
+
+        elif query.data in c_model :
+            conn = sqlite3.connect("settings/user_settings.db")
+            cursor = conn.cursor()
+            model_num = int(query.data[5:])
+            cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model_num, user_id))
+            conn.commit()
+            conn.close()
+            await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
+
+        elif query.data in c_persona:
+            conn = sqlite3.connect("settings/user_settings.db")
+            cursor = conn.cursor()
+            persona_num = int(query.data[7:])
+            cursor.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona_num, user_id))
+            conn.commit()
+            conn.close()
+            personas = sorted(glob("persona/*txt"))
+            await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(personas[persona_num]))[0]}.")
+
+        elif query.data == "g_classroom":
+            await query.edit_message_text("CSE Google classroom code: ```2o2ea2k3```\n\nMath G. Classroom code: ```aq4vazqi```\n\nChemistry G. Classroom code: ```wnlwjtbg```", parse_mode="Markdown")
+
+        elif query.data == "c_all_websites":
+            keyboard = [
+                [InlineKeyboardButton("CSE 24 Website", url="https://ruetcse24.vercel.app/")],
+                [InlineKeyboardButton("Facebook", url="https://www.facebook.com/profile.php?id=61574730479807"), InlineKeyboardButton("Profiles", url="https://ruetcse24.vercel.app/profiles")],
+                [InlineKeyboardButton("Cancel", callback_data="cancel")]
+            ]
+            aw_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("CSE 24 RELATED ALL WEBSITES:", reply_markup=aw_markup)
+
+        elif query.data == "c_circulate_routine":
+            await query.edit_message_text("Please wait while bot is circulating the routine.")
+            asyncio.create_task(circulate_routine(update.callback_query, content))
+
+        elif query.data == "c_toggle_routine":
+            keyboard = [
+                [InlineKeyboardButton("Sure", callback_data="c_tr_sure"), InlineKeyboardButton("Cancel", callback_data="c_tr_cancel")]
+            ]
+            tr_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("Are you sure you want to toggle the routine?", reply_markup=tr_markup)
+
+        elif query.data == "c_tr_sure":
+            with open("routine/lab_routine.txt", "r+", encoding="utf-8") as f:
+                active = f.read()
+                f.seek(0)
+                f.truncate(0)
+                if active == "first":
+                    f.write("second")
+                elif active=="second":
+                    f.write("first")
+                await query.edit_message_text("Routine Succesfully Toggled.")
+
+        elif query.data == "c_tr_cancel":
+            await query.edit_message_text("Thanks.")
+
+        elif query.data == "cancel":
+            await query.delete_message()
+
+        elif query.data == "c_show_memory":
+            await see_memory(update, content, query)
+
+        elif query.data == "c_delete_memory":
+            await delete_memory(update, content, query)
+
+        elif query.data == "c_ch_show":
+            await query.edit_message_text("Your conversation history:")
+            with open(f"Conversation/conversation-{user_id}.txt", "rb") as file:
+                if os.path.getsize(f"Conversation/conversation-{user_id}.txt") == 0:
+                    await query.message.reply_text("You don't have any conversation history.")
+                else:
+                    await content.bot.send_document(chat_id=user_id, document=file)
+
+        elif query.data == "c_ch_reset":
+            await reset(update, content, query)
+
+        elif query.data == "c_admin_help":
+            if user_id in all_admins:
+                with open("admin/admin_help.txt", "r", encoding="utf-8") as file:
+                    help_data = file.read() if file.read() else "Sorry no document. Try again later."
+                await query.edit_message_text(help_data)
             else:
-                await content.bot.send_document(chat_id=user_id, document=file)
-    elif query.data == "c_ch_reset":
-        await reset(update, content, query)
+                await query.edit_message_text("Sorry you are not a Admin.")
+
+    except Exception as e:
+        print(f"Error in button_handler function.\n\nError Code -{e}")
+        await query.edit_message_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
 
 
 
@@ -1292,8 +1805,49 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
 def main():
     try:
         app = ApplicationBuilder().token(TOKEN).build()
-        add_admin_conv = ConversationHandler(
-            entry_points = [CallbackQueryHandler(password_taker, pattern="^c_manage_admin$")],
+
+        #conversation handler for taking thinking token
+        thinking_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(thinking, pattern="^c_thinking$")],
+            states={
+                "TT" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_thinking)]
+            },
+            fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv$")]
+        )
+
+        #conversation handler for taking temperature
+        temperature_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(temperature, pattern="^c_temperature$")],
+            states={
+                "TT" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_temperature)]
+            },
+            fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv$")]
+        )
+
+        #conversation handler for registering new user
+        register_conv = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(take_name, pattern="c_register")
+            ],
+            states = {
+                "TG" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_gender)],
+                "TR" : [CallbackQueryHandler(take_roll, pattern="^(c_male|c_female)$")],
+                "RA" : [MessageHandler(filters.TEXT & ~filters.COMMAND, roll_action)],
+                "AH" : [
+                        CallbackQueryHandler(handle_skip, pattern="^c_skip$"),
+                        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_api_conv)
+                ],
+                "TP" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_password)],
+                "CP" : [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_password)],
+                
+            },
+            fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv$")],
+            per_message=False,
+        )
+
+        #conversation handler for managing admin commad
+        manage_admin_conv = ConversationHandler(
+            entry_points = [CallbackQueryHandler(admin_password_taker, pattern="^c_manage_admin$")],
             states = {
                 "MA" : [MessageHandler(
                     filters.TEXT & ~filters.COMMAND,
@@ -1302,8 +1856,11 @@ def main():
                 "ADMIN_ACTION" : [CallbackQueryHandler(admin_action, pattern="^(add_admin|delete_admin|see_all_admin)$")],
                 "ENTER_USER_ID" : [MessageHandler(filters.TEXT & ~filters.COMMAND, add_or_delete_admin)]
             },
-            fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv$")]
+            fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv$")],
+            per_message=False
         )
+
+        #conversation handler for circulate message
         circulate_message_conv = ConversationHandler(
             entry_points = [CallbackQueryHandler(message_taker, pattern="^c_circulate_message$")],
             states = {
@@ -1313,8 +1870,10 @@ def main():
                 )],
             },
             fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv")],
-            per_message=False,
+            per_message=False
         )
+
+        #conversation handler for adding a new api
         api_conv_handler = ConversationHandler(
             entry_points = [CommandHandler("api", api)],
             states = {
@@ -1322,26 +1881,30 @@ def main():
             },
             fallbacks = [CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv$")],
         )
+        app.add_handler(register_conv)
         app.add_handler(api_conv_handler)
-        app.add_handler(add_admin_conv)
+        app.add_handler(thinking_conv)
+        app.add_handler(temperature_conv)
+        app.add_handler(manage_admin_conv)
         app.add_handler(circulate_message_conv)
-        app.add_handler(CommandHandler("start",start))
         app.add_handler(CommandHandler("help", help))
+        app.add_handler(CommandHandler("start",start))
+        app.add_handler(CallbackQueryHandler(button_handler))
         app.add_handler(CommandHandler("admin", admin_handler))
         app.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
-        app.add_handler(CallbackQueryHandler(button_handler))
         app.add_handler(MessageHandler(filters.PHOTO & ~filters.ChatType.CHANNEL, handle_image))
         app.add_handler(MessageHandler(filters.AUDIO & ~filters.ChatType.CHANNEL, handle_audio))
         app.add_handler(MessageHandler(filters.VOICE & ~filters.ChatType.CHANNEL, handle_voice))
         app.add_handler(MessageHandler(filters.VIDEO & ~filters.ChatType.CHANNEL, handle_video))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.ChatType.CHANNEL, echo))
-        with open("info/webhook_url.txt", "r", encoding="utf-8") as file:
-            url = file.read().strip()
-        app.run_webhook(
-            listen = "0.0.0.0",
-            port = int(os.environ.get("PORT", 10000)),
-            webhook_url = url
-        )
+        # with open("info/webhook_url.txt", "r", encoding="utf-8") as file:
+        #     url = file.read().strip()
+        # app.run_webhook(
+        #     listen = "0.0.0.0",
+        #     port = int(os.environ.get("PORT", 10000)),
+        #     webhook_url = url
+        #)
+        app.run_polling()
     except Exception as e:
         print(f"Error in main function. Error Code - {e}")
 
