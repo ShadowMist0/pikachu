@@ -74,7 +74,7 @@ try:
     cursor.execute("SELECT api from bot_api")
     rows = cursor.fetchall()
     tokens = tuple(row[0] for row in rows)
-    TOKEN = tokens[1]
+    TOKEN = tokens[0]
 except Exception as e:
     print(f"Error Code -{e}")
 
@@ -1167,7 +1167,7 @@ async def admin_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) ->
         user_id = update.effective_user.id
         if user_id in all_admins:
             keyboard = [
-                [InlineKeyboardButton("Circulate Message", callback_data="c_circulate_message")],
+                [InlineKeyboardButton("Circulate Message", callback_data="c_circulate_message"), InlineKeyboardButton("Show All User", callback_data="c_show_all_user")],
                 [InlineKeyboardButton("Circulate Routine", callback_data="c_circulate_routine"), InlineKeyboardButton("Toggle Routine", callback_data="c_toggle_routine")],
                 [InlineKeyboardButton("Manage Admin", callback_data="c_manage_admin"), InlineKeyboardButton("Manage AI Model", callback_data="c_manage_ai_model")],
                 [InlineKeyboardButton("cancel", callback_data="cancel")]
@@ -1975,6 +1975,18 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             ]
             markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text("From here you can manage the AI model this bot use to provide response.\n\nChoose an option:", reply_markup=markup, parse_mode="Markdown")
+
+        elif query.data == "c_show_all_user":
+            conn = sqlite3.connect("info/user_data.db")
+            cursor = conn.cursor()
+            cursor.execute("SELECT user_id from users")
+            rows = cursor.fetchall()
+            users = tuple(row[0] for row in rows)
+            user_data = "All registered users are listed below:\n"
+            for i, user in enumerate(users):
+                user_data += f"{i+1}. {user}\n"
+            await query.edit_message_text(user_data)
+
 
     except Exception as e:
         print(f"Error in button_handler function.\n\nError Code -{e}")
