@@ -10,6 +10,7 @@ import requests
 from glob import glob
 from io import BytesIO
 from flask import Flask, request
+from cryptography.fernet import Fernet
 from datetime import datetime, timedelta
 from telegram import (
     Update,
@@ -32,7 +33,13 @@ from telegram._utils.warnings import PTBUserWarning
 from telegram.request import HTTPXRequest
 from google import genai
 from google.genai import types
+from PIL import Image
 
+
+
+
+key = os.getenv("decryption_key")
+fernet = Fernet(key)
 
 
 #code to ignore warnig about per_message in conv handler and increase poll size
@@ -67,7 +74,7 @@ try:
     cursor.execute("SELECT api from bot_api")
     rows = cursor.fetchall()
     tokens = tuple(row[0] for row in rows)
-    TOKEN = tokens[0]
+    TOKEN = tokens[1]
 except Exception as e:
     print(f"Error Code -{e}")
 
@@ -137,9 +144,9 @@ FIREBASE_URL = 'https://last-197cd-default-rtdb.firebaseio.com/routines.json'
 #loading persona
 def load_persona(settings):
     try:
-        files = sorted(glob("persona/*txt"))
-        with open(files[settings[6]], "r") as file:
-            persona = file.read()
+        files = sorted(glob("persona/*shadow"))
+        with open(files[settings[6]], "rb") as file:
+            persona = fernet.decrypt(file.read()).decode("utf-8")
         return persona
     except Exception as e:
         print(f"Error in load_persona function. \n\n Error Code - {e}")
@@ -270,8 +277,8 @@ def delete_n_convo(user_id, n):
 async def create_memory(api, user_id):
     try:
         if user_id > 0:
-            with open("persona/memory_persona.txt", "r", encoding="utf-8") as f:
-                instruction = f.read()
+            with open("persona/memory_persona.shadow", "rb") as f:
+                instruction = fernet.decrypt(f.read()).decode("utf-8")
             with open(f"memory/memory-{user_id}.txt", "a+", encoding = "utf-8") as f:
                 f.seek(0)
                 data = "***PREVIOUS MEMORY***\n\n"
@@ -284,8 +291,8 @@ async def create_memory(api, user_id):
                 data += "\n\n***END OF CONVERSATION***\n\n"
         elif user_id < 0:
             group_id = user_id
-            with open("persona/memory_persona.txt", "r", encoding="utf-8") as f:
-                instruction = f.read()
+            with open("persona/memory_persona.shadow", "rb") as f:
+                instruction = fernet.decrypt(f.read()).decode("utf-8")
             with open(f"memory/memory-group-{group_id}.txt", "a+", encoding = "utf-8") as f:
                 f.seek(0)
                 data = "***PREVIOUS MEMORY***\n\n"
@@ -325,8 +332,8 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
     try:
         if update.message.chat.type == "private":
             data = "***RULES***\n"
-            with open("info/rules.txt", "r" , encoding="utf-8") as f:
-                data += f.read()
+            with open("info/rules.shadow", "rb" ) as f:
+                data += fernet.decrypt(f.read()).decode("utf-8")
                 data += "\n***END OF RULES***\n\n\n"
                 data += "***MEMORY***\n"
             with open(f"memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
@@ -345,12 +352,12 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
         if update.message.chat.type != "private":
             group_id = update.effective_chat.id
             data = "***RULES***\n"
-            with open("info/group-rules.txt", "r" , encoding="utf-8") as f:
-                data += f.read()
+            with open("info/group_rules.shadow", "rb") as f:
+                data += fernet.decrypt(f.read()).decode("utf-8")
                 data += "\n***END OF RULES***\n\n\n"
             data += "******TRAINING DATA******\n\n"
-            with open("info/group_training_data.txt", "r") as f:
-                data += f.read()
+            with open("info/group_training_data.shadow", "rb") as f:
+                data += fernet.decrypt(f.read()).decode("utf-8")
                 data += "******END OF TRAINING DATA******\n\n"
             data += "***MEMORY***\n"
             with open(f"memory/memory-group-{group_id}.txt", "a+", encoding="utf-8") as f:
@@ -897,7 +904,7 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
         await send_to_channel(update, content, channel_id, f"Error in echo function \n\nError Code -{e}")
 
 
-#function for the command reset
+#function for the resetting the conversation history
 async def reset(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> None:
     try:
         user_id = update.callback_query.from_user.id
@@ -924,10 +931,11 @@ async def api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
         if update.message.chat.type != "private":
             await update.message.reply_text("This function is only available in private chat.")
             return
-        with open("info/getting_api.txt") as f:
-            for line in f.readlines():
-                if line.strip():
-                    await update.message.reply_text(line.strip())
+        keyboard = [[InlineKeyboardButton("cancel", callback_data="cancel_conv")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        with open("info/getting_api.shadow", "rb") as f:
+            data = fernet.decrypt(f.read()).decode("utf-8")
+            await update.message.reply_text(data, reply_markup=markup)
         return 1
     except Exception as e:
         print(f"Error in api function.\nError Code - {e}")
@@ -940,9 +948,8 @@ async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> No
         existing_apis = load_gemini_api()
         user_api = update.message.text.strip()
         await update.message.chat.send_action(action = ChatAction.TYPING)
-        user_name = f"{update.effective_user.first_name or "X"} {update.effective_user.last_name or "X"}".strip()
         try:
-            settings = get_settings(update.effective_user.id, user_name)
+            settings = get_settings(update.effective_user.id)
             response = gemini_stream("Checking if the gemini api is working or not", user_api, settings)
             chunk = next(response)
             if(
@@ -968,14 +975,6 @@ async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> No
     except Exception as e:
         print(f"Error in handling api. \n Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in handle_api function \n\nError Code -{e}")
-
-
-#function to handle persona
-async def handle_persona(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message.chat.type != "private":
-        await update.message.reply_text("This function is only available in private chat.")
-        return
-    await update.message.reply_text("The Persona function is under developement, Try again Later")
 
 
 #function to handle image
@@ -1103,11 +1102,6 @@ async def delete_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, qu
         await send_to_channel(update, content, channel_id, f"Error in delete_memory function \n\nError Code -{e}")
 
 
-#function to add persona from user
-async def add_persona(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("The add_persona function is under developement, Try again Later")
-
-
 #a function to handle settings
 async def handle_settings(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
@@ -1119,7 +1113,7 @@ async def handle_settings(update : Update, content : ContextTypes.DEFAULT_TYPE) 
             [InlineKeyboardButton("Memory", callback_data="c_memory"), InlineKeyboardButton("cancel", callback_data="cancel")]
         ]
         settings_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("Bot Configuration Menu:", reply_markup=settings_markup)
+        await update.message.reply_text("You change the bot configuration from here.\nBot Configuration Menu:", reply_markup=settings_markup)
     except Exception as e:
         await send_to_channel(update, content, channel_id, f"Error in handle_settings function \n\nError Code -{e}")
         print(f"Error in handle_settings function. \n\n Error Code -{e}")
@@ -1193,12 +1187,12 @@ async def admin_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) ->
 async def help(update: Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
         keyboard = [
-            [InlineKeyboardButton("Admin Help", callback_data="c_admin_help")],
+            [InlineKeyboardButton("Admin Help", callback_data="c_admin_help"), InlineKeyboardButton("Cancel", callback_data="cancel")],
             [InlineKeyboardButton("Read Documentation", url = "https://github.com/sifat1996120/Phantom_bot")]
         ]
         help_markup = InlineKeyboardMarkup(keyboard)
-        with open("info/help.txt", "r", encoding="utf-8") as file:
-            await update.message.reply_text(file.read(), reply_markup=help_markup)
+        with open("info/help.shadow", "rb") as file:
+            await update.message.reply_text(fernet.decrypt(file.read()).decode("utf-8"), reply_markup=help_markup)
     except Exception as e:
         print(f"Error in help function. \n\n Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in help function. \n\n Error Code - {e}")
@@ -1251,8 +1245,8 @@ async def manage_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None
         except:
             pass
         given_password = update.message.text.strip()
-        with open("admin/admin_password.txt", "r") as file:
-            password = file.read().strip()
+        with open("admin/admin_password.shadow", "rb") as file:
+            password = fernet.decrypt(file.read().strip()).decode("utf-8")
         if password != given_password:
             await update.message.reply_text("Wrong Password.")
             return ConversationHandler.END
@@ -1435,8 +1429,8 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 content.user_data["roll"] = roll
                 keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
                 markup = InlineKeyboardMarkup(keyboard)
-                with open("info/getting_api.txt", "r", encoding="utf-8") as file:
-                    help_data = add_escape_character(file.read())
+                with open("info/getting_api.shadow", "rb") as file:
+                    help_data = add_escape_character(fernet.decrypt(file.read()).decode("utf-8"))
                 msg = await update.message.reply_text(help_data, reply_markup=markup, parse_mode="MarkdownV2")
                 content.user_data["ra_message_id"] = msg.message_id
                 await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
@@ -1804,7 +1798,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             user_id = query.from_user.id
         settings = get_settings(user_id)
         c_model = tuple(f"model{i}" for i in range(len(gemini_model_list)))
-        personas = glob("persona/*txt")
+        personas = glob("persona/*shadow")
         c_persona = tuple(f"persona{i}" for i in range(len(personas)))
 
         if query.data == "c_model":
@@ -1845,7 +1839,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("Streaming has turned off.")
 
         elif query.data == "c_persona":
-            personas = sorted(glob("persona/*txt"))
+            personas = sorted(glob("persona/*shadow"))
             settings = get_settings(user_id)
             keyboard = []
             for i in range(0, len(personas), 2):
@@ -1900,7 +1894,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             cursor.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona_num, user_id))
             conn.commit()
             conn.close()
-            personas = sorted(glob("persona/*txt"))
+            personas = sorted(glob("persona/*shadow"))
             await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(personas[persona_num]))[0]}.")
 
         elif query.data == "g_classroom":
@@ -1962,9 +1956,15 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
 
         elif query.data == "c_admin_help":
             if user_id in all_admins:
-                with open("admin/admin_help.txt", "r", encoding="utf-8") as file:
-                    help_data = file.read() if file.read() else "Sorry no document. Try again later."
-                await query.edit_message_text(help_data)
+                keyboard = [
+                    [InlineKeyboardButton("Read Documentation", url = "https://github.com/sifat1996120/Phantom_bot")],
+                     [InlineKeyboardButton("Cancel", callback_data="cancel")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                with open("admin/admin_help.shadow", "rb") as file:
+                    help_data = fernet.decrypt(file.read()).decode("utf-8")
+                    help_data = help_data if help_data else "Sorry no document. Try again later."
+                await query.edit_message_text(help_data, reply_markup=markup)
             else:
                 await query.edit_message_text("Sorry you are not a Admin.")
         
@@ -2098,8 +2098,8 @@ async def main():
         app.add_handler(MessageHandler(filters.VOICE & ~filters.ChatType.CHANNEL, handle_voice))
         app.add_handler(MessageHandler(filters.VIDEO & ~filters.ChatType.CHANNEL, handle_video))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.ChatType.CHANNEL, echo))
-        # with open("info/webhook_url.txt", "r", encoding="utf-8") as file:
-        #     url = file.read().strip()
+        # with open("info/webhook_url.shadow", "rb") as file:
+        #     url = fernet.decrypt(file.read().strip()).decode("utf-8")
         # app.run_webhook(
         #     listen = "0.0.0.0",
         #     port = int(os.environ.get("PORT", 10000)),

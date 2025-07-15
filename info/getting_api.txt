@@ -1,6 +1,0 @@
-Follow the steps below to get an API KEY from google and register it to the bot(OPTIONAL):
-1. Go to this page below: https://aistudio.google.com/apikey?_gl=1*1fiy6v5*_ga*MTIxMzcxNzI4OS4xNzUxNjA3NzAw*_ga_P1DBVKWT6V*czE3NTE2OTYwMjYkbzkkZzEkdDE3NTE2OTYwMjckajU5JGwwJGg1MjA3NTgyNTE
-2. Click on the *Create an API KEY* on top right corner.
-3. You will get a API KEY after few seconds
-4. Copy the API KEY
-5. Paste your API KEY here:
