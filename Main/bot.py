@@ -863,8 +863,8 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
         bot_name_obj = await content.bot.get_my_name()
         bot_name = bot_name_obj.name.lower()
-        user_id = update.effective_chat.id
-        if user_id not in all_users:
+        user_id = update.effective_user.id
+        if user_id not in all_users and update.message.chat.type == "private":
             keyboard = [
                 [InlineKeyboardButton("Register", callback_data="c_register"), InlineKeyboardButton("Cancel", callback_data="cancel")]
             ]
@@ -876,17 +876,17 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
         if (update.message and update.message.chat.type == "private") or (update.message.chat.type != "private" and (f"@{bot_name}" in user_message.lower() or f"{bot_name}" in user_message.lower())):
             await update.message.chat.send_action(action = ChatAction.TYPING)
         gemini_api_keys = load_gemini_api()
-        if user_message == "ROUTINE":
+        if user_message == "ROUTINE" and update.message.chat.type == "private":
             await routine_handler(update, content)
             return
-        elif user_message == "SETTINGS":
+        elif user_message == "SETTINGS" and update.message.chat.type == "private":
             await handle_settings(update, content)
             await update.message.delete()
             return
-        elif user_message == "CT":
+        elif user_message == "CT" and update.message.chat.type == "private":
             await handle_ct(update, content)
             return
-        elif user_message == "RESOURCES":
+        elif user_message == "RESOURCES" and update.message.chat.type == "private":
             keyboard = [
                 [InlineKeyboardButton("Drive", url="https://drive.google.com/drive/folders/1xbyCdj3XQ9AsCCF8ImI13HCo25JEhgUJ"), InlineKeyboardButton("Syllabus", url="https://drive.google.com/file/d/1pVF40-E0Oe8QI-EZp9S7udjnc0_Kquav/view?usp=drive_link")],
                 [InlineKeyboardButton("Orientation Files", url = "https://drive.google.com/drive/folders/10_-xTV-FsXnndtDiw_StqH2Zy9tQcWq0"), InlineKeyboardButton("All Websites", callback_data="c_all_websites")],
@@ -1165,6 +1165,8 @@ async def background_memory_creation(update: Update,content,user_id):
 async def admin_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
         user_id = update.effective_user.id
+        if update.message.chat.type != "private":
+            await update.message.reply_text("Sorry, This is not available for group.")
         if user_id in all_admins:
             keyboard = [
                 [InlineKeyboardButton("Circulate Message", callback_data="c_circulate_message"), InlineKeyboardButton("Show All User", callback_data="c_show_all_user")],
