@@ -1,5 +1,5 @@
 [project]
-name = "Nyx_bot"
+name = "phantom_bot"
 version = "0.1.0"
 description = "A telegram bot project for RUET CSE SECTION C"
 readme = "README.md"
