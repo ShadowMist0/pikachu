@@ -27,6 +27,7 @@ dependencies = [
     "pyrebase4>=4.5.0",
     "gunicorn>=23.0.0",
     "cryptography",
+    "pillow"
 ]
 
 [project.urls]
