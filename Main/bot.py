@@ -825,7 +825,7 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
         user_message = update.message.text.strip()
         user_id = update.effective_user.id
         gemini_api_keys = load_gemini_api()
-        if update.message.chat.type != "private" and (f"@{bot_name}" not in user_message.lower() or f"{bot_name}" not in user_message.lower()):
+        if update.message.chat.type != "private" and f"{bot_name.lower()}" not in user_message.lower():
             return
         else:
             settings = get_settings(user_id)
@@ -1167,6 +1167,7 @@ async def admin_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) ->
         user_id = update.effective_user.id
         if update.message.chat.type != "private":
             await update.message.reply_text("Sorry, This is not available for group.")
+            return
         if user_id in all_admins:
             keyboard = [
                 [InlineKeyboardButton("Circulate Message", callback_data="c_circulate_message"), InlineKeyboardButton("Show All User", callback_data="c_show_all_user")],
