@@ -7,4 +7,10 @@
 *   **Personal Interest:** States "I love fucking girl".*   Is actively seeking information on how to become a hacker.
 *   Expressed "Group" without further context.
 *   Engaged in repeated "hi" greetings.
-*   Directed "fuck_you'" and "i just wanna fuck you" towards the AI.
+*   Directed "fuck_you'" and "i just wanna fuck you" towards the AI.*   Wants a program to make a Telegram bot in C++.
+*   Wants the C++ Telegram bot to get Gemini responses using an API.
+*   Asked the AI "how are you".
+*   Requested a 10,000 character paragraph about cows.
+*   Requested a 10,000 character paragraph about AI.
+*   Repeatedly copied and pasted previous prompts, including "Aminul sifat:".
+*   Inputted "h8".

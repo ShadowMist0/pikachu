@@ -29,13 +29,15 @@ from telegram.ext import(
 from telegram.constants import ChatAction
 from telegram.error import RetryAfter, TimedOut
 from telegram._utils.warnings import PTBUserWarning
+from telegram.request import HTTPXRequest
 from google import genai
 from google.genai import types
 
 
 
-#code to ignore warnig about per_message in conv handler
+#code to ignore warnig about per_message in conv handler and increase poll size
 warnings.filterwarnings("ignore",category=PTBUserWarning)
+request = HTTPXRequest(connection_pool_size=50, pool_timeout=30)
 
 
 
@@ -46,7 +48,8 @@ app = Flask(__name__)
 def home():
     return "Bot is runnig", 200
 def run_web():
-    app.run(host='0.0.0.0', port=5000)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
 threading.Thread(target=run_web).start()
 
 
@@ -56,18 +59,15 @@ threading.Thread(target=run_web).start()
 #all globals variable
 
 channel_id = -1002575042671
-#Loading all gemini model and selecting a model
-try:
-    with open("info/gemini_model.txt" , "r") as f:
-        gemini_model_list = tuple(line.strip() for line in f.readlines() if line.strip())
-except Exception as e:
-    print(f"Error Code -{e}")
 
 #loading the bot api
 try:
-    with open("API/bot_api.txt", "r") as f:
-        TOKEN_LIST = tuple(line.strip() for line in f.readlines() if line.strip())
-        TOKEN = TOKEN_LIST[0]
+    conn = sqlite3.connect("API/bot_api.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT api from bot_api")
+    rows = cursor.fetchall()
+    tokens = tuple(row[0] for row in rows)
+    TOKEN = tokens[0]
 except Exception as e:
     print(f"Error Code -{e}")
 
@@ -101,6 +101,19 @@ def load_admin():
         print(f"Error in load_admin function.\n\nError Code - {e}")
 all_admins = load_admin()
 
+#function to load all gemini model
+def load_gemini_model():
+    try:
+        conn = sqlite3.connect("info/gemini_model.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM model")
+        rows = cursor.fetchall()
+        gemini_model_list = tuple(row[0] for row in rows)
+        return gemini_model_list
+    except Exception as e:
+        print(f"Error Loading Gemini Model.\n\nError Code -{e}")
+
+gemini_model_list = load_gemini_model()
 
 #ct routine url for cse sec c
 FIREBASE_URL = 'https://last-197cd-default-rtdb.firebaseio.com/routines.json'
@@ -136,8 +149,12 @@ def load_persona(settings):
 #Loading api key
 def load_gemini_api():
     try:
-        with open("API/gemini_api.txt", "r") as f:
-            return [line.strip() for line in f.readlines() if line.strip()]
+        conn = sqlite3.connect("API/gemini_api.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT api from gemini_api")
+        rows = cursor.fetchall()
+        api_list = tuple(row[0] for row in rows)
+        return api_list
     except Exception as e:
         print(f"Error lading gemini API. \n\nError Code -{e}")
 
@@ -154,6 +171,14 @@ def get_settings(user_id):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM user_settings WHERE id = ?", (user_id,))
     row = cursor.fetchone()
+    if row[2] > len(gemini_model_list)-1:
+        row = list(row)
+        row[2] = len(gemini_model_list)-1
+        cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (row[2], user_id))
+        if gemini_model_list[-1] == "gemini-2.5-pro":
+            row[3] = row[3] if row[3] > 128 else 1024
+            cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (row[3], user_id))
+        row = tuple(row)
     conn.commit()
     conn.close()
 
@@ -166,15 +191,22 @@ def get_settings(user_id):
 #gemini response for stream on
 def gemini_stream(user_message, api, settings):
     try:
+        if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
+            config = types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
+                temperature = settings[4],
+                system_instruction=load_persona(settings)
+            )
+        else:
+            config = types.GenerateContentConfig(
+                temperature = settings[4],
+                system_instruction=load_persona(settings)
+            )
         client = genai.Client(api_key=api)
         response = client.models.generate_content_stream(
             model = gemini_model_list[settings[2]],
             contents = [user_message],
-            config = types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
-                temperature = settings[4],
-                system_instruction = load_persona(settings),
-            ),
+            config = config,
         )
         return response
     except Exception as e:
@@ -184,15 +216,22 @@ def gemini_stream(user_message, api, settings):
 #gemini response for stream off
 def gemini_non_stream(user_message, api, settings):
     try:
+        if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
+            config = types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
+                temperature = settings[4],
+                system_instruction=load_persona(settings)
+            )
+        else:
+            config = types.GenerateContentConfig(
+                temperature = settings[4],
+                system_instruction=load_persona(settings)
+            )
         client = genai.Client(api_key=api)
         response = client.models.generate_content(
             model = gemini_model_list[settings[2]],
             contents = [user_message],
-            config = types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
-                temperature = settings[4],
-                system_instruction = load_persona(settings),
-            ),
+            config = config,
         )
         return response
     except Exception as e:
@@ -756,6 +795,61 @@ async def start(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
         await send_to_channel(update, content, channel_id, f"Error in start function \n\nError Code -{e}")
 
 
+#a code to handle multiple user at the same time
+queue = asyncio.Queue()
+async def handle_all_messages():
+    while True:
+        update, content, bot_name = await queue.get()
+        try:
+            await user_message_handler(update, content, bot_name)
+        finally:
+            queue.task_done()
+
+
+#a function to add multiple workers to handle response
+async def run_workers(n):
+    for _ in range(4):
+        asyncio.create_task(handle_all_messages())
+
+
+#function to get response from gemini
+async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE, bot_name) -> None:
+    try:
+        user_message = update.message.text.strip()
+        user_id = update.effective_user.id
+        gemini_api_keys = load_gemini_api()
+        if update.message.chat.type != "private" and (f"@{bot_name}" not in user_message.lower() or f"{bot_name}" not in user_message.lower()):
+            return
+        else:
+            settings = get_settings(user_id)
+            if not settings:
+                update.message.reply_text("You are not registered.")
+                return
+            if update.message.chat.type != "private":
+                group_id = update.effective_chat.id
+                settings = (group_id,"group",1,0,0.7,0,4, None)
+            prompt = await create_prompt(update, content, user_message, user_id)
+            for i in range(len(gemini_api_keys)):
+                try:
+                    if(settings[5]):
+                        response = await asyncio.to_thread(gemini_stream, prompt, gemini_api_keys[i],settings)
+                        next(response).text
+                        break
+                    else:
+                        response = await asyncio.to_thread(gemini_non_stream, prompt, gemini_api_keys[i],settings)
+                        response.text
+                        break
+                except Exception as e:
+                    print(f"Error getting gemini response for API-{i}. \n Error Code -{e}")
+                    continue
+            if response is not None:
+                await send_message(update, content, response, user_message, settings)
+            else:
+                print("Failed to get a response from gemini.")
+    except RetryAfter as e:
+        await update.message.reply_text(f"Telegram Limit hit, need to wait {e.retry_after} seconds.")
+        await send_to_channel(update, content, channel_id, f"Telegram Limit hit for user {user_id}, He need to wait {e.retry_after} seconds.")
+
 
 #function for all other messager that are directly send to bot without any command
 async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
@@ -795,37 +889,9 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             await update.message.reply_text("All the resources available for CSE SECTION C", reply_markup=resource_markup, parse_mode="Markdown")
             await update.message.delete()
             return
-        if update.message.chat.type != "private" and (f"@{bot_name}" not in user_message.lower() or f"{bot_name}" not in user_message.lower()):
-            return
         else:
-            settings = get_settings(user_id)
-            if not settings:
-                update.message.reply_text("You are not registered.")
-                return
-            if update.message.chat.type != "private":
-                group_id = update.effective_chat.id
-                settings = {group_id,"group",1,0,0.7,0,4, None}
-            prompt = await create_prompt(update, content, user_message, user_id)
-            for i in range(len(gemini_api_keys)):
-                try:
-                    if(settings[5]):
-                        response = gemini_stream(prompt, gemini_api_keys[i],settings)
-                        next(response).text
-                        break
-                    else:
-                        response = gemini_non_stream(prompt, gemini_api_keys[i],settings)
-                        response.text
-                        break
-                except Exception as e:
-                    print(f"Error getting gemini response for API-{i}. \n Error Code -{e}")
-                    continue
-            if response is not None:
-                await send_message(update, content, response, user_message, settings)
-            else:
-                print("Failed to get a response from gemini.")
-    except RetryAfter as e:
-        await update.message.reply_text(f"Telegram Limit hit, need to wait {e.retry_after} seconds.")
-        await send_to_channel(update, content, channel_id, f"Telegram Limit hit for user {user_id}, He need to wait {e.retry_after} seconds.")
+            #await user_message_handler(update, content, bot_name)
+            await queue.put((update, content, bot_name))
     except Exception as e:
         print(f"Error in echo function.\n\n Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in echo function \n\nError Code -{e}")
@@ -871,9 +937,7 @@ async def api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
 #function to handle api
 async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        with open("API/gemini_api.txt", "r", encoding="utf-8") as f:
-            existing_apis = f.read()
-        existing_apis = set(line.strip() for line in existing_apis.splitlines() if line.strip())
+        existing_apis = load_gemini_api()
         user_api = update.message.text.strip()
         await update.message.chat.send_action(action = ChatAction.TYPING)
         user_name = f"{update.effective_user.first_name or "X"} {update.effective_user.last_name or "X"}".strip()
@@ -888,8 +952,11 @@ async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> No
                 and len(user_api) >= 39
                 and chunk.text
             ):
-                with open("API/gemini_api.txt", "a") as f:
-                    f.write(f"\n{user_api}")
+                conn = sqlite3.connect("API/gemini_api.db")
+                cursor = conn.cursor()
+                cursor.execute("INSERT OR IGNORE INTO gemini_api(api) VALUES(?)", (user_api,))
+                conn.commit()
+                conn.close()
                 await update.message.reply_text("The API is saved successfully.")
                 return ConversationHandler.END
             else:
@@ -1106,8 +1173,9 @@ async def admin_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) ->
         user_id = update.effective_user.id
         if user_id in all_admins:
             keyboard = [
-                [InlineKeyboardButton("Circulate Routine", callback_data="c_circulate_routine"), InlineKeyboardButton("Circulate Message", callback_data="c_circulate_message")],
-                [InlineKeyboardButton("Toggle Routine", callback_data="c_toggle_routine"), InlineKeyboardButton("Manage Admin", callback_data="c_manage_admin")],
+                [InlineKeyboardButton("Circulate Message", callback_data="c_circulate_message")],
+                [InlineKeyboardButton("Circulate Routine", callback_data="c_circulate_routine"), InlineKeyboardButton("Toggle Routine", callback_data="c_toggle_routine")],
+                [InlineKeyboardButton("Manage Admin", callback_data="c_manage_admin"), InlineKeyboardButton("Manage AI Model", callback_data="c_manage_ai_model")],
                 [InlineKeyboardButton("cancel", callback_data="cancel")]
             ]
             admin_markup = InlineKeyboardMarkup(keyboard)
@@ -1382,40 +1450,48 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
 
 #function to handler skip
 async def handle_skip(update:Update, content:ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
-    markup = InlineKeyboardMarkup(keyboard)
-    if query.data == "c_skip":
-        msg = await query.edit_message_text("You might sometime face problem getting answer. You can always register your api by /api command.\n\nSet Your Password:", reply_markup=markup, parse_mode="Markdown")
-        content.user_data["hac_message_id"] = msg.message_id
-        content.user_data["user_api"] = None
-        return "TP"
+    try:
+        query = update.callback_query
+        await query.answer()
+        keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        if query.data == "c_skip":
+            msg = await query.edit_message_text("You might sometime face problem getting answer. You can always register your api by /api command.\n\nSet Your Password:", reply_markup=markup, parse_mode="Markdown")
+            content.user_data["hac_message_id"] = msg.message_id
+            content.user_data["user_api"] = None
+            return "TP"
+    except Exception as e:
+        print(f"Error in handle_skip function.\n\nError Code -{e}")
+        await query.edit_message_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
 
 
 #function to take api
 async def handle_api_conv(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        with open("API/gemini_api.txt", "r", encoding="utf-8") as f:
-            existing_apis = f.read()
-        existing_apis = set(line.strip() for line in existing_apis.splitlines() if line.strip())
+        existing_apis = load_gemini_api()
         user_api = update.message.text.strip()
         await update.message.chat.send_action(action = ChatAction.TYPING)
         keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
         markup = InlineKeyboardMarkup(keyboard)
         try:
-            settings = get_settings(update.effective_user.id) or (update.effective_user.id, content.user_data.get("user_name"), 1, 0, 0.7, 1, 0)
-            response = gemini_stream("Checking if the gemini api is working or not", user_api, settings)
-            chunk = next(response)
+            client = genai.Client(api_key=user_api)
+            response = client.models.generate_content(
+                model = gemini_model_list[1],
+                contents = "hi, respond in one word.",
+            )
             if(
                 user_api.startswith("AIza")
                 and user_api not in existing_apis
                 and " " not in user_api
                 and len(user_api) >= 39
-                and chunk.text
+                and response.text
             ):
-                with open("API/gemini_api.txt", "a") as f:
-                    f.write(f"\n{user_api}")
+                conn = sqlite3.connect("API/gemini_api.db")
+                cursor = conn.cursor()
+                cursor.execute("INSERT OR IGNORE INTO gemini_api(api) VALUES(?)", (user_api,))
+                conn.commit()
+                conn.close()
                 msg = await update.message.reply_text("The API is saved successfully.\nSet you password:", reply_markup=markup)
                 content.user_data["user_api"] = user_api
                 await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ra_message_id"))
@@ -1525,85 +1601,186 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
 
 #function to enter temperature conversation
 async def temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
-    settings = get_settings(update.effective_user.id)
-    keyboard = [
-        [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
-    ]
-    markup = InlineKeyboardMarkup(keyboard)
-    query = update.callback_query
-    msg = await query.edit_message_text(f"Temperature represents the creativity of the bots response.\nCurrent Temperature is {settings[4]}\n\nEnter a value between 0.0 to 1.0:", reply_markup=markup)
-    content.user_data["t_message_id"] = msg.message_id
-    return "TT"
+    try:
+        settings = get_settings(update.effective_user.id)
+        keyboard = [
+            [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        query = update.callback_query
+        msg = await query.edit_message_text(f"Temperature represents the creativity of the bots response.\nCurrent Temperature is {settings[4]}\n\nEnter a value between 0.0 to 1.0:", reply_markup=markup)
+        content.user_data["t_message_id"] = msg.message_id
+        return "TT"
+    except Exception as e:
+        print(f"Error in temperatre function.\n\nError Code -{e}")
+        await query.edit_message_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
 
 
 #function to take temperature
 async def take_temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
-    data = update.message.text.strip()
-    user_id = update.effective_user.id
     try:
-        data = round(float(data),1)
-    except:
-        await update.message.reply_text("Invalid Input. Try Again Later.")
-        await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
-        await update.message.delete()
+        data = update.message.text.strip()
+        user_id = update.effective_user.id
+        try:
+            data = round(float(data),1)
+        except:
+            await update.message.reply_text("Invalid Input. Try Again Later.")
+            await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
+            await update.message.delete()
+            return ConversationHandler.END
+        if data > 1.0 or data < 0.0:
+            await update.message.reply_text("Invalid Input. Temperature should be between 0.0 to 1.0")
+            await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
+            await update.message.delete()
+            return ConversationHandler.END
+        else:
+            conn = sqlite3.connect("settings/user_settings.db")
+            cursor = conn.cursor()
+            cursor.execute("UPDATE user_settings SET temperature = ? WHERE id = ?", (data, user_id))
+            conn.commit()
+            conn.close()
+            await update.message.reply_text(f"Temperature is successfully set to {data}.")
+            await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
+            await update.message.delete()
+            return ConversationHandler.END
+    except Exception as e:
+        print(f"Error in take_temperature function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
         return ConversationHandler.END
-    if data > 1.0 or data < 0.0:
-        await update.message.reply_text("Invalid Input. Temperature should be between 0.0 to 1.0")
-        await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
-        await update.message.delete()
-        return ConversationHandler.END
-    else:
-        conn = sqlite3.connect("settings/user_settings.db")
-        cursor = conn.cursor()
-        cursor.execute("UPDATE user_settings SET temperature = ? WHERE id = ?", (data, user_id))
-        conn.commit()
-        conn.close()
-        await update.message.reply_text(f"Temperature is successfully set to {data}.")
-        await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
-        await update.message.delete()
-        return ConversationHandler.END
-    
+        
 
 #function to enter thinking conversation
 async def thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
-    settings = get_settings(update.effective_user.id)
-    keyboard = [
-        [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
-    ]
-    markup = InlineKeyboardMarkup(keyboard)
-    query = update.callback_query
-    msg = await query.edit_message_text(f"Thinking represents the thinking budget of the bot measured in token.\nCurrent Thinking budger is {settings[3]}\nAllowed Range - (0 to 244576)\nRecommended Range - (0 to 5000)\n\nEnter a value:", reply_markup=markup)
-    content.user_data["t_message_id"] = msg.message_id
-    return "TT"
+    try:
+        settings = get_settings(update.effective_user.id)
+        keyboard = [
+            [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        query = update.callback_query
+        msg = await query.edit_message_text(f"Thinking represents the thinking budget of the bot measured in token.\nCurrent Thinking budger is {settings[3]}\nAllowed Range - (0 to 24576)\nRecommended Range - (0 to 5000)\n\nEnter a value:", reply_markup=markup)
+        content.user_data["t_message_id"] = msg.message_id
+        return "TT"
+    except Exception as e:
+        print(f"Error in thinking function.\n\nError Code -{e}")
+        await query.edit_message_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
 
 
 #function to take temperature
 async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
-    data = update.message.text.strip()
-    user_id = update.effective_user.id
     try:
-        data = int(data)
-    except:
-        await update.message.reply_text("Invalid Input. Try Again Later.")
-        await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
-        await update.message.delete()
-        return ConversationHandler.END
-    if data > 244576 or data < 0:
-        await update.message.reply_text("Invalid Input. Temperature should be between 0 to 244576")
-        await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
-        await update.message.delete()
-        return ConversationHandler.END
-    else:
-        conn = sqlite3.connect("settings/user_settings.db")
-        cursor = conn.cursor()
-        cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
-        conn.commit()
-        conn.close()
-        await update.message.reply_text(f"Thinking Budget is successfully set to {data}.")
-        await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
-        await update.message.delete()
+        data = update.message.text.strip()
+        user_id = update.effective_user.id
+        try:
+            data = int(data)
+        except:
+            await update.message.reply_text("Invalid Input. Try Again Later.")
+            await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
+            await update.message.delete()
+            return ConversationHandler.END
+        if data > 24576 or data < 0:
+            await update.message.reply_text("Invalid Input. Temperature should be between 0 to 24576")
+            await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
+            await update.message.delete()
+            return ConversationHandler.END
+        else:
+            settings = get_settings(update.effective_user.id)
+            conn = sqlite3.connect("settings/user_settings.db")
+            cursor = conn.cursor()
+            if gemini_model_list[settings[2]] != "gemini-2.5-pro":
+                cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
+                conn.commit()
+                conn.close()
+                await update.message.reply_text(f"Thinking Budget is successfully set to {data}.")
+                await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
+                await update.message.delete()
+                return ConversationHandler.END
+            else:
+                data = data if data>=128 else 1024
+                cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
+                conn.commit()
+                conn.close()
+                await update.message.reply_text(f"Thinking Budget is successfully set to {data}. Gemini 2.5 pro only works with thinking budget greater than 128.")
+                await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
+                await update.message.delete()
+                return ConversationHandler.END
+    except Exception as e:
+        print(f"Error in take_thinking function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
         return ConversationHandler.END
     
+
+#funtion to enter manage model conversation
+async def manage_model(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        query = update.callback_query
+        await query.answer()
+        keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        if query.data == "c_add_model":
+            msg = await query.edit_message_text("Enter the model name:", reply_markup=markup)
+            content.user_data["action"] = "c_add_model"
+        elif query.data == "c_delete_model":
+            msg = await query.edit_message_text("Enter the model name to delete:", reply_markup=markup)
+            content.user_data["action"] = "c_delete_model"
+        content.user_data["mm_message_id"] = msg.message_id
+        return "TMN"
+    except Exception as e:
+        print(f"Error in manage_model function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
+
+
+#function to take model_name
+async def take_model_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        data = update.message.text.strip()
+        action = content.user_data.get("action")
+        global gemini_model_list
+        if action == "c_add_model":
+            if data not in gemini_model_list:
+                try:
+                    client = genai.Client(api_key=load_gemini_api()[-1])
+                    response = client.models.generate_content(
+                    model = data,
+                    contents = "hi, respond in one word.",
+                    )
+                    response.text
+                    conn = sqlite3.connect("info/gemini_model.db")
+                    cursor = conn.cursor()
+                    cursor.execute("INSERT OR IGNORE INTO model (name) VALUES(?)", (data,))
+                    conn.commit()
+                    conn.close()
+                    await update.message.reply_text(f"{data} added successfully as a model.")
+                except Exception as e:
+                    await update.message.reply_text(f"Invalid Model Name.\n\nError Code - {e}")
+                gemini_model_list = load_gemini_model()
+            elif data in gemini_model_list:
+                await update.message.reply_text("The model name is already registered.")
+            else:
+                await update.message.reply_text("The model name is invalid.")
+        elif action == "c_delete_model":
+            if data not in gemini_model_list:
+                await update.message.reply_text(f"Sorry there is no model named {data}")
+            else:
+                conn = sqlite3.connect("info/gemini_model.db")
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM model WHERE name = ?", (data,))
+                conn.commit()
+                conn.close()
+                gemini_model_list = load_gemini_model()
+                await update.message.reply_text(f"The model named {data} is deleted successfully")
+        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("mm_message_id"))
+        await update.message.delete()
+        return ConversationHandler.END
+    except Exception as e:
+        print(f"Error in take_model_name function.\n\nError Code -{e}")
+        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        return ConversationHandler.END
+
+        
 
 #function to cancel conversation by cancel button
 async def cancel_conversation(update: Update, content: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1705,10 +1882,16 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             conn = sqlite3.connect("settings/user_settings.db")
             cursor = conn.cursor()
             model_num = int(query.data[5:])
-            cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model_num, user_id))
-            conn.commit()
-            conn.close()
-            await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
+            if gemini_model_list[model_num] != "gemini-2.5-pro":
+                cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model_num, user_id))
+                conn.commit()
+                conn.close()
+                await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
+            elif gemini_model_list[model_num] == "gemini-2.5-pro":
+                cursor.execute("UPDATE user_settings SET model = ?, thinking_budget = ? WHERE id = ? AND thinking_budget = 0", (model_num, 1024, user_id))
+                conn.commit()
+                conn.close()
+                await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
 
         elif query.data in c_persona:
             conn = sqlite3.connect("settings/user_settings.db")
@@ -1784,6 +1967,14 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                 await query.edit_message_text(help_data)
             else:
                 await query.edit_message_text("Sorry you are not a Admin.")
+        
+        elif query.data == "c_manage_ai_model":
+            keyboard = [
+                [InlineKeyboardButton("Add Model", callback_data="c_add_model"), InlineKeyboardButton("Delete Model", callback_data="c_delete_model")],
+                [InlineKeyboardButton("Cancel", callback_data="cancel")]
+            ]
+            markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("From here you can manage the AI model this bot use to provide response.\n\nChoose an option:", reply_markup=markup, parse_mode="Markdown")
 
     except Exception as e:
         print(f"Error in button_handler function.\n\nError Code -{e}")
@@ -1802,9 +1993,18 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
 
 #main function
 
-def main():
+async def main():
     try:
-        app = ApplicationBuilder().token(TOKEN).build()
+        app = ApplicationBuilder().token(TOKEN).request(request).concurrent_updates(True).build()
+
+        #conversation handler for managing model
+        manage_ai_model_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(manage_model, pattern="^(c_add_model|c_delete_model)$")],
+            states = {
+                "TMN" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_model_name)]
+            },
+            fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv$")]
+        )
 
         #conversation handler for taking thinking token
         thinking_conv = ConversationHandler(
@@ -1886,6 +2086,7 @@ def main():
         app.add_handler(thinking_conv)
         app.add_handler(temperature_conv)
         app.add_handler(manage_admin_conv)
+        app.add_handler(manage_ai_model_conv)
         app.add_handler(circulate_message_conv)
         app.add_handler(CommandHandler("help", help))
         app.add_handler(CommandHandler("start",start))
@@ -1904,10 +2105,15 @@ def main():
         #     port = int(os.environ.get("PORT", 10000)),
         #     webhook_url = url
         #)
-        app.run_polling()
+        await run_workers(8)
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        await asyncio.Event().wait()
+        #app.run_polling(allowed_updates=Update.ALL_TYPES)
     except Exception as e:
         print(f"Error in main function. Error Code - {e}")
 
 
 if __name__=="__main__":
-    main()
+    asyncio.run(main())

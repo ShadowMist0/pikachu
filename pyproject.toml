@@ -16,21 +16,24 @@ maintainers = [
 keywords = ["Telegram", "bot", "automation", "ai", "ruet", "cse", "section-c"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Operating System :: Linux",
+    "Operating System :: Linux"
 ]
 dependencies = [
     "flask>=3.1.1",
     "requests>=2.28.1",
-    "python-telegram-bot>=20.8",
+    "python-telegram-bot[webhooks]>=20.8",
     "google-genai>=1.24.0",
     "telegram>=0.0.1",
     "pyrebase4>=4.5.0",
     "gunicorn>=23.0.0",
 ]
+
 [project.urls]
 "Repository" = "https://github.com/sifat1996120/cse_sec_c"
 "Homepage" = "https://github.com/shadow_mist0/sec_c"
+
 [project.scripts]
-bot-start = "main.bot:main"
+bot-start = "Main.bot:main"
+
 [tools.setuptools]
 packages = ["Main", "API", "info", "memory", "persona", "routine", "settings", "Conversation"]
