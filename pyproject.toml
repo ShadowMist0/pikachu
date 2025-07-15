@@ -25,7 +25,7 @@ dependencies = [
     "google-genai>=1.24.0",
     "telegram>=0.0.1",
     "pyrebase4>=4.5.0",
-    "gunicorn>=23.0.0",
+    "gunicorn>=23.0.0"
 ]
 
 [project.urls]
@@ -35,5 +35,5 @@ dependencies = [
 [project.scripts]
 bot-start = "Main.bot:main"
 
-[tools.setuptools]
+[tool.setuptools]
 packages = ["Main", "API", "info", "memory", "persona", "routine", "settings", "Conversation"]
