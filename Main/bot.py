@@ -74,7 +74,7 @@ try:
     cursor.execute("SELECT api from bot_api")
     rows = cursor.fetchall()
     tokens = tuple(row[0] for row in rows)
-    TOKEN = tokens[0]
+    TOKEN = tokens[1]
 except Exception as e:
     print(f"Error Code -{e}")
 
