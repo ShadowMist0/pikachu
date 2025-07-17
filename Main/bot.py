@@ -29,6 +29,8 @@ from telegram.ext import(
 )
 from telegram.constants import ChatAction
 from telegram.error import RetryAfter, TimedOut
+from pymongo import MongoClient
+from pymongo.server_api import ServerApi
 from telegram._utils.warnings import PTBUserWarning
 from telegram.request import HTTPXRequest
 from google import genai
@@ -61,6 +63,12 @@ threading.Thread(target=run_web).start()
 
 
 
+#connecting to MongoDB database
+mongo_pass = os.getenv("MDB_pass_shadow")
+url = f"mongodb+srv://shadow_mist0:{mongo_pass}@cluster0.zozzwwv.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+client = MongoClient(url, server_api=ServerApi("1"))
+db = client["phantom_bot"]
+
 
 
 #all globals variable
@@ -68,26 +76,19 @@ threading.Thread(target=run_web).start()
 channel_id = -1002575042671
 
 #loading the bot api
-try:
-    conn = sqlite3.connect("API/bot_api.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT api from bot_api")
-    rows = cursor.fetchall()
-    tokens = tuple(row[0] for row in rows)
-    TOKEN = tokens[1]
-except Exception as e:
-    print(f"Error Code -{e}")
+def get_token():
+    try:
+        TOKENs = db["API"].find()[0]["bot_api"]
+        return TOKENs
+    except Exception as e:
+        print(f"Error Code -{e}")
+TOKEN = get_token()[0]
 
 
 #all registered user
 def load_all_user():
     try:
-        conn = sqlite3.connect("info/user_data.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT user_id from users")
-        rows = cursor.fetchall()
-        users = tuple(row[0] for row in rows)
-        conn.close()
+        users = tuple(int(user) for user in db.list_collection_names() if user.isdigit())
         return users
     except Exception as e:
         print(f"Error in load_all_user fnction.\n\n Error code -{e}")
@@ -97,12 +98,7 @@ all_users = load_all_user()
 #function to load all admin
 def load_admin():
     try:
-        conn = sqlite3.connect("admin/admin.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT user_id from admin")
-        rows = cursor.fetchall()
-        admins = tuple(row[0] for row in rows)
-        conn.close()
+        admins = tuple(admin for admin in db["admin"].find()[0]["admin"])
         return admins
     except Exception as e:
         print(f"Error in load_admin function.\n\nError Code - {e}")
@@ -111,12 +107,8 @@ all_admins = load_admin()
 #function to load all gemini model
 def load_gemini_model():
     try:
-        conn = sqlite3.connect("info/gemini_model.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM model")
-        rows = cursor.fetchall()
-        gemini_model_list = tuple(row[0] for row in rows)
-        return gemini_model_list
+        models = tuple(db["ai_model"].find()[0]["model_name"])
+        return models
     except Exception as e:
         print(f"Error Loading Gemini Model.\n\nError Code -{e}")
 
@@ -137,6 +129,136 @@ FIREBASE_URL = 'https://last-197cd-default-rtdb.firebaseio.com/routines.json'
 
 
 
+#function to create settings file MongoDB to offline for optimization
+def create_settings_file():
+    os.makedirs("settings", exist_ok=True)
+    conn = sqlite3.connect("settings/user_settings.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_settings(
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            model INTEGER,
+            thinking_budget INTEGER,
+            temperature REAL,
+            streaming INTEGER,
+            persona INTEGER
+        )
+    """)
+    for user in all_users:
+        settings = tuple(db[f"{user}"].find()[0]["settings"])
+        cursor.execute("""
+            INSERT OR IGNORE INTO user_settings 
+            (id, name, model, thinking_budget, temperature, streaming, persona)
+            VALUES (?,?,?,?,?,?,?)
+    """, settings
+    )
+    conn.commit()
+    conn.close()
+
+
+#function to create offline file for conversation history
+def create_conversation_file():
+    try:
+        os.makedirs("Conversation", exist_ok=True)
+        for user in all_users:
+            conv_data = db[f"{user}"].find()[0]["conversation"]
+            with open(f"Conversation/conversation-{user}.txt", "w") as file:
+                if conv_data:
+                    file.write(conv_data)
+                else:
+                    pass
+        try:
+            conv_data = db["group"].find()[0]["conversation"]
+            with open(f"Conversation/conversation-group.txt", "w") as file:
+                file.write(conv_data)
+        except:
+            print("Group conversation doesn't exist")
+            with open(f"Conversation/conversation-group.txt", "w") as file:
+                pass
+    except Exception as e:
+        print(f"Error in create_conversation_file function. \n\n Error Code  {e}")
+
+
+#function to create offline file for memory
+def create_memory_file():
+    try:
+        os.makedirs("memory", exist_ok=True)
+        for user in all_users:
+            mem_data = db[f"{user}"].find()[0]["memory"]
+            with open(f"memory/memory-{user}.txt", "w") as file:
+                if mem_data:
+                    file.write(mem_data)
+                else:
+                    pass
+        try:
+            mem_data = db["group"].find()[0]["memory"]
+            with open(f"memory/memory-group.txt", "w") as file:
+                file.write(mem_data)
+        except:
+            print("Group memory doesn't exist")
+            with open(f"memory/memory-group.txt", "w") as file:
+                pass
+    except Exception as e:
+        print(f"Error in create_memory_file function. \n\n Error Code  {e}")
+
+
+#function to create offline file for memory
+def create_persona_file():
+    try:
+        os.makedirs("persona", exist_ok=True)
+        personas = [persona for persona in db["persona"].find({"type":"persona"})]
+        for persona in personas:
+            with open(f"persona/{persona["name"]}.txt", "w") as f:
+                f.write(persona["persona"])
+    except Exception as e:
+        print(f"Error in create_persona_file function. \n\n Error Code  {e}")
+
+    
+#function to create user_data file MongoDB to offline for optimization
+def create_user_data_file():
+    os.makedirs("info", exist_ok=True)
+    conn = sqlite3.connect("info/user_data.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users(
+            user_id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            gender TEXT,
+            roll INTEGER,
+            password TEXT,
+            api TEXT
+        )
+    """)
+    for user in all_users:
+        user_data = tuple(data for data in db[f"{user}"].find_one({"id":user})["user_data"])
+        cursor.execute("""
+            INSERT OR IGNORE INTO users 
+            (user_id, name, gender, roll, password, api)
+            VALUES (?,?,?,?,?,?)
+    """, user_data
+    )
+    conn.commit()
+    conn.close()
+
+
+#function to create a password file for admin
+def create_admin_pass_file():
+    os.makedirs("admin", exist_ok=True)
+    content = db["admin"].find_one({"type" : "admin"})["admin_password"]
+    content = fernet.encrypt(content.encode())
+    with open("admin/admin_password.shadow", "wb") as f:
+        f.write(content)
+
+
+#calling all those function to create offline file from MongoDB
+create_memory_file()
+create_persona_file()
+create_settings_file()
+create_user_data_file()
+create_admin_pass_file()
+create_conversation_file()
+
 
 
 #All the global function 
@@ -144,9 +266,9 @@ FIREBASE_URL = 'https://last-197cd-default-rtdb.firebaseio.com/routines.json'
 #loading persona
 def load_persona(settings):
     try:
-        files = sorted(glob("persona/*shadow"))
-        with open(files[settings[6]], "rb") as file:
-            persona = fernet.decrypt(file.read()).decode("utf-8")
+        files = sorted(glob("persona/*txt"))
+        with open(files[settings[6]], "r") as file:
+            persona = file.read()
         return persona
     except Exception as e:
         print(f"Error in load_persona function. \n\n Error Code - {e}")
@@ -156,14 +278,11 @@ def load_persona(settings):
 #Loading api key
 def load_gemini_api():
     try:
-        conn = sqlite3.connect("API/gemini_api.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT api from gemini_api")
-        rows = cursor.fetchall()
-        api_list = tuple(row[0] for row in rows)
+        api_list = tuple(db["API"].find()[0]["gemini_api"])
         return api_list
     except Exception as e:
         print(f"Error lading gemini API. \n\nError Code -{e}")
+gemini_api_keys = load_gemini_api()
 
 
 #adding escape character for markdown rule
@@ -173,7 +292,7 @@ def add_escape_character(text):
 
 
 #function to get settings
-def get_settings(user_id):
+async def get_settings(user_id):
     conn = sqlite3.connect("settings/user_settings.db")
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM user_settings WHERE id = ?", (user_id,))
@@ -181,9 +300,17 @@ def get_settings(user_id):
     if row[2] > len(gemini_model_list)-1:
         row = list(row)
         row[2] = len(gemini_model_list)-1
+        await asyncio.to_thread(db[f"{user_id}"].update_one,
+            {"id" : user_id},
+            {"$set" : {"settings" : row}}
+        )
         cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (row[2], user_id))
         if gemini_model_list[-1] == "gemini-2.5-pro":
             row[3] = row[3] if row[3] > 128 else 1024
+            await asyncio.to_thread(db[f"{user_id}"].update_one,
+                {"id" : user_id},
+                {"$set" : {"settings" : row}}
+            )
             cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (row[3], user_id))
         row = tuple(row)
     conn.commit()
@@ -198,16 +325,24 @@ def get_settings(user_id):
 #gemini response for stream on
 def gemini_stream(user_message, api, settings):
     try:
+        tools=[]
+        tools.append(types.Tool(google_search=types.GoogleSearch))
+        tools.append(types.Tool(url_context=types.UrlContext))
+
         if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
             config = types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
                 temperature = settings[4],
-                system_instruction=load_persona(settings)
+                system_instruction=load_persona(settings),
+                tools = tools,
+                response_modalities=["TEXT"]
             )
         else:
             config = types.GenerateContentConfig(
                 temperature = settings[4],
-                system_instruction=load_persona(settings)
+                system_instruction=load_persona(settings),
+                tools = tools,
+                response_modalities=["TEXT"],
             )
         client = genai.Client(api_key=api)
         response = client.models.generate_content_stream(
@@ -223,16 +358,24 @@ def gemini_stream(user_message, api, settings):
 #gemini response for stream off
 def gemini_non_stream(user_message, api, settings):
     try:
+        tools=[]
+        tools.append(types.Tool(google_search=types.GoogleSearch))
+        tools.append(types.Tool(url_context=types.UrlContext))
+        
         if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
             config = types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
                 temperature = settings[4],
-                system_instruction=load_persona(settings)
+                system_instruction=load_persona(settings),
+                tools = tools,
+                response_modalities=["TEXT"],
             )
         else:
             config = types.GenerateContentConfig(
                 temperature = settings[4],
-                system_instruction=load_persona(settings)
+                system_instruction=load_persona(settings),
+                tools = tools,
+                response_modalities=["TEXT"]
             )
         client = genai.Client(api_key=api)
         response = client.models.generate_content(
@@ -245,20 +388,36 @@ def gemini_non_stream(user_message, api, settings):
         print(f"Error getting gemini response.\n\n Error Code - {e}")
         
 
+#function to create image using gemini api
+def gemini_create_image(prompt, api):
+    client = genai.Client(api_key=api)
+    response = client.models.generate_content(
+        model = "gemini-2.0-flash-preview-image-generation",
+        contents = prompt,
+        config = types.GenerateContentConfig(
+            response_modalities=["TEXT", "IMAGE"],
+        )
+    )
+    return response
+
 
 #A function to delete n times convo from conversation history
 def delete_n_convo(user_id, n):
     try:
         if user_id < 0:
-            group_id = user_id
-            with open(f"Conversation/conversation-group-{group_id}.txt", "r+", encoding="utf-8") as f:
+            with open(f"Conversation/conversation-group.txt", "r+", encoding="utf-8") as f:
                 data = f.read()
                 data = data.split("You: ")
                 if len(data) >= n+1:
                     data = data[n:]
                     f.seek(0)
                     f.truncate(0)
-                    f.write("You: ".join(data))
+                    data =  "You: ".join(data)
+                    f.write(data)
+                    db[f"group"].update_one(
+                        {"id" : "group"},
+                        {"$set" : {"conversation" : data}}
+                    )
             return
         with open(f"Conversation/conversation-{user_id}.txt", "r+", encoding="utf-8") as f:
             data = f.read()
@@ -267,7 +426,12 @@ def delete_n_convo(user_id, n):
                 data = data[n:]
                 f.seek(0)
                 f.truncate(0)
-                f.write("You: ".join(data))
+                data =  "You: ".join(data)
+                f.write(data)
+                db[f"{user_id}"].update_one(
+                    {"id" : user_id},
+                    {"$set" : {"conversation" : data}}
+                )
     except Exception as e:
         print(f"Failed to delete conversation history \n Error Code - {e}")
 
@@ -293,12 +457,12 @@ async def create_memory(api, user_id):
             group_id = user_id
             with open("persona/memory_persona.shadow", "rb") as f:
                 instruction = fernet.decrypt(f.read()).decode("utf-8")
-            with open(f"memory/memory-group-{group_id}.txt", "a+", encoding = "utf-8") as f:
+            with open(f"memory/memory-group.txt", "a+", encoding = "utf-8") as f:
                 f.seek(0)
                 data = "***PREVIOUS MEMORY***\n\n"
                 data += f.read()
                 data += "\n\n***END OF MEMORY***\n\n"
-            with open(f"Conversation/conversation-group-{group_id}.txt", "a+", encoding = "utf-8") as f:
+            with open(f"Conversation/conversation-group.txt", "a+", encoding = "utf-8") as f:
                 f.seek(0)
                 data += "\n\n***CONVERSATION HISTORY***"
                 data += f.read()
@@ -316,12 +480,24 @@ async def create_memory(api, user_id):
         if user_id > 0:
             with open(f"memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
                 f.write(response.text)
-            delete_n_convo(user_id, 10)
+                f.seek(0)
+                memory = f.read()
+            await asyncio.to_thread(db[f"{user_id}"].update_one,
+                {"id" : user_id},
+                {"$set" : {"memory" : memory}}
+            )
+            await asyncio.to_thread(delete_n_convo, user_id, 10)
         elif user_id < 0:
             group_id = user_id
-            with open(f"memory/memory-group-{group_id}.txt", "a+", encoding="utf-8") as f:
+            with open(f"memory/memory-group.txt", "a+", encoding="utf-8") as f:
                 f.write(response.text)
-            delete_n_convo(group_id,100)
+                f.seek(0)
+                memory = f.read()
+            await asyncio.to_thread(db[f"group"].update_one,
+                {"id" : "group"},
+                {"$set" : {"memory" : memory}}
+            )
+            await asyncio.to_thread(delete_n_convo, group_id,100)
     except Exception as e:
         print(f"Failed to create memory\n Error code-{e}")
 
@@ -350,7 +526,6 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                     asyncio.create_task(background_memory_creation(update, content, user_id))
             return data
         if update.message.chat.type != "private":
-            group_id = update.effective_chat.id
             data = "***RULES***\n"
             with open("info/group_rules.shadow", "rb") as f:
                 data += fernet.decrypt(f.read()).decode("utf-8")
@@ -360,11 +535,11 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 data += fernet.decrypt(f.read()).decode("utf-8")
                 data += "******END OF TRAINING DATA******\n\n"
             data += "***MEMORY***\n"
-            with open(f"memory/memory-group-{group_id}.txt", "a+", encoding="utf-8") as f:
+            with open(f"memory/memory-group.txt", "a+", encoding="utf-8") as f:
                 f.seek(0)
                 data += f.read()
                 data += "\n***END OF MEMORY***\n\n\n"
-            with open(f"Conversation/conversation-group-{group_id}.txt", "a+", encoding="utf-8") as f:
+            with open(f"Conversation/conversation-group.txt", "a+", encoding="utf-8") as f:
                 f.seek(0)
                 data += "***CONVERSATION HISTORY***\n\n"
                 data += f.read()
@@ -383,6 +558,12 @@ def save_conversation(user_message : str , gemini_response:str , user_id:int) ->
     try:
         with open(f"Conversation/conversation-{user_id}.txt", "a+", encoding="utf-8") as f:
             f.write(f"\nUser: {user_message}\nYou: {gemini_response}\n")
+            f.seek(0)
+            data = f.read()
+        db[f"{user_id}"].update_one(
+            {"id" : user_id},
+            {"$set" : {"conversation" : data}}
+        )
     except Exception as e:
         print(f"Error in saving conversation. \n\n Error Code - {e}")
 
@@ -390,10 +571,15 @@ def save_conversation(user_message : str , gemini_response:str , user_id:int) ->
 #function to save group conversation
 def save_group_conversation(update : Update,user_message, gemini_response):
     try:
-        group_id = update.effective_chat.id
         name = update.effective_user.first_name or "X" +" "+ update.effective_user.last_name or "X"
-        with open(f"Conversation/conversation-group-{group_id}.txt", "a+", encoding="utf-8") as f:
+        with open(f"Conversation/conversation-group.txt", "a+", encoding="utf-8") as f:
             f.write(f"\n{name}: {user_message}\nYou: {gemini_response}\n")
+            f.seek(0)
+            data = f.read()
+        db["group"].update_one(
+            {"id" : "group"},
+            {"$set" : {"conversation" : data}}
+        )
     except Exception as e:
         print(f"Error in saving conversation. \n\n Error Code - {e}")
 
@@ -538,63 +724,68 @@ async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
 
 #function to inform all the student 
 async def inform_all(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
-    ct_data = get_ct_data()
-    if ct_data is None or not ct_data:
-        await update.message.reply_text("⚠️ Couldn't connect to database or no CT data available.")
-        return
-    now = datetime.now()
-    tomorrow = now.date() + timedelta(days=1)
-    tomorrow_cts = []
-    for ct_id, ct in ct_data.items():
-        try:
-            ct_date = datetime.strptime(ct['date'], "%Y-%m-%d").date()
-            if ct_date == tomorrow:
-                tomorrow_cts.append({
-                    'subject': ct.get('subject', 'No Subject'),
-                    'teacher': ct.get('teacher', 'Not specified'),
-                    'syllabus': ct.get('syllabus', 'No syllabus')
-                })
-        except (KeyError, ValueError) as e:
-            print(f"Skipping malformed CT {ct_id}: {e}")
-    if not tomorrow_cts:
-        await update.message.reply_text("ℹ️ No CTs scheduled for tomorrow.")
-        return
-
-    # Format the reminder message
-    message = ["🔔 <b>CT Reminder: Tomorrow's Tests</b>"]
-    for ct in tomorrow_cts:
-        message.append(
-            f"\n📚 <b>{ct['subject']}</b>\n"
-            f"👨‍🏫 {ct['teacher']}\n"
-            f"📖 {ct['syllabus']}\n"
-        )
-    full_message = "\n".join(message)
     try:
-        sent = 0
-        failed = 0
-        failed_list = "Failed to send message to those user:\n"
-        for user in all_users:
+        all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
+        ct_data = get_ct_data()
+        if ct_data is None or not ct_data:
+            await update.message.reply_text("⚠️ Couldn't connect to database or no CT data available.")
+            return
+        now = datetime.now()
+        tomorrow = now.date() + timedelta(days=1)
+        tomorrow_cts = []
+        for ct_id, ct in ct_data.items():
             try:
-                await content.bot.send_message(chat_id=user, text=full_message, parse_mode="HTML")
-                sent += 1
-            except:
-                failed += 1
-                failed_list += str(user) + "\n"
-        report = (
-                f"📊 Notification sent to {sent} users\n"
-                f"⚠️ Failed to send to {failed} users\n"
+                ct_date = datetime.strptime(ct['date'], "%Y-%m-%d").date()
+                if ct_date == tomorrow:
+                    tomorrow_cts.append({
+                        'subject': ct.get('subject', 'No Subject'),
+                        'teacher': ct.get('teacher', 'Not specified'),
+                        'syllabus': ct.get('syllabus', 'No syllabus')
+                    })
+            except (KeyError, ValueError) as e:
+                print(f"Skipping malformed CT {ct_id}: {e}")
+        if not tomorrow_cts:
+            await update.message.reply_text("ℹ️ No CTs scheduled for tomorrow.")
+            return
+
+        # Format the reminder message
+        message = ["🔔 <b>CT Reminder: Tomorrow's Tests</b>"]
+        for ct in tomorrow_cts:
+            message.append(
+                f"\n📚 <b>{ct['subject']}</b>\n"
+                f"👨‍🏫 {ct['teacher']}\n"
+                f"📖 {ct['syllabus']}\n"
             )
-        await update.message.reply_text(report)
-        if failed != 0:
-            await update.message.reply_text(failed_list, parse_mode="Markdown")
+        full_message = "\n".join(message)
+        try:
+            sent = 0
+            failed = 0
+            failed_list = "Failed to send message to those user:\n"
+            for user in all_users:
+                try:
+                    await content.bot.send_message(chat_id=user, text=full_message, parse_mode="HTML")
+                    sent += 1
+                except:
+                    failed += 1
+                    failed_list += str(user) + "\n"
+            report = (
+                    f"📊 Notification sent to {sent} users\n"
+                    f"⚠️ Failed to send to {failed} users\n"
+                )
+            await update.message.reply_text(report)
+            if failed != 0:
+                await update.message.reply_text(failed_list, parse_mode="Markdown")
+        except Exception as e:
+            print(f"Error in inform_all function.\n\n Error Code - {e}")
+            await send_to_channel(update, content, channel_id, f"Error in inform_all function.\n\n Error Code - {e}")
     except Exception as e:
-        print(f"Error in inform_all function.\n\n Error Code - {e}")
-        await send_to_channel(update, content, channel_id, f"Error in inform_all function.\n\n Error Code - {e}")
+        await update.message.reply_text(f"Internal Error.\n\nError Code -{e}\n\nPlease contact admin or try again later.")
 
 
 #fuction to circulate message
 async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE):
     try:
+        all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
         message = update.message.text.strip()
         await update.message.reply_text("Please wait while bot is circulating the message.")
         sent = 0
@@ -625,6 +816,7 @@ async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE
 #function to circulate routine among all users
 async def circulate_routine(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
         lab = lab_participant()
         if lab[0]:
             rt = "routine/rt1.png"
@@ -714,9 +906,9 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
                     except:
                         await message_object.edit_text(buffer+"\n")
             if update.message.chat.type == "private":
-                save_conversation(user_message, sent_message , update.effective_user.id)
+                await asyncio.to_thread(save_conversation, user_message, sent_message , update.effective_user.id)
             elif update.message.chat.type != "private":
-                save_group_conversation(update, user_message, sent_message)
+                await asyncio.to_thread(save_group_conversation, update, user_message, sent_message)
         #if streaming is off
         else:
             sent_message = response.text
@@ -760,9 +952,9 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
                         except:
                             await update.message.reply_text(sent_message)
             if update.message.chat.type == "private":
-                save_conversation(user_message, sent_message, update.effective_user.id)
+                await asyncio.to_thread(save_conversation, user_message, sent_message, update.effective_user.id)
             elif update.message.chat.type != "private":
-                save_group_conversation(update, user_message, sent_message)
+                await asyncio.to_thread(save_group_conversation, update, user_message, sent_message)
     except Exception as e:
         print(f"Error in send_message function Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in send_message function \n\nError Code -{e}")
@@ -777,7 +969,7 @@ async def start(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
     try:
-        user_id = update.effective_user.id
+        user_id = update.effective_chat.id
         paths = [
             f"Conversation/conversation-{user_id}.txt",
             f"memory/memory-{user_id}.txt",
@@ -787,7 +979,7 @@ async def start(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             if not os.path.exists(path):
                 with open(path, "w", encoding = "utf-8") as f:
                     pass
-        users = load_all_user()
+        users = await asyncio.to_thread(load_all_user)
         if user_id in users:
             await update.message.reply_text("Hi there, I am your personal assistant. If you need any help feel free to ask me.", reply_markup=reply_markup)
             return
@@ -824,11 +1016,10 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
     try:
         user_message = update.message.text.strip()
         user_id = update.effective_user.id
-        gemini_api_keys = load_gemini_api()
-        if update.message.chat.type != "private" and f"{bot_name.lower()}" not in user_message.lower():
+        if update.message.chat.type != "private" and f"{bot_name.lower()}" not in user_message.lower() and "bot" not in user_message.lower() and "@" not in user_message.lower() and "mama" not in user_message.lower() and "pika" not in user_message.lower():
             return
         else:
-            settings = get_settings(user_id)
+            settings = await get_settings(user_id)
             if not settings:
                 update.message.reply_text("You are not registered.")
                 return
@@ -873,9 +1064,8 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             return
         user_name = f"{update.effective_user.first_name or update.effective_user.last_name or "Unknown"}".strip()
         user_message = (update.message.text or "...").strip()
-        if (update.message and update.message.chat.type == "private") or (update.message.chat.type != "private" and (f"@{bot_name}" in user_message.lower() or f"{bot_name}" in user_message.lower())):
+        if (update.message and update.message.chat.type == "private") or (update.message.chat.type != "private" and (f"@{bot_name}" in user_message.lower() or f"{bot_name}" in user_message.lower() or "mama" in user_message.lower() or "@" in user_message.lower() or "bot" in user_message.lower() or "pika" in user_message.lower())):
             await update.message.chat.send_action(action = ChatAction.TYPING)
-        gemini_api_keys = load_gemini_api()
         if user_message == "ROUTINE" and update.message.chat.type == "private":
             await routine_handler(update, content)
             return
@@ -896,6 +1086,50 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             await update.message.reply_text("All the resources available for CSE SECTION C", reply_markup=resource_markup, parse_mode="Markdown")
             await update.message.delete()
             return
+        elif any(trigger in user_message.lower() for trigger in ["create image", "create a image", "make image", "make a image", "prompt=", "prompt ="]):
+            try:
+                msg = await update.message.reply_text("Image creation is in process, This may take a while please wait patiently.")
+                for i, api_key in enumerate(gemini_api_keys):
+                    try:
+                        response = await asyncio.to_thread(gemini_create_image, user_message, api_key)
+                        break
+                    except Exception as e:
+                        print(f"Error for API-{i}.\n\nError code -{e}")
+                await content.bot.delete_message(chat_id=user_id, message_id=msg.message_id)
+                for part in response.candidates[0].content.parts:
+                    if part.text is not None:
+                        data = part.text
+                        if len(data)>4080:
+                            data = [data[i:i+4080] for i in range(0, len(data), 4080)]
+                            for d in data:
+                                try:
+                                    await update.message.reply_text(add_escape_character(d), parse_mode="MarkdownV2")
+                                except:
+                                    try:
+                                        await update.message.reply_text(d, parse_mode="Markdown")
+                                    except:
+                                        await update.message.reply_text(d)
+                        else:
+                            try:
+                                await update.message.reply_text(add_escape_character(data), parse_mode="MarkdownV2")
+                            except:
+                                try:
+                                    await update.message.reply_text(data, parse_mode="Markdown")
+                                except:
+                                    await update.message.reply_text(data)
+                    elif part.inline_data is not None:
+                        image = Image.open(BytesIO(part.inline_data.data))
+                        bio = BytesIO()
+                        image.save(bio, "PNG")
+                        bio.seek(0)
+                        await content.bot.send_photo(chat_id=user_id, photo=bio, caption="Created By AI")
+            except Exception as e:
+                print(f"Error in gemini_create_image function.\n\nError Code-{e}")
+                await update.message.reply_text("Image creation failed.")
+                try:
+                    await content.bot.delete_message(chat_id=user_id, message_id=msg.message_id)
+                except:
+                    pass
         else:
             #await user_message_handler(update, content, bot_name)
             await queue.put((update, content, bot_name))
@@ -917,6 +1151,10 @@ async def reset(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> 
         if os.path.exists(f"Conversation/conversation-{user_id}.txt"):
             with open(f"Conversation/conversation-{user_id}.txt", "w") as f:
                 pass
+            await asyncio.to_thread(db[f"{user_id}"].update_one,
+                {"id" : user_id},
+                {"$set" : {"conversation" : None}}
+            )
             await query.edit_message_text("All clear, Now we are starting fresh.")
         else:
             await query.edit_message_text("It seems you don't have a conversation at all.")
@@ -945,26 +1183,26 @@ async def api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
 #function to handle api
 async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        existing_apis = load_gemini_api()
+        global gemini_api_keys
         user_api = update.message.text.strip()
         await update.message.chat.send_action(action = ChatAction.TYPING)
         try:
-            settings = get_settings(update.effective_user.id)
-            response = gemini_stream("Checking if the gemini api is working or not", user_api, settings)
+            settings = await get_settings(update.effective_user.id)
+            response = await asyncio.to_thread(gemini_stream, "Checking if the gemini api is working or not", user_api, settings)
             chunk = next(response)
             if(
                 user_api.startswith("AIza")
-                and user_api not in existing_apis
+                and user_api not in gemini_api_keys
                 and " " not in user_api
                 and len(user_api) >= 39
                 and chunk.text
             ):
-                conn = sqlite3.connect("API/gemini_api.db")
-                cursor = conn.cursor()
-                cursor.execute("INSERT OR IGNORE INTO gemini_api(api) VALUES(?)", (user_api,))
-                conn.commit()
-                conn.close()
+                await asyncio.to_thread(db["API"].update_one,
+                    {"type" : "api"},
+                    {"$push" : {"gemini_api" : user_api}}
+                )
                 await update.message.reply_text("The API is saved successfully.")
+                gemini_api_keys = await asyncio.to_thread(load_gemini_api)
                 return ConversationHandler.END
             else:
                 await update.message.reply_text("Sorry, This is an invalid or Duplicate API, try again with a valid API.")
@@ -980,17 +1218,43 @@ async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> No
 #function to handle image
 async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        os.makedirs("media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
+        settings = await get_settings(update.effective_user.id)
         if update.message and update.message.photo:
-            await update.message.reply_text("You have sent a Image")
+            message = await update.message.reply_text("Downloading Image...")
+            caption = update.message.caption if update.message.caption else "Describe this imgae, if this image have question answer this."
             photo_file = await update.message.photo[-1].get_file()
             photo = await photo_file.download_as_bytearray()
-            photo = BytesIO(photo)
-            await update.message.reply_text("I have recieved your Image")
-            await content.bot.send_photo(chat_id=channel_id, photo = photo, caption="Sent from handle_image function of Phantom bot")
-            await update.message.reply_text("I downloaded your Image. But this function is under development, Try again later")
-        else:
-            await update.message.reply_text("That doesn't seems like an Image at all")
+
+            await message.edit_text("Analyzing Image...\nThis may take a while.")
+            def gemini_photo_worker(photo, caption):
+                photo = BytesIO(photo)
+                image = Image.open(photo)
+                for i, api_key in enumerate(gemini_api_keys):
+                    try:
+                        client = genai.Client(api_key=api_key)
+                        response = client.models.generate_content(
+                            model = "gemini-2.5-flash",
+                            contents = [image, caption],
+                            config = types.GenerateContentConfig(
+                                thinking_config=types.ThinkingConfig(thinking_budget=1024),
+                                temperature = 0.7,
+                                system_instruction = load_persona(settings)
+                            )
+                        )
+                        response = response.text
+                        return response
+                    except Exception as e:
+                        print(f"Error getting response for API-{i}\n\nError Code - {e}")
+                return "Can't get response for your request"
+            
+            response = await asyncio.to_thread(gemini_photo_worker, photo, caption)
+            await message.edit_text("Response for the Image" + response)
+            if update.message.chat.type == "private":
+                await asyncio.to_thread(save_conversation, caption, response, update.effective_chat.id)
+            else:
+                await asyncio.to_thread(save_group_conversation, caption, response, update.effective_chat.id)
     except Exception as e:
         print(f"Error in handle_image function.\n\nError Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in handle_image function \n\nError Code -{e}")
@@ -999,17 +1263,67 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 #function to handle video
 async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        os.makedirs("media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
         if update.message and update.message.video:
-            await update.message.reply_text("You sent a video.")
+            settings = await get_settings(update.effective_user.id)
+            caption = update.message.caption if update.message.caption else "Descrive this video."
+            chat_type = update.message.chat.type
+            chat_id = update.effective_chat.id
+            message = await update.message.reply_text("Downloading video...")
             video_file = await update.message.video.get_file()
-            video = await video_file.download_as_bytearray()
-            video = BytesIO(video)
-            await update.message.reply_text("I got your video")
-            await content.bot.send_video(chat_id=channel_id, video=video, caption="Video sent from handle_video function of Phantom Bot")
-            await update.message.reply_text("I downloaded your video. But this function is under developement please try again later.")
+            file_name = update.message.video.file_name or f"video-{update.message.video.file_unique_id}.mp4"
+            path = f"media/{file_name}"
+            await video_file.download_to_drive(path)
+            await message.edit_text("🤖 Analyzing video...\nThis may take a moment ⏳")
+
+            def gemini_analysis_worker(caption, path, video_file):
+                for i,api_key in enumerate(gemini_api_keys):
+                    try:
+                        if os.path.getsize(path)/(1024*1024) > 20:
+                            client = genai.Client(api_key=api_key)
+                            up_video = client.files.upload(file=path) 
+                            response = client.models.generate_content(
+                                model = "gemini-2.5-pro",
+                                contents = [up_video, caption],
+                                config = types.GenerateContentConfig(
+                                    media_resolution=types.MediaResolution.MEDIA_RESOLUTION_LOW,
+                                    system_instruction=load_persona(settings)
+                                )
+                            )
+                        else:
+                            video = open(path, "rb").read()
+                            client = genai.Client(api_key=api_key)
+                            response = client.models.generate_content(
+                                model = "models/gemini-2.5-pro",
+                                contents = types.Content(
+                                    parts = [
+                                        types.Part(
+                                        inline_data=types.Blob(data=video, mime_type=update.message.video.mime_type)
+                                    ),
+                                    types.Part(text=caption)
+                                    ]
+                                ),
+                                config = types.GenerateContentConfig(
+                                    system_instruction=load_persona(settings)
+                                )
+                            )
+                        response = response.text
+                        os.remove(path)
+                        return response
+                    except Exception as e:
+                        print(f"Error getting response for api-{i}.\n\nError Code - {e}")
+                if not response:
+                    return "Couldn't get response from AI"
+            response = await asyncio.to_thread(gemini_analysis_worker, caption, path, video_file)
+            if chat_type == "private":
+                await asyncio.to_thread(save_conversation, caption, response, chat_id)
+            else:
+                await asyncio.to_thread(save_group_conversation, caption, response, chat_id)
+            await message.edit_text("Response for the video:\n\n" + response)
+            return
         else:
-            await update.message.reply_text("This doesn't seems like a Video at all")
+            await update.message.reply_text("Operation Failed")
     except Exception as e:
         print(f"Error in handle_video function.\n\n Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in handle_video function \n\nError Code -{e}")
@@ -1018,15 +1332,44 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 #fuction to handle audio
 async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        os.makedirs("media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
         if update.message and update.message.audio:
-            await update.message.reply_text("You sent a audio.")
+            message = await update.message.reply_text("Downloading audio....")
             audio_file = await update.message.audio.get_file()
-            audio = await audio_file.download_as_bytearray()
-            audio = BytesIO(audio)
-            await update.message.reply_text("I got your audio")
-            await content.bot.send_audio(chat_id=channel_id, audio=audio, caption="Audio sent from handle_audio function of Phantom Bot")
-            await update.message.reply_text("I downloaded your audio. But this function is under developement please try again later.")
+            chat_id = update.effective_chat.id
+            file_name = update.message.audio.file_name or f"audio-{update.message.audio.file_unique_id}.mp3"
+            await audio_file.download_to_drive(f"media/{file_name}")
+            settings = await get_settings(chat_id)
+            chat_type = update.message.chat.type
+            caption = update.message.caption if update.message.caption else "Descrive the audio."
+            
+            await message.edit_text("Analyzing audio...\nThis may take a while")
+            def gemini_audio_worker(caption, file_name):
+                for i, api in enumerate(gemini_api_keys):
+                    try:
+                        client = genai.Client(api_key=api)
+                        file = client.files.upload(file=f"media/{file_name}")
+                        response = client.models.generate_content(
+                            model = "gemini-2.5-flash",
+                            contents = [caption, file],
+                            config=types.GenerateContentConfig(
+                                system_instruction=load_persona(settings)
+                            )
+                        )
+                        response = response.text
+                        os.remove(f"media/{file_name}")
+                        return response
+                    except Exception as e:
+                        print(f"Error getting response for api-{i}.\n\nError Code - {e}")
+                return "couldn't get response for your request."
+
+            response = await asyncio.to_thread(gemini_audio_worker, caption, file_name)
+            if chat_type == "private":
+                await asyncio.to_thread(save_conversation, caption, response, chat_id)
+            else:
+                await asyncio.to_thread(save_group_conversation, caption, response, chat_id)
+            await message.edit_text("Response for the audio:\n\n" + response)
         else:
             await update.message.reply_text("This doesn't seems like a audio at all")
     except Exception as e:
@@ -1038,15 +1381,45 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 #function to handle voice
 async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        os.makedirs("media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
         if update.message and update.message.voice:
-            await update.message.reply_text("You sent a voice.")
+            settings = await get_settings(update.effective_user.id)
+            caption = ""
+            chat_type = update.message.chat.type
+            chat_id = update.effective_chat.id
+            message = await update.message.reply_text("Downloading voice...")
             voice_file = await update.message.voice.get_file()
-            voice_data = await voice_file.download_as_bytearray()
-            voice_data = BytesIO(voice_data) 
-            await update.message.reply_text("I got your voice")
-            await content.bot.send_voice(chat_id=channel_id, voice=voice_data, caption="Voice sent from handle_voice function of Phantom Bot")
-            await update.message.reply_text("I downloaded your voice. But this function is under developement please try again later.")
+            file_id = update.message.voice.file_unique_id
+            await voice_file.download_to_drive(f"media/voice-{file_id}.ogg")
+
+            await message.edit_text("Analyzing voice...\nThis may take a while")
+            def gemini_voice_worker(caption, file_id):
+                for i, api in enumerate(gemini_api_keys):
+                    try:
+                        client = genai.Client(api_key=api)
+                        file = client.files.upload(file=f"media/voice-{file_id}.ogg")
+                        response = client.models.generate_content(
+                            model = "gemini-2.5-flash",
+                            contents = [caption, file],
+                            config=types.GenerateContentConfig(
+                                system_instruction=load_persona(settings)
+                            )
+                        )
+                        response = response.text
+                        os.remove(f"media/voice-{file_id}.ogg")
+                        return response
+                    except Exception as e:
+                        print(f"Error getting response for api-{i}.\n\nError Code - {e}")
+                return "couldn't get response for your request."
+
+            response = await asyncio.to_thread(gemini_voice_worker, caption, file_id)
+            if chat_type == "private":
+                await asyncio.to_thread(save_conversation, caption, response, chat_id)
+            else:
+                await asyncio.to_thread(save_group_conversation, caption, response, chat_id)
+            await message.edit_text("Response for the voice:\n\n" + response)
+            return
         else:
             await update.message.reply_text("This doesn't seems like a voice at all")
     except Exception as e:
@@ -1094,8 +1467,13 @@ async def see_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, query
 #function for deleting memory
 async def delete_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> None:
     try:
+        user_id = update.effective_chat.id
         with open(f"memory/memory-{update.callback_query.from_user.id}.txt", "w") as f:
             pass
+        await asyncio.to_thread(db[f"{user_id}"].update_one,
+            {"id" : user_id},
+            {"$set" : {"memory" : None}}
+        )
         await query.edit_message_text("You cleared my memory about you, It really makes me sad.")
     except Exception as e:
         print(f"Error in delete_memory function.\n\nError Code - {e}")
@@ -1142,15 +1520,15 @@ async def safe_send(bot_func, *args, retries =3, **kwargs):
 async def background_memory_creation(update: Update,content,user_id):
     try:
         if update.message.chat.type == "private":
-            await create_memory(load_gemini_api()[-1], user_id)
+            await asyncio.create_task(create_memory(gemini_api_keys[-1], user_id))
             await send_to_channel(update, content, channel_id, f"Created memory for User - {user_id}")
             with open(f"memory/memory-{user_id}.txt", "rb") as file:
                 await content.bot.send_document(chat_id=channel_id, document = file, caption = "Heres the memory file.")
         elif update.message.chat.type != "private":
             group_id = update.effective_chat.id
-            await create_memory(load_gemini_api()[-1], group_id)
+            await asyncio.create_task(create_memory(gemini_api_keys[-1], group_id))
             await send_to_channel(update, content, channel_id, "Created memory for group")
-            with open(f"memory/memory-group-{group_id}.txt", "r", encoding="utf-8") as f:
+            with open(f"memory/memory-group.txt", "r", encoding="utf-8") as f:
                 await content.bot.send_document(chat_id=channel_id, document=file, caption="Memory for the group.")
     except Exception as e:
         print(f"Error in background_memory_creation function.\n\n Error Code -{e}")
@@ -1170,6 +1548,7 @@ async def admin_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) ->
             return
         if user_id in all_admins:
             keyboard = [
+                [InlineKeyboardButton("Inform All", callback_data="c_inform_all")],
                 [InlineKeyboardButton("Circulate Message", callback_data="c_circulate_message"), InlineKeyboardButton("Show All User", callback_data="c_show_all_user")],
                 [InlineKeyboardButton("Circulate Routine", callback_data="c_circulate_routine"), InlineKeyboardButton("Toggle Routine", callback_data="c_toggle_routine")],
                 [InlineKeyboardButton("Manage Admin", callback_data="c_manage_admin"), InlineKeyboardButton("Manage AI Model", callback_data="c_manage_ai_model")],
@@ -1303,34 +1682,35 @@ async def admin_action(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None
 #function to add or delete admin
 async def add_or_delete_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        global all_admins
         user_id = update.message.text.strip()
         action = content.user_data.get("admin_action")
         msg_id = content.user_data.get("aa_message_id")
         await content.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
-        conn = sqlite3.connect("admin/admin.db")
-        cursor = conn.cursor()
         global all_admins
         if action == "add_admin":
             if user_id not in all_admins:
-                cursor.execute("INSERT OR IGNORE INTO admin(user_id) VALUES(?)", (user_id,))
-                conn.commit()
-                conn.close()
+                await asyncio.to_thread(
+                    db["admin"].update_one, 
+                    {"type" : "admin"},
+                    {"$push" : {"admin" : user_id}}
+                )
                 await update.message.reply_text(f"Successfully added {user_id} user_id as Admin.")
-                all_admins = load_admin()
+                all_admins = await asyncio.to_thread(load_admin)
             else:
                 await update.message.reply_text(f"{user_id} is already an Admin.")
-                conn.close()
             return ConversationHandler.END
         elif action == "delete_admin":
             if user_id in all_admins:
-                cursor.execute("DELETE FROM admin WHERE user_id=?", (user_id,))
+                await asyncio.to_thread(
+                    db["admin"].update_one, 
+                    {"type" : "admin"},
+                    {"$pull" : {"admin" : user_id}}
+                )
                 await update.message.reply_text(f"Successfully deleted {user_id} from admin.")
-                all_admins = load_admin()
-                conn.commit()
-                conn.close()
+                all_admins = await asyncio.to_thread(load_admin)
             else:
                 await update.message.reply_text(f"{user_id} is not an Admin.")
-                conn.close()
             return ConversationHandler.END
     except Exception as e:
         print(f"Error in add_or_delete_admin function.\n\nError Code -{e}")
@@ -1466,7 +1846,7 @@ async def handle_skip(update:Update, content:ContextTypes.DEFAULT_TYPE):
 #function to take api
 async def handle_api_conv(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        existing_apis = load_gemini_api()
+        global gemini_api_keys
         user_api = update.message.text.strip()
         await update.message.chat.send_action(action = ChatAction.TYPING)
         keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
@@ -1479,23 +1859,23 @@ async def handle_api_conv(update : Update, content : ContextTypes.DEFAULT_TYPE) 
             )
             if(
                 user_api.startswith("AIza")
-                and user_api not in existing_apis
+                and user_api not in gemini_api_keys
                 and " " not in user_api
                 and len(user_api) >= 39
                 and response.text
             ):
-                conn = sqlite3.connect("API/gemini_api.db")
-                cursor = conn.cursor()
-                cursor.execute("INSERT OR IGNORE INTO gemini_api(api) VALUES(?)", (user_api,))
-                conn.commit()
-                conn.close()
+                await asyncio.to_thread(db["API"].update_one,
+                    {"type" : "api"},
+                    {"$push" : {"gemini_api" : user_api}}
+                )
                 msg = await update.message.reply_text("The API is saved successfully.\nSet you password:", reply_markup=markup)
+                gemini_api_keys = await asyncio.to_thread(load_gemini_api)
                 content.user_data["user_api"] = user_api
                 await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ra_message_id"))
                 await update.message.delete()
                 content.user_data["hac_message_id"] = msg.message_id
                 return "TP"
-            elif user_api in existing_apis:
+            elif user_api in gemini_api_keys:
                 msg = await update.message.reply_text("The API already exists, you are excused.\n Set your password:", reply_markup=markup)
                 content.user_data["user_api"] = None
                 await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ra_message_id"))
@@ -1564,6 +1944,18 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 """,
                 tuple(info for info in user_info)
                 )
+                data = {
+                    "id" : user_info[0],
+                    "name" : user_info[1],
+                    "memory" : None,
+                    "conversation" : None,
+                    "settings" : (user_info[0], user_info[1], 1, 0, 0.7, 0, 0),
+                    "user_data" : user_info
+                }
+                await asyncio.to_thread(
+                    db[f"{user_info[0]}"].insert_one,
+                    data
+                )
                 conn.commit()
                 conn.close()
                 conn = sqlite3.connect("settings/user_settings.db")
@@ -1578,7 +1970,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 conn.commit()
                 conn.close()
                 global all_users
-                all_users = load_all_user()
+                all_users = await asyncio.to_thread(load_all_user)
                 await update.message.reply_text("Registration Seccessful.", reply_markup=reply_markup)
                 await content.bot.delete_message(chat_id = update.effective_user.id, message_id=content.user_data.get("tp_message_id"))
                 await update.message.delete()
@@ -1599,7 +1991,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
 #function to enter temperature conversation
 async def temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
-        settings = get_settings(update.effective_user.id)
+        settings = await get_settings(update.effective_user.id)
         keyboard = [
             [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
         ]
@@ -1637,6 +2029,11 @@ async def take_temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
             cursor.execute("UPDATE user_settings SET temperature = ? WHERE id = ?", (data, user_id))
             conn.commit()
             conn.close()
+            await asyncio.to_thread(
+                db[f"{user_id}"].update_one,
+                    {"id" : user_id},
+                    {"$set" : {"settings.4":data}}
+            )
             await update.message.reply_text(f"Temperature is successfully set to {data}.")
             await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
             await update.message.delete()
@@ -1650,7 +2047,7 @@ async def take_temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
 #function to enter thinking conversation
 async def thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
-        settings = get_settings(update.effective_user.id)
+        settings = await get_settings(update.effective_user.id)
         keyboard = [
             [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
         ]
@@ -1683,13 +2080,18 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
             await update.message.delete()
             return ConversationHandler.END
         else:
-            settings = get_settings(update.effective_user.id)
+            settings = await get_settings(update.effective_user.id)
             conn = sqlite3.connect("settings/user_settings.db")
             cursor = conn.cursor()
             if gemini_model_list[settings[2]] != "gemini-2.5-pro":
                 cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
                 conn.commit()
                 conn.close()
+                await asyncio.to_thread(
+                    db[f"{user_id}"].update_one,
+                        {"id" : user_id},
+                        {"$set" : {"settings.3":data}}
+                )
                 await update.message.reply_text(f"Thinking Budget is successfully set to {data}.")
                 await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
                 await update.message.delete()
@@ -1699,6 +2101,11 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
                 conn.commit()
                 conn.close()
+                await asyncio.to_thread(
+                db[f"{user_id}"].update_one,
+                        {"id" : user_id},
+                        {"$set" : {"settings.3":data}}
+                )
                 await update.message.reply_text(f"Thinking Budget is successfully set to {data}. Gemini 2.5 pro only works with thinking budget greater than 128.")
                 await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
                 await update.message.delete()
@@ -1739,21 +2146,20 @@ async def take_model_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
         if action == "c_add_model":
             if data not in gemini_model_list:
                 try:
-                    client = genai.Client(api_key=load_gemini_api()[-1])
+                    client = genai.Client(api_key=gemini_api_keys[-1])
                     response = client.models.generate_content(
                     model = data,
                     contents = "hi, respond in one word.",
                     )
                     response.text
-                    conn = sqlite3.connect("info/gemini_model.db")
-                    cursor = conn.cursor()
-                    cursor.execute("INSERT OR IGNORE INTO model (name) VALUES(?)", (data,))
-                    conn.commit()
-                    conn.close()
+                    await asyncio.to_thread(db["ai_model"].update_one,
+                        {"type" : "gemini_model_name"},
+                        {"$push" : {"model_name" : data}}
+                    )
                     await update.message.reply_text(f"{data} added successfully as a model.")
                 except Exception as e:
                     await update.message.reply_text(f"Invalid Model Name.\n\nError Code - {e}")
-                gemini_model_list = load_gemini_model()
+                gemini_model_list = await asyncio.to_thread(load_gemini_model)
             elif data in gemini_model_list:
                 await update.message.reply_text("The model name is already registered.")
             else:
@@ -1762,12 +2168,11 @@ async def take_model_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
             if data not in gemini_model_list:
                 await update.message.reply_text(f"Sorry there is no model named {data}")
             else:
-                conn = sqlite3.connect("info/gemini_model.db")
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM model WHERE name = ?", (data,))
-                conn.commit()
-                conn.close()
-                gemini_model_list = load_gemini_model()
+                await asyncio.to_thread(db["ai_model"].update_one,
+                        {"type" : "gemini_model_name"},
+                        {"$pull" : {"model_name" : data}}
+                    )
+                gemini_model_list = await asyncio.to_thread(load_gemini_model)
                 await update.message.reply_text(f"The model named {data} is deleted successfully")
         await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("mm_message_id"))
         await update.message.delete()
@@ -1799,7 +2204,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             user_id = update.effective_user.id
         except:
             user_id = query.from_user.id
-        settings = get_settings(user_id)
+        settings = await get_settings(user_id)
         c_model = tuple(f"model{i}" for i in range(len(gemini_model_list)))
         personas = glob("persona/*shadow")
         c_persona = tuple(f"persona{i}" for i in range(len(personas)))
@@ -1821,7 +2226,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                 [InlineKeyboardButton("ON", callback_data="c_streaming_on"), InlineKeyboardButton("OFF", callback_data="c_streaming_off")]    
             ]
             markup = InlineKeyboardMarkup(keyboard)
-            settings = get_settings(user_id)
+            settings = await get_settings(user_id)
             c_s = "ON" if settings[5] == 1 else "OFF"
             await query.edit_message_text(f"Streaming let you stream the bot response in real time.\nCurrent setting : {c_s}", reply_markup=markup)
 
@@ -1831,6 +2236,11 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (1, user_id))
             conn.commit()
             conn.close()
+            await asyncio.to_thread(
+                db[f"{user_id}"].update_one,
+                    {"id" : user_id},
+                    {"$set" : {"settings.5":1}}
+            )
             await query.edit_message_text("Streaming has turned on.")
 
         elif query.data == "c_streaming_off":
@@ -1839,11 +2249,16 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (0, user_id))
             conn.commit()
             conn.close()
+            await asyncio.to_thread(
+                db[f"{user_id}"].update_one,
+                    {"id" : user_id},
+                    {"$set" : {"settings.5":0}}
+            )
             await query.edit_message_text("Streaming has turned off.")
 
         elif query.data == "c_persona":
             personas = sorted(glob("persona/*shadow"))
-            settings = get_settings(user_id)
+            settings = await get_settings(user_id)
             keyboard = []
             for i in range(0, len(personas), 2):
                 row = []
@@ -1883,11 +2298,21 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                 cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model_num, user_id))
                 conn.commit()
                 conn.close()
+                await asyncio.to_thread(
+                db[f"{user_id}"].update_one,
+                        {"id" : user_id},
+                        {"$set" : {"settings.2":model_num}}
+                )
                 await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
             elif gemini_model_list[model_num] == "gemini-2.5-pro":
                 cursor.execute("UPDATE user_settings SET model = ?, thinking_budget = ? WHERE id = ? AND thinking_budget = 0", (model_num, 1024, user_id))
                 conn.commit()
                 conn.close()
+                await asyncio.to_thread(
+                db[f"{user_id}"].update_one,
+                        {"id" : user_id},
+                        {"$set" : {"settings.2":model_num, "settings.3" : 1024}}
+                )
                 await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
 
         elif query.data in c_persona:
@@ -1897,6 +2322,11 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             cursor.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona_num, user_id))
             conn.commit()
             conn.close()
+            await asyncio.to_thread(
+                db[f"{user_id}"].update_one,
+                    {"id" : user_id},
+                    {"$set" : {"settings.6":persona_num}}
+            )
             personas = sorted(glob("persona/*shadow"))
             await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(personas[persona_num]))[0]}.")
 
@@ -1947,11 +2377,11 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await delete_memory(update, content, query)
 
         elif query.data == "c_ch_show":
-            await query.edit_message_text("Your conversation history:")
             with open(f"Conversation/conversation-{user_id}.txt", "rb") as file:
                 if os.path.getsize(f"Conversation/conversation-{user_id}.txt") == 0:
                     await query.message.reply_text("You don't have any conversation history.")
                 else:
+                    await query.edit_message_text("Your conversation history:")
                     await content.bot.send_document(chat_id=user_id, document=file)
 
         elif query.data == "c_ch_reset":
@@ -1989,6 +2419,9 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             for i, user in enumerate(users):
                 user_data += f"{i+1}. {user}\n"
             await query.edit_message_text(user_data)
+        
+        elif query.data == "c_inform_all":
+            asyncio.create_task(inform_all(update, content))
 
 
     except Exception as e:

@@ -1,5 +1,0 @@
-python-telegram-bot[webhooks]
-google-genai
-gunicorn
-flask
-requests
