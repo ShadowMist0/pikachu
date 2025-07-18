@@ -64,10 +64,13 @@ threading.Thread(target=run_web).start()
 
 
 #connecting to MongoDB database
-mongo_pass = os.getenv("MDB_pass_shadow")
-url = f"mongodb+srv://shadow_mist0:{mongo_pass}@cluster0.zozzwwv.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-client = MongoClient(url, server_api=ServerApi("1"))
-db = client["phantom_bot"]
+try:
+    mongo_pass = os.getenv("MDB_pass_shadow")
+    url = f"mongodb+srv://shadow_mist0:{mongo_pass}@cluster0.zozzwwv.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+    client = MongoClient(url, server_api=ServerApi("1"))
+    db = client["phantom_bot"]
+except Exception as e:
+    print(f"Error Connecting to MongoDB.\n\nError Code - {e}")
 
 
 
@@ -82,7 +85,7 @@ def get_token():
         return TOKENs
     except Exception as e:
         print(f"Error Code -{e}")
-TOKEN = get_token()[2]
+TOKEN = get_token()[0]
 
 
 #all registered user
@@ -98,7 +101,7 @@ all_users = load_all_user()
 #function to load all admin
 def load_admin():
     try:
-        admins = tuple(admin for admin in db["admin"].find()[0]["admin"])
+        admins = tuple(int(admin) for admin in db["admin"].find()[0]["admin"])
         return admins
     except Exception as e:
         print(f"Error in load_admin function.\n\nError Code - {e}")
@@ -111,6 +114,7 @@ def load_gemini_model():
         return models
     except Exception as e:
         print(f"Error Loading Gemini Model.\n\nError Code -{e}")
+        return None
 
 gemini_model_list = load_gemini_model()
 
@@ -319,7 +323,7 @@ async def get_settings(user_id):
     if row:
         return row
     else:
-        return None
+        return (999999, "XX", 1, 0, 0.7, 0, 4)
 
 
 #gemini response for stream on
@@ -455,7 +459,6 @@ def delete_n_convo(user_id, n):
     except Exception as e:
         print(f"Failed to delete conversation history \n Error Code - {e}")
 
-delete_n_convo(6226239719, 10)
 
 #creating memory, SPECIAL_NOTE: THIS FUNCTION ALWAYS REWRITE THE WHOLE MEMORY, SO THE MEMORY SIZE IS LIMITED TO THE RESPONSE SIZE OF GEMINI, IT IS DONE THIS WAY BECAUSE OTHERWISE THERE WILL BE DUPLICATE DATA 
 async def create_memory(api, user_id):
@@ -746,12 +749,13 @@ async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
 
 
 #function to inform all the student 
-async def inform_all(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
+async def inform_all(query, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        await query.edit_message_text("please wait while the bot is sending the message to all user.")
         all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
         ct_data = get_ct_data()
         if ct_data is None or not ct_data:
-            await update.message.reply_text("⚠️ Couldn't connect to database or no CT data available.")
+            await query.edit_message_text("⚠️ Couldn't connect to database or no CT data available.")
             return
         now = datetime.now()
         tomorrow = now.date() + timedelta(days=1)
@@ -768,7 +772,7 @@ async def inform_all(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
             except (KeyError, ValueError) as e:
                 print(f"Skipping malformed CT {ct_id}: {e}")
         if not tomorrow_cts:
-            await update.message.reply_text("ℹ️ No CTs scheduled for tomorrow.")
+            await query.edit_message_text("ℹ️ No CTs scheduled for tomorrow.")
             return
 
         # Format the reminder message
@@ -791,18 +795,18 @@ async def inform_all(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
                 except:
                     failed += 1
                     failed_list += str(user) + "\n"
+                await query.edit_message_text(f"Plese wait, your request is in process.\n\nSent to {sent} user and failed for {failed} user.")
             report = (
                     f"📊 Notification sent to {sent} users\n"
                     f"⚠️ Failed to send to {failed} users\n"
                 )
-            await update.message.reply_text(report)
+            await query.edit_message_text(report)
             if failed != 0:
-                await update.message.reply_text(failed_list, parse_mode="Markdown")
+                await query.message.reply_text(failed_list, parse_mode="Markdown")
         except Exception as e:
             print(f"Error in inform_all function.\n\n Error Code - {e}")
-            await send_to_channel(update, content, channel_id, f"Error in inform_all function.\n\n Error Code - {e}")
     except Exception as e:
-        await update.message.reply_text(f"Internal Error.\n\nError Code -{e}\n\nPlease contact admin or try again later.")
+        print(f"Error in inform_all function. Error Code - {e}")
 
 
 #fuction to circulate message
@@ -810,7 +814,7 @@ async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE
     try:
         all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
         message = update.message.text.strip()
-        await update.message.reply_text("Please wait while bot is circulating the message.")
+        msg = await update.message.reply_text("Please wait while bot is circulating the message.")
         sent = 0
         failed = 0
         failed_list = "Failed to send message to those user:\n"
@@ -823,13 +827,31 @@ async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE
                 )
                 sent += 1
             except:
-                failed += 1
-                failed_list += str(user) + "\n"
+                try:
+                    await content.bot.send_message(
+                        chat_id=user,
+                        text=add_escape_character("*** IMPORTANT NOTICE ***\n\n" + message),
+                        parse_mode="MarkdownV2"
+                    )
+                    sent += 1
+                except:
+                    try:
+                        await content.bot.send_message(
+                            chat_id=user,
+                            text="*** IMPORTANT NOTICE ***\n\n" + message,
+                        )
+                        sent += 1
+
+                    except Exception as e:
+                        failed += 1
+                        failed_list += str(user) + "\n"
+                        print(e)
+            await msg.edit_text(f"Plese wait, your request is in process.\n\nSent to {sent} user and failed for {failed} user.")
         report = (
                 f"📊 Notification sent to {sent} users\n"
                 f"⚠️ Failed to send to {failed} users\n"
             )
-        await update.message.reply_text(report)
+        await msg.edit_text(report)
         if failed != 0:
             await update.message.reply_text(failed_list, parse_mode="Markdown")
     except Exception as e:
@@ -837,7 +859,7 @@ async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE
 
 
 #function to circulate routine among all users
-async def circulate_routine(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
+async def circulate_routine(query, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
         all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
         lab = lab_participant()
@@ -857,13 +879,14 @@ async def circulate_routine(update:Update, content:ContextTypes.DEFAULT_TYPE) ->
                 print(e)
                 failed += 1
                 failed_list += str(user) + "\n"
+            await query.edit_message_text(f"Plese wait, your request is in process.\n\nSent to {sent} user and failed for {failed} user.")
         report = (
                 f"📊 Notification sent to {sent} users\n"
                 f"⚠️ Failed to send to {failed} users\n"
             )
-        await update.message.reply_text(report, parse_mode="HTML")
+        await query.message.reply_text(report, parse_mode="HTML")
         if failed != 0:
-            await update.message.reply_text(failed_list, parse_mode="Markdown")
+            await query.message.reply_text(failed_list, parse_mode="Markdown")
     except Exception as e:
         print(f"Error in circulate message function.\n\nError Code - {e}")
 
@@ -882,6 +905,8 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
             sent_message = ""
             chunks = ''
             for chunk in response:
+                if not chunk.text:
+                    continue
                 chunks += chunk.text
                 if chunk.text is not None and chunk.text.strip() and len(buffer+chunk.text)<4080:
                     buffer += chunk.text if chunk.text else "."
@@ -1678,7 +1703,7 @@ async def message_taker(update:Update, content:ContextTypes.DEFAULT_TYPE) -> Non
         return "CM"
     except Exception as e:
         print(f"Error in message_taker function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -1692,7 +1717,7 @@ async def admin_password_taker(update: Update, content:ContextTypes.DEFAULT_TYPE
         return "MA"
     except Exception as e:
         print(f"Error in admin_password_taker function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -1703,7 +1728,7 @@ async def handle_circulate_message(update:Update, content:ContextTypes.DEFAULT_T
         return ConversationHandler.END
     except Exception as e:
         print(f"Error in handle_circulate_message function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -1733,7 +1758,7 @@ async def manage_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None
             return "ADMIN_ACTION"
     except Exception as e:
         print(f"Error in manage_admin function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -1764,7 +1789,7 @@ async def admin_action(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None
         return "ENTER_USER_ID"
     except Exception as e:
         print(f"Error in manage_admin function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -1803,7 +1828,7 @@ async def add_or_delete_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) 
             return ConversationHandler.END
     except Exception as e:
         print(f"Error in add_or_delete_admin function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -1822,7 +1847,7 @@ async def take_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
             return "TG"
     except Exception as e:
         print(f"Error in take_name function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -1843,7 +1868,7 @@ async def take_gender(update:Update, content: ContextTypes.DEFAULT_TYPE):
         return "TR"
     except Exception as e:
         print(f"Error in take_gender function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -1862,7 +1887,7 @@ async def take_roll(update: Update, content:ContextTypes.DEFAULT_TYPE):
         return "RA"
     except Exception as e:
         print(f"Error in take_roll function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -1910,7 +1935,7 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 return "AH"
     except Exception as e:
         print(f"Error in roll_action function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -1928,7 +1953,7 @@ async def handle_skip(update:Update, content:ContextTypes.DEFAULT_TYPE):
             return "TP"
     except Exception as e:
         print(f"Error in handle_skip function.\n\nError Code -{e}")
-        await query.edit_message_text("Internal Error. Please try again later or contact admin.")
+        await query.edit_message_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -2001,7 +2026,7 @@ async def take_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
         return "CP"
     except Exception as e:
         print(f"Error in take_password function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -2074,7 +2099,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
     except Exception as e:
         print(f"Error in confirm_password function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
     
 
@@ -2092,7 +2117,7 @@ async def temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
         return "TT"
     except Exception as e:
         print(f"Error in temperatre function.\n\nError Code -{e}")
-        await query.edit_message_text("Internal Error. Please try again later or contact admin.")
+        await query.edit_message_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -2130,7 +2155,7 @@ async def take_temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
     except Exception as e:
         print(f"Error in take_temperature function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
         
 
@@ -2148,7 +2173,7 @@ async def thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
         return "TT"
     except Exception as e:
         print(f"Error in thinking function.\n\nError Code -{e}")
-        await query.edit_message_text("Internal Error. Please try again later or contact admin.")
+        await query.edit_message_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -2202,7 +2227,7 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
     except Exception as e:
         print(f"Error in take_thinking function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
     
 
@@ -2223,7 +2248,7 @@ async def manage_model(update:Update, content:ContextTypes.DEFAULT_TYPE):
         return "TMN"
     except Exception as e:
         print(f"Error in manage_model function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -2269,7 +2294,7 @@ async def take_model_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
     except Exception as e:
         print(f"Error in take_model_name function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
         
@@ -2281,7 +2306,7 @@ async def cancel_conversation(update: Update, content: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
     except Exception as e:
         print(f"Error in cancel_conversation function.\n\nError Code -{e}")
-        await update.message.reply_text("Internal Error. Please try again later or contact admin.")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -2436,7 +2461,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
 
         elif query.data == "c_circulate_routine":
             await query.edit_message_text("Please wait while bot is circulating the routine.")
-            asyncio.create_task(circulate_routine(update.callback_query, content))
+            asyncio.create_task(circulate_routine(query, content))
 
         elif query.data == "c_toggle_routine":
             keyboard = [
@@ -2513,12 +2538,12 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text(user_data)
         
         elif query.data == "c_inform_all":
-            asyncio.create_task(inform_all(update, content))
+            asyncio.create_task(inform_all(query, content))
 
 
     except Exception as e:
         print(f"Error in button_handler function.\n\nError Code -{e}")
-        await query.edit_message_text("Internal Error. Please try again later or contact admin.")
+        await query.edit_message_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
