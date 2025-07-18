@@ -85,7 +85,7 @@ def get_token():
         return TOKENs
     except Exception as e:
         print(f"Error Code -{e}")
-TOKEN = get_token()[2]
+TOKEN = get_token()[0]
 
 
 #all registered user
@@ -255,9 +255,28 @@ def create_admin_pass_file():
         f.write(content)
 
 
+#function to create routine folder offline
+def create_routine_file():
+    try:
+        os.makedirs("routine", exist_ok=True)
+        with open("routine/lab_routine.txt", "w") as f:
+            data = db["routine"].find_one({"type" : "routine"})["lab_routine"]
+            f.write(data)
+        with open("routine/rt1.png", "wb") as f:
+            data = db["routine"].find_one({"type" : "routine"})["rt1"]
+            f.write(data)
+        with open("routine/rt2.png", "wb") as f:
+            data = db["routine"].find_one({"type" : "routine"})["rt2"]
+            f.write(data)
+    except Exception as e:
+        print(f"Error in create_routine_file function. Error Code - {e}")
+
+
+
 #calling all those function to create offline file from MongoDB
 create_memory_file()
 create_persona_file()
+create_routine_file()
 create_settings_file()
 create_user_data_file()
 create_admin_pass_file()
@@ -527,14 +546,20 @@ async def create_memory(api, user_id):
 
 
 #create the conversation history as prompt
-async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_message, user_id):
+async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_message, user_id, media):
     try:
+        settings = await get_settings(user_id)
         if update.message.chat.type == "private":
             data = "***RULES***\n"
             with open("info/rules.shadow", "rb" ) as f:
                 data += fernet.decrypt(f.read()).decode("utf-8")
                 data += "\n***END OF RULES***\n\n\n"
-                data += "***MEMORY***\n"
+            data += "****TRAINING DATA****"
+            if (settings[6] == 4 or settings[6] == 0) and media == 0:
+                with open("info/group_training_data.shadow", "rb") as file:
+                    data += fernet.decrypt(file.read()).decode("utf-8")
+            data += "****END OF TRAINIG DATA****"
+            data += "***MEMORY***\n"
             with open(f"memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
                 f.seek(0)
                 data += f.read()
@@ -547,7 +572,10 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 f.seek(0)
                 if(f.read().count("You: ")>20):
                     asyncio.create_task(background_memory_creation(update, content, user_id))
-            return data
+            if data:
+                return data
+            else:
+                return "Hi"
         if update.message.chat.type != "private":
             data = "***RULES***\n"
             with open("info/group_rules.shadow", "rb") as f:
@@ -570,7 +598,10 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 f.seek(0)
                 if(f.read().count("You: ")>200):
                     asyncio.create_task(background_memory_creation(update, content, user_id))
-            return data
+            if data:
+                return data
+            else:
+                return "Hi"
     except Exception as e:
         print(f"Error in create_promot function. \n\n Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in create_prompt function. \n\n Error Code - {e}")
@@ -579,8 +610,12 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
 #function to save conversation
 def save_conversation(user_message : str , gemini_response:str , user_id:int) -> None:
     try:
+        conn = sqlite3.connect("info/user_data.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM users WHERE user_id = ?", (user_id,))
+        name = cursor.fetchone()[0]
         with open(f"Conversation/conversation-{user_id}.txt", "a+", encoding="utf-8") as f:
-            f.write(f"\nUser: {user_message}\nYou: {gemini_response}\n")
+            f.write(f"\n{name}: {user_message}\nYou: {gemini_response}\n")
             f.seek(0)
             data = f.read()
         db[f"{user_id}"].update_one(
@@ -1071,7 +1106,7 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
             if update.message.chat.type != "private":
                 group_id = update.effective_chat.id
                 settings = (group_id,"group",1,0,0.7,0,1)
-            prompt = await create_prompt(update, content, user_message, user_id)
+            prompt = await create_prompt(update, content, user_message, user_id, 0)
             for i in range(len(gemini_api_keys)):
                 try:
                     if(settings[5]):
@@ -1124,8 +1159,9 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
         elif user_message == "RESOURCES" and update.message.chat.type == "private":
             keyboard = [
                 [InlineKeyboardButton("Drive", url="https://drive.google.com/drive/folders/1xbyCdj3XQ9AsCCF8ImI13HCo25JEhgUJ"), InlineKeyboardButton("Syllabus", url="https://drive.google.com/file/d/1pVF40-E0Oe8QI-EZp9S7udjnc0_Kquav/view?usp=drive_link")],
-                [InlineKeyboardButton("Orientation Files", url = "https://drive.google.com/drive/folders/10_-xTV-FsXnndtDiw_StqH2Zy9tQcWq0"), InlineKeyboardButton("All Websites", callback_data="c_all_websites")],
-                [InlineKeyboardButton("G. Classroom Code", callback_data="g_classroom"), InlineKeyboardButton("Cancel", callback_data="cancel")]
+                [InlineKeyboardButton("Orientation Files", url = "https://drive.google.com/drive/folders/10_-xTV-FsXnndtDiw_StqH2Zy9tQcWq0"), InlineKeyboardButton("Lab Cover Page", url="https://ruet-cover-page.github.io/")],
+                [InlineKeyboardButton("G. Classroom Code", callback_data="g_classroom"), InlineKeyboardButton("All Websites", callback_data="c_all_websites")],
+                [InlineKeyboardButton("Cancel", callback_data="cancel")]
             ]
             resource_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text("All the resources available for CSE SECTION C", reply_markup=resource_markup, parse_mode="Markdown")
@@ -1272,7 +1308,7 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             photo_file = await update.message.photo[-1].get_file()
             photo = await photo_file.download_as_bytearray()
             chat_id = update.effective_chat.id
-            prompt = await create_prompt(update, content, caption, chat_id)
+            prompt = await create_prompt(update, content, caption, chat_id, 1)
 
 
             await message.edit_text("Analyzing Image...\nThis may take a while.")
@@ -1319,7 +1355,7 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             caption = update.message.caption if update.message.caption else "Descrive this video."
             chat_type = update.message.chat.type
             chat_id = update.effective_chat.id
-            prompt = await create_prompt(update, content, caption, chat_id)
+            prompt = await create_prompt(update, content, caption, chat_id, 1)
             message = await update.message.reply_text("Downloading video...")
             video_file = await update.message.video.get_file()
             file_name = update.message.video.file_name or f"video-{update.message.video.file_unique_id}.mp4"
@@ -1393,7 +1429,7 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             settings = await get_settings(chat_id)
             chat_type = update.message.chat.type
             caption = update.message.caption if update.message.caption else "Descrive the audio."
-            prompt = await create_prompt(update, content, caption, chat_id)
+            prompt = await create_prompt(update, content, caption, chat_id, 1)
             
             await message.edit_text("🤖 Analyzing audio...\nThis may take a while ⏳")
             def gemini_audio_worker(caption, file_name):
@@ -1505,7 +1541,7 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
         if update.message.document:
             message = await update.message.reply_text("Downloading Document...")
             caption = update.message.caption or "Describe this document."
-            prompt = await create_prompt(update, content, caption, chat_id)
+            prompt = await create_prompt(update, content, caption, chat_id, 1)
             file_name = update.message.document.file_name
             file_id = update.message.document.file_unique_id
             mime = update.message.document.mime_type
