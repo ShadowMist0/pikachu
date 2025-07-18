@@ -82,7 +82,7 @@ def get_token():
         return TOKENs
     except Exception as e:
         print(f"Error Code -{e}")
-TOKEN = get_token()[0]
+TOKEN = get_token()[1]
 
 
 #all registered user
@@ -418,11 +418,21 @@ def delete_n_convo(user_id, n):
                         {"id" : "group"},
                         {"$set" : {"conversation" : data}}
                     )
+                elif len(data)-n > n:
+                    data = data[-n:]
+                    f.seek(0)
+                    f.truncate(0)
+                    data = "You: ".join(data)
+                    f.write(data)
+                    db[f"group"].update_one(
+                        {"id" : "group"},
+                        {"$set" : {"conversation" : data}}
+                    )
             return
         with open(f"Conversation/conversation-{user_id}.txt", "r+", encoding="utf-8") as f:
             data = f.read()
             data = data.split("You: ")
-            if len(data) >= n+1:
+            if len(data) >= n+1 and len(data)-n < n:
                 data = data[n:]
                 f.seek(0)
                 f.truncate(0)
@@ -432,17 +442,27 @@ def delete_n_convo(user_id, n):
                     {"id" : user_id},
                     {"$set" : {"conversation" : data}}
                 )
+            elif len(data)-n > n:
+                data = data[-n:]
+                f.seek(0)
+                f.truncate(0)
+                data = "You: ".join(data)
+                f.write(data)
+                db[f"{user_id}"].update_one(
+                    {"id" : user_id},
+                    {"$set" : {"conversation" : data}}
+                )
     except Exception as e:
         print(f"Failed to delete conversation history \n Error Code - {e}")
 
-
+delete_n_convo(6226239719, 10)
 
 #creating memory, SPECIAL_NOTE: THIS FUNCTION ALWAYS REWRITE THE WHOLE MEMORY, SO THE MEMORY SIZE IS LIMITED TO THE RESPONSE SIZE OF GEMINI, IT IS DONE THIS WAY BECAUSE OTHERWISE THERE WILL BE DUPLICATE DATA 
 async def create_memory(api, user_id):
     try:
         if user_id > 0:
-            with open("persona/memory_persona.shadow", "rb") as f:
-                instruction = fernet.decrypt(f.read()).decode("utf-8")
+            with open("persona/memory_persona.txt", "r", encoding="utf-8") as f:
+                instruction = f.read()
             with open(f"memory/memory-{user_id}.txt", "a+", encoding = "utf-8") as f:
                 f.seek(0)
                 data = "***PREVIOUS MEMORY***\n\n"
@@ -455,8 +475,8 @@ async def create_memory(api, user_id):
                 data += "\n\n***END OF CONVERSATION***\n\n"
         elif user_id < 0:
             group_id = user_id
-            with open("persona/memory_persona.shadow", "rb") as f:
-                instruction = fernet.decrypt(f.read()).decode("utf-8")
+            with open("persona/memory_persona.txt", "r") as f:
+                instruction = f.read()
             with open(f"memory/memory-group.txt", "a+", encoding = "utf-8") as f:
                 f.seek(0)
                 data = "***PREVIOUS MEMORY***\n\n"
@@ -482,11 +502,14 @@ async def create_memory(api, user_id):
                 f.write(response.text)
                 f.seek(0)
                 memory = f.read()
+                print(memory)
             await asyncio.to_thread(db[f"{user_id}"].update_one,
                 {"id" : user_id},
                 {"$set" : {"memory" : memory}}
             )
+            print("done")
             await asyncio.to_thread(delete_n_convo, user_id, 10)
+            print("delete")
         elif user_id < 0:
             group_id = user_id
             with open(f"memory/memory-group.txt", "a+", encoding="utf-8") as f:
@@ -1025,7 +1048,7 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                 return
             if update.message.chat.type != "private":
                 group_id = update.effective_chat.id
-                settings = (group_id,"group",1,0,0.7,0,4, None)
+                settings = (group_id,"group",1,0,0.7,0,1)
             prompt = await create_prompt(update, content, user_message, user_id)
             for i in range(len(gemini_api_keys)):
                 try:
@@ -1226,6 +1249,9 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             caption = update.message.caption if update.message.caption else "Describe this imgae, if this image have question answer this."
             photo_file = await update.message.photo[-1].get_file()
             photo = await photo_file.download_as_bytearray()
+            chat_id = update.effective_chat.id
+            prompt = await create_prompt(update, content, caption, chat_id)
+
 
             await message.edit_text("Analyzing Image...\nThis may take a while.")
             def gemini_photo_worker(photo, caption):
@@ -1249,8 +1275,9 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                         print(f"Error getting response for API-{i}\n\nError Code - {e}")
                 return "Can't get response for your request"
             
-            response = await asyncio.to_thread(gemini_photo_worker, photo, caption)
-            await message.edit_text("Response for the Image" + response)
+            response = await asyncio.to_thread(gemini_photo_worker, photo, prompt)
+            await update.message.reply_text("Response for the Image:\n\n" + response)
+            await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
             if update.message.chat.type == "private":
                 await asyncio.to_thread(save_conversation, caption, response, update.effective_chat.id)
             else:
@@ -1270,12 +1297,13 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             caption = update.message.caption if update.message.caption else "Descrive this video."
             chat_type = update.message.chat.type
             chat_id = update.effective_chat.id
+            prompt = await create_prompt(update, content, caption, chat_id)
             message = await update.message.reply_text("Downloading video...")
             video_file = await update.message.video.get_file()
             file_name = update.message.video.file_name or f"video-{update.message.video.file_unique_id}.mp4"
             path = f"media/{file_name}"
             await video_file.download_to_drive(path)
-            await message.edit_text("🤖 Analyzing video...\nThis may take a moment ⏳")
+            await message.edit_text("🤖 Analyzing video...\nThis may take a while ⏳")
 
             def gemini_analysis_worker(caption, path, video_file):
                 for i,api_key in enumerate(gemini_api_keys):
@@ -1314,14 +1342,14 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                     except Exception as e:
                         print(f"Error getting response for api-{i}.\n\nError Code - {e}")
                 if not response:
-                    return "Couldn't get response from AI"
-            response = await asyncio.to_thread(gemini_analysis_worker, caption, path, video_file)
+                    return "Failed to process your request. Try again."
+            response = await asyncio.to_thread(gemini_analysis_worker, prompt, path, video_file)
             if chat_type == "private":
                 await asyncio.to_thread(save_conversation, caption, response, chat_id)
             else:
                 await asyncio.to_thread(save_group_conversation, caption, response, chat_id)
-            await message.edit_text("Response for the video:\n\n" + response)
-            return
+            await update.message.reply_text("Response for the video:\n\n" + response)
+            await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
         else:
             await update.message.reply_text("Operation Failed")
     except Exception as e:
@@ -1343,8 +1371,9 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             settings = await get_settings(chat_id)
             chat_type = update.message.chat.type
             caption = update.message.caption if update.message.caption else "Descrive the audio."
+            prompt = await create_prompt(update, content, caption, chat_id)
             
-            await message.edit_text("Analyzing audio...\nThis may take a while")
+            await message.edit_text("🤖 Analyzing audio...\nThis may take a while ⏳")
             def gemini_audio_worker(caption, file_name):
                 for i, api in enumerate(gemini_api_keys):
                     try:
@@ -1362,14 +1391,15 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                         return response
                     except Exception as e:
                         print(f"Error getting response for api-{i}.\n\nError Code - {e}")
-                return "couldn't get response for your request."
+                return "Failed to process your request. Try again."
 
-            response = await asyncio.to_thread(gemini_audio_worker, caption, file_name)
+            response = await asyncio.to_thread(gemini_audio_worker, prompt, file_name)
             if chat_type == "private":
                 await asyncio.to_thread(save_conversation, caption, response, chat_id)
             else:
                 await asyncio.to_thread(save_group_conversation, caption, response, chat_id)
-            await message.edit_text("Response for the audio:\n\n" + response)
+            await update.message.reply_text("Response for the audio:\n\n" + response)
+            await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
         else:
             await update.message.reply_text("This doesn't seems like a audio at all")
     except Exception as e:
@@ -1393,7 +1423,7 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             file_id = update.message.voice.file_unique_id
             await voice_file.download_to_drive(f"media/voice-{file_id}.ogg")
 
-            await message.edit_text("Analyzing voice...\nThis may take a while")
+            await message.edit_text("🤖 Analyzing voice...\nThis may take a while ⏳")
             def gemini_voice_worker(caption, file_id):
                 for i, api in enumerate(gemini_api_keys):
                     try:
@@ -1411,14 +1441,15 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                         return response
                     except Exception as e:
                         print(f"Error getting response for api-{i}.\n\nError Code - {e}")
-                return "couldn't get response for your request."
+                return "Failed to process your request. Try again."
 
             response = await asyncio.to_thread(gemini_voice_worker, caption, file_id)
             if chat_type == "private":
-                await asyncio.to_thread(save_conversation, caption, response, chat_id)
+                await asyncio.to_thread(save_conversation, "<a voice message", response, chat_id)
             else:
-                await asyncio.to_thread(save_group_conversation, caption, response, chat_id)
-            await message.edit_text("Response for the voice:\n\n" + response)
+                await asyncio.to_thread(save_group_conversation, "<a voice message>", response, chat_id)
+            await update.message.reply_text("Response for the voice:\n\n" + response)
+            await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
             return
         else:
             await update.message.reply_text("This doesn't seems like a voice at all")
@@ -1431,16 +1462,74 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 async def handle_sticker(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
         if update.message and update.message.sticker:
-            sticker = update.message.sticker
-            await update.message.reply_text("I recieved your sticker, but this function is under developement. Please try again Later.")
-            await content.bot.send_sticker(chat_id=channel_id, sticker=sticker.file_id, emoji=sticker.emoji or "X")
-            await update.message.reply_text("I downloaded your sticker")
+            sticker = update.message.sticker.get_file()
+            message = await update.message.reply_text("Wow!! A sticker.")
+            await message.edit_text("But what I am supposed to do with it, i don't know.")
         else:
             await update.message.reply_text("This doesn't seems like a sticker")
     except Exception as e:
         print(f"Error on handle_sticker function. \n\n Error Code -{e}")
         await send_to_channel(update, content, channel_id, f"Error in handle_sticker function \n\nError Code -{e}")
 
+
+#function to handle document
+async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        await update.message.chat.send_action(action=ChatAction.TYPING)
+        os.makedirs("media", exist_ok=True)
+        chat_id = update.effective_chat.id
+        chat_type = update.message.chat.type
+        settings = await get_settings(chat_id)
+        if update.message.document:
+            message = await update.message.reply_text("Downloading Document...")
+            caption = update.message.caption or "Describe this document."
+            prompt = await create_prompt(update, content, caption, chat_id)
+            file_name = update.message.document.file_name
+            file_id = update.message.document.file_unique_id
+            mime = update.message.document.mime_type
+            if mime == "application/pdf":
+                path = f"media/{file_name}" if file_name else f"media/{file_id}.pdf"
+            elif mime=="application/json":
+                path = f"media/{file_name}" if file_name else f"media/{file_id}.json"
+            else:
+                path = f"media/{file_name}" if file_name else f"media/{file_id}.txt"
+            doc_file = await update.message.document.get_file()
+            await doc_file.download_to_drive(path)
+
+            await message.edit_text("🤖 Analyzing document...\nThis may take a while ⏳")
+            def gemini_doc_worker(caption, path):
+                for i,api_key in enumerate(gemini_api_keys):
+                    try:
+                        client = genai.Client(api_key=api_key)
+                        u_doc = client.files.upload(file=path)
+                        response = client.models.generate_content(
+                            model="gemini-2.5-pro",
+                            contents = [u_doc, caption],
+                            config=types.GenerateContentConfig(
+                                system_instruction=load_persona(settings)
+                            )
+                        )
+                        response = response.text
+                        os.remove(path)
+                        return response
+                    except Exception as e:
+                        print(f"Error getting response for API{i}.\n\nError Code - {e}")
+                return "Failed to process your request. Try again."
+            
+            response = await asyncio.to_thread(gemini_doc_worker, prompt, path)
+            if chat_type == "private":
+                await asyncio.to_thread(save_conversation, caption, response, chat_id)
+            else:
+                await asyncio.to_thread(save_group_conversation, caption, response, chat_id)
+            await update.message.reply_text("Response for the document:\n\n" + response)
+            await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+            return
+        else:
+            await update.message.reply_text("This doensn't seems like a document at all")
+    except Exception as e:
+        print(f"Error in handle_document function.\n\n Error Code - {e}")
+        await send_to_channel(update, content, channel_id, f"Error in handle_document function \n\nError Code -{e}")
+        
 
 #A function to return memory for user convention
 async def see_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> None:
@@ -1944,12 +2033,13 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 """,
                 tuple(info for info in user_info)
                 )
+                persona = 4 if user_info[2] == "male" else 0
                 data = {
                     "id" : user_info[0],
                     "name" : user_info[1],
                     "memory" : None,
                     "conversation" : None,
-                    "settings" : (user_info[0], user_info[1], 1, 0, 0.7, 0, 0),
+                    "settings" : (user_info[0], user_info[1], 1, 0, 0.7, 0, persona),
                     "user_data" : user_info
                 }
                 await asyncio.to_thread(
@@ -1965,7 +2055,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                         (id, name, model, thinking_budget, temperature, streaming, persona)
                         VALUES(?,?,?,?,?,?,?)
                 """,
-                (user_info[0], user_info[1], 1, 0, 0.7, 0, 0)
+                (user_info[0], user_info[1], 1, 0, 0.7, 0, persona)
                 )
                 conn.commit()
                 conn.close()
@@ -2206,7 +2296,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             user_id = query.from_user.id
         settings = await get_settings(user_id)
         c_model = tuple(f"model{i}" for i in range(len(gemini_model_list)))
-        personas = glob("persona/*shadow")
+        personas = glob("persona/*txt")
         c_persona = tuple(f"persona{i}" for i in range(len(personas)))
 
         if query.data == "c_model":
@@ -2257,7 +2347,8 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("Streaming has turned off.")
 
         elif query.data == "c_persona":
-            personas = sorted(glob("persona/*shadow"))
+            personas = sorted(glob("persona/*txt"))
+            personas.remove("persona/memory_persona.txt")
             settings = await get_settings(user_id)
             keyboard = []
             for i in range(0, len(personas), 2):
@@ -2272,7 +2363,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                 keyboard.append(row)
             keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
             markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("Select a persona:", reply_markup=markup, parse_mode="Markdown")
+            await query.edit_message_text(f"Persona will shape your bot response as personality.\n\nCurrent Persona: {os.path.splitext(os.path.basename(personas[settings[6]]))[0]}\n\nIt is recommended not to change the persona. Choose an option:", reply_markup=markup, parse_mode="Markdown")
 
         elif query.data == "c_memory":
             keyboard = [
@@ -2327,7 +2418,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                     {"id" : user_id},
                     {"$set" : {"settings.6":persona_num}}
             )
-            personas = sorted(glob("persona/*shadow"))
+            personas = sorted(glob("persona/*txt"))
             await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(personas[persona_num]))[0]}.")
 
         elif query.data == "g_classroom":
@@ -2541,6 +2632,7 @@ async def main():
         app.add_handler(CallbackQueryHandler(button_handler))
         app.add_handler(CommandHandler("admin", admin_handler))
         app.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
+        app.add_handler(MessageHandler(filters.Document.ALL & ~filters.ChatType.CHANNEL, handle_document))
         app.add_handler(MessageHandler(filters.PHOTO & ~filters.ChatType.CHANNEL, handle_image))
         app.add_handler(MessageHandler(filters.AUDIO & ~filters.ChatType.CHANNEL, handle_audio))
         app.add_handler(MessageHandler(filters.VOICE & ~filters.ChatType.CHANNEL, handle_voice))
