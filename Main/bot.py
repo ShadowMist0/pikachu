@@ -82,7 +82,7 @@ def get_token():
         return TOKENs
     except Exception as e:
         print(f"Error Code -{e}")
-TOKEN = get_token()[1]
+TOKEN = get_token()[2]
 
 
 #all registered user
@@ -1279,9 +1279,9 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("Response for the Image:\n\n" + response)
             await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
             if update.message.chat.type == "private":
-                await asyncio.to_thread(save_conversation, caption, response, update.effective_chat.id)
+                await asyncio.to_thread(save_conversation, "<image>" + caption, response, update.effective_chat.id)
             else:
-                await asyncio.to_thread(save_group_conversation, caption, response, update.effective_chat.id)
+                await asyncio.to_thread(save_group_conversation, "<image>" + caption, response, update.effective_chat.id)
     except Exception as e:
         print(f"Error in handle_image function.\n\nError Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in handle_image function \n\nError Code -{e}")
@@ -1345,9 +1345,9 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                     return "Failed to process your request. Try again."
             response = await asyncio.to_thread(gemini_analysis_worker, prompt, path, video_file)
             if chat_type == "private":
-                await asyncio.to_thread(save_conversation, caption, response, chat_id)
+                await asyncio.to_thread(save_conversation, "<video>" + caption, response, chat_id)
             else:
-                await asyncio.to_thread(save_group_conversation, caption, response, chat_id)
+                await asyncio.to_thread(save_group_conversation, "<video>" + caption, response, chat_id)
             await update.message.reply_text("Response for the video:\n\n" + response)
             await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
         else:
@@ -1395,9 +1395,9 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 
             response = await asyncio.to_thread(gemini_audio_worker, prompt, file_name)
             if chat_type == "private":
-                await asyncio.to_thread(save_conversation, caption, response, chat_id)
+                await asyncio.to_thread(save_conversation, "<audio>" + caption, response, chat_id)
             else:
-                await asyncio.to_thread(save_group_conversation, caption, response, chat_id)
+                await asyncio.to_thread(save_group_conversation, "<audio>" + caption, response, chat_id)
             await update.message.reply_text("Response for the audio:\n\n" + response)
             await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
         else:
@@ -1518,9 +1518,9 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
             
             response = await asyncio.to_thread(gemini_doc_worker, prompt, path)
             if chat_type == "private":
-                await asyncio.to_thread(save_conversation, caption, response, chat_id)
+                await asyncio.to_thread(save_conversation, "<document>" + caption, response, chat_id)
             else:
-                await asyncio.to_thread(save_group_conversation, caption, response, chat_id)
+                await asyncio.to_thread(save_group_conversation, "<document>" + caption, response, chat_id)
             await update.message.reply_text("Response for the document:\n\n" + response)
             await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
             return
@@ -2061,7 +2061,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 conn.close()
                 global all_users
                 all_users = await asyncio.to_thread(load_all_user)
-                await update.message.reply_text("Registration Seccessful.", reply_markup=reply_markup)
+                await update.message.reply_text("Registration Seccessful. Now press /start", reply_markup=reply_markup)
                 await content.bot.delete_message(chat_id = update.effective_user.id, message_id=content.user_data.get("tp_message_id"))
                 await update.message.delete()
             except Exception as e:
@@ -2413,6 +2413,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             cursor.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona_num, user_id))
             conn.commit()
             conn.close()
+            await reset(update, content, query)
             await asyncio.to_thread(
                 db[f"{user_id}"].update_one,
                     {"id" : user_id},
@@ -2470,7 +2471,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
         elif query.data == "c_ch_show":
             with open(f"Conversation/conversation-{user_id}.txt", "rb") as file:
                 if os.path.getsize(f"Conversation/conversation-{user_id}.txt") == 0:
-                    await query.message.reply_text("You don't have any conversation history.")
+                    await query.edit_message_text("You don't have any conversation history.")
                 else:
                     await query.edit_message_text("Your conversation history:")
                     await content.bot.send_document(chat_id=user_id, document=file)

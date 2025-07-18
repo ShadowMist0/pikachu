@@ -1,6 +1,6 @@
 [project]
-name = "phantom_bot"
-version = "0.1.0"
+name = "Pikachu"
+version = "0.6.9"
 description = "A telegram bot project for RUET CSE SECTION C"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -32,8 +32,8 @@ dependencies = [
 ]
 
 [project.urls]
-"Repository" = "https://github.com/sifat1996120/cse_sec_c"
-"Homepage" = "https://github.com/shadow_mist0/sec_c"
+"Repository" = "https://github.com/shadow_mist0/pikachu"
+"Homepage" = "https://ruetcse24.vercel.app/"
 
 [project.scripts]
 bot-start = "Main.bot:main"
