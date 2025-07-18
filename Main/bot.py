@@ -301,6 +301,8 @@ async def get_settings(user_id):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM user_settings WHERE id = ?", (user_id,))
     row = cursor.fetchone()
+    if not row:
+        return (999999, "XX", 1, 0, 0.7, 0, 4)
     if row[2] > len(gemini_model_list)-1:
         row = list(row)
         row[2] = len(gemini_model_list)-1
@@ -319,12 +321,7 @@ async def get_settings(user_id):
         row = tuple(row)
     conn.commit()
     conn.close()
-
-    if row:
-        return row
-    else:
-        return (999999, "XX", 1, 0, 0.7, 0, 4)
-
+    return row
 
 #gemini response for stream on
 def gemini_stream(user_message, api, settings):
@@ -2312,239 +2309,239 @@ async def cancel_conversation(update: Update, content: ContextTypes.DEFAULT_TYPE
 
 #A function to handle button response
 async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
+    #try:
+    query = update.callback_query
+    await query.answer()
     try:
-        query = update.callback_query
-        await query.answer()
-        try:
-            user_id = update.effective_user.id
-        except:
-            user_id = query.from_user.id
+        user_id = update.effective_user.id
+    except:
+        user_id = query.from_user.id
+    settings = await get_settings(user_id)
+    c_model = tuple(f"model{i}" for i in range(len(gemini_model_list)))
+    personas = glob("persona/*txt")
+    c_persona = tuple(f"persona{i}" for i in range(len(personas)))
+
+    if query.data == "c_model":
+        keyboard = []
+        for i in range(0, len(gemini_model_list), 2):
+            row =[]
+            row.append(InlineKeyboardButton(text=gemini_model_list[i], callback_data=f"model{i}"))
+            if i+1 < len(gemini_model_list):
+                row.append(InlineKeyboardButton(text=gemini_model_list[i+1], callback_data=f"model{i+1}"))
+            keyboard.append(row)
+        keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
+        model_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(f"Current Model: {gemini_model_list[settings[2]]}\nChoose a model:", reply_markup=model_markup, parse_mode="Markdown")
+
+    elif query.data == "c_streaming":
+        keyboard = [
+            [InlineKeyboardButton("ON", callback_data="c_streaming_on"), InlineKeyboardButton("OFF", callback_data="c_streaming_off")]    
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
         settings = await get_settings(user_id)
-        c_model = tuple(f"model{i}" for i in range(len(gemini_model_list)))
-        personas = glob("persona/*txt")
-        c_persona = tuple(f"persona{i}" for i in range(len(personas)))
+        c_s = "ON" if settings[5] == 1 else "OFF"
+        await query.edit_message_text(f"Streaming let you stream the bot response in real time.\nCurrent setting : {c_s}", reply_markup=markup)
 
-        if query.data == "c_model":
-            keyboard = []
-            for i in range(0, len(gemini_model_list), 2):
-                row =[]
-                row.append(InlineKeyboardButton(text=gemini_model_list[i], callback_data=f"model{i}"))
-                if i+1 < len(gemini_model_list):
-                    row.append(InlineKeyboardButton(text=gemini_model_list[i+1], callback_data=f"model{i+1}"))
-                keyboard.append(row)
-            keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
-            model_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(f"Current Model: {gemini_model_list[settings[2]]}\nChoose a model:", reply_markup=model_markup, parse_mode="Markdown")
+    elif query.data == "c_streaming_on":
+        conn = sqlite3.connect("settings/user_settings.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (1, user_id))
+        conn.commit()
+        conn.close()
+        await asyncio.to_thread(
+            db[f"{user_id}"].update_one,
+                {"id" : user_id},
+                {"$set" : {"settings.5":1}}
+        )
+        await query.edit_message_text("Streaming has turned on.")
 
-        elif query.data == "c_streaming":
-            keyboard = [
-                [InlineKeyboardButton("ON", callback_data="c_streaming_on"), InlineKeyboardButton("OFF", callback_data="c_streaming_off")]    
-            ]
-            markup = InlineKeyboardMarkup(keyboard)
-            settings = await get_settings(user_id)
-            c_s = "ON" if settings[5] == 1 else "OFF"
-            await query.edit_message_text(f"Streaming let you stream the bot response in real time.\nCurrent setting : {c_s}", reply_markup=markup)
+    elif query.data == "c_streaming_off":
+        conn = sqlite3.connect("settings/user_settings.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (0, user_id))
+        conn.commit()
+        conn.close()
+        await asyncio.to_thread(
+            db[f"{user_id}"].update_one,
+                {"id" : user_id},
+                {"$set" : {"settings.5":0}}
+        )
+        await query.edit_message_text("Streaming has turned off.")
 
-        elif query.data == "c_streaming_on":
-            conn = sqlite3.connect("settings/user_settings.db")
-            cursor = conn.cursor()
-            cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (1, user_id))
-            conn.commit()
-            conn.close()
-            await asyncio.to_thread(
-                db[f"{user_id}"].update_one,
-                    {"id" : user_id},
-                    {"$set" : {"settings.5":1}}
-            )
-            await query.edit_message_text("Streaming has turned on.")
-
-        elif query.data == "c_streaming_off":
-            conn = sqlite3.connect("settings/user_settings.db")
-            cursor = conn.cursor()
-            cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (0, user_id))
-            conn.commit()
-            conn.close()
-            await asyncio.to_thread(
-                db[f"{user_id}"].update_one,
-                    {"id" : user_id},
-                    {"$set" : {"settings.5":0}}
-            )
-            await query.edit_message_text("Streaming has turned off.")
-
-        elif query.data == "c_persona":
-            personas = sorted(glob("persona/*txt"))
-            personas.remove("persona/memory_persona.txt")
-            settings = await get_settings(user_id)
-            keyboard = []
-            for i in range(0, len(personas), 2):
-                row = []
-                name = os.path.splitext(os.path.basename(personas[i]))[0]
+    elif query.data == "c_persona":
+        personas = sorted(glob("persona/*txt"))
+        personas.remove("persona/memory_persona.txt")
+        settings = await get_settings(user_id)
+        keyboard = []
+        for i in range(0, len(personas), 2):
+            row = []
+            name = os.path.splitext(os.path.basename(personas[i]))[0]
+            if name != "memory_persona":
+                row.append(InlineKeyboardButton(text=name, callback_data="persona"+str(i)))
+            if i+1 < len(personas):
+                name = os.path.splitext(os.path.basename(personas[i+1]))[0]
                 if name != "memory_persona":
-                    row.append(InlineKeyboardButton(text=name, callback_data="persona"+str(i)))
-                if i+1 < len(personas):
-                    name = os.path.splitext(os.path.basename(personas[i+1]))[0]
-                    if name != "memory_persona":
-                        row.append(InlineKeyboardButton(text = name, callback_data="persona"+str(i+1)))
-                keyboard.append(row)
-            keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
-            markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(f"Persona will shape your bot response as personality.\n\nCurrent Persona: {os.path.splitext(os.path.basename(personas[settings[6]]))[0]}\n\nIt is recommended not to change the persona. Choose an option:", reply_markup=markup, parse_mode="Markdown")
+                    row.append(InlineKeyboardButton(text = name, callback_data="persona"+str(i+1)))
+            keyboard.append(row)
+        keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
+        markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(f"Persona will shape your bot response as personality.\n\nCurrent Persona: {os.path.splitext(os.path.basename(personas[settings[6]]))[0]}\n\nIt is recommended not to change the persona. Choose an option:", reply_markup=markup, parse_mode="Markdown")
 
-        elif query.data == "c_memory":
-            keyboard = [
-                [InlineKeyboardButton("Show Memory", callback_data="c_show_memory"), InlineKeyboardButton("Delete Memory", callback_data="c_delete_memory")],
-                [InlineKeyboardButton("Cancel", callback_data="cancel")]
-            ]
-            memory_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("Memory is created based on you conversation history to provide more personalized response.", reply_markup=memory_markup, parse_mode="Markdown")
+    elif query.data == "c_memory":
+        keyboard = [
+            [InlineKeyboardButton("Show Memory", callback_data="c_show_memory"), InlineKeyboardButton("Delete Memory", callback_data="c_delete_memory")],
+            [InlineKeyboardButton("Cancel", callback_data="cancel")]
+        ]
+        memory_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("Memory is created based on you conversation history to provide more personalized response.", reply_markup=memory_markup, parse_mode="Markdown")
 
-        elif query.data == "c_conv_history":
-            keyboard = [
-                [InlineKeyboardButton("Show", callback_data="c_ch_show"), InlineKeyboardButton("Reset", callback_data="c_ch_reset")],
-                [InlineKeyboardButton("Cancel", callback_data="cancel")]
-            ]
-            ch_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("Conversation history holds your conversation with the bot.", reply_markup=ch_markup, parse_mode="Markdown")
+    elif query.data == "c_conv_history":
+        keyboard = [
+            [InlineKeyboardButton("Show", callback_data="c_ch_show"), InlineKeyboardButton("Reset", callback_data="c_ch_reset")],
+            [InlineKeyboardButton("Cancel", callback_data="cancel")]
+        ]
+        ch_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("Conversation history holds your conversation with the bot.", reply_markup=ch_markup, parse_mode="Markdown")
 
-        elif query.data in c_model :
-            conn = sqlite3.connect("settings/user_settings.db")
-            cursor = conn.cursor()
-            model_num = int(query.data[5:])
-            if gemini_model_list[model_num] != "gemini-2.5-pro":
-                cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model_num, user_id))
-                conn.commit()
-                conn.close()
-                await asyncio.to_thread(
-                db[f"{user_id}"].update_one,
-                        {"id" : user_id},
-                        {"$set" : {"settings.2":model_num}}
-                )
-                await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
-            elif gemini_model_list[model_num] == "gemini-2.5-pro":
-                cursor.execute("UPDATE user_settings SET model = ?, thinking_budget = ? WHERE id = ? AND thinking_budget = 0", (model_num, 1024, user_id))
-                conn.commit()
-                conn.close()
-                await asyncio.to_thread(
-                db[f"{user_id}"].update_one,
-                        {"id" : user_id},
-                        {"$set" : {"settings.2":model_num, "settings.3" : 1024}}
-                )
-                await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
-
-        elif query.data in c_persona:
-            conn = sqlite3.connect("settings/user_settings.db")
-            cursor = conn.cursor()
-            persona_num = int(query.data[7:])
-            cursor.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona_num, user_id))
+    elif query.data in c_model :
+        conn = sqlite3.connect("settings/user_settings.db")
+        cursor = conn.cursor()
+        model_num = int(query.data[5:])
+        if gemini_model_list[model_num] != "gemini-2.5-pro":
+            cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model_num, user_id))
             conn.commit()
             conn.close()
-            await reset(update, content, query)
             await asyncio.to_thread(
-                db[f"{user_id}"].update_one,
+            db[f"{user_id}"].update_one,
                     {"id" : user_id},
-                    {"$set" : {"settings.6":persona_num}}
+                    {"$set" : {"settings.2":model_num}}
             )
-            personas = sorted(glob("persona/*txt"))
-            await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(personas[persona_num]))[0]}.")
+            await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
+        elif gemini_model_list[model_num] == "gemini-2.5-pro":
+            cursor.execute("UPDATE user_settings SET model = ?, thinking_budget = ? WHERE id = ? AND thinking_budget = 0", (model_num, 1024, user_id))
+            conn.commit()
+            conn.close()
+            await asyncio.to_thread(
+            db[f"{user_id}"].update_one,
+                    {"id" : user_id},
+                    {"$set" : {"settings.2":model_num, "settings.3" : 1024}}
+            )
+            await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
 
-        elif query.data == "g_classroom":
-            await query.edit_message_text("CSE Google classroom code: ```2o2ea2k3```\n\nMath G. Classroom code: ```aq4vazqi```\n\nChemistry G. Classroom code: ```wnlwjtbg```", parse_mode="Markdown")
+    elif query.data in c_persona:
+        conn = sqlite3.connect("settings/user_settings.db")
+        cursor = conn.cursor()
+        persona_num = int(query.data[7:])
+        cursor.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona_num, user_id))
+        conn.commit()
+        conn.close()
+        await reset(update, content, query)
+        await asyncio.to_thread(
+            db[f"{user_id}"].update_one,
+                {"id" : user_id},
+                {"$set" : {"settings.6":persona_num}}
+        )
+        personas = sorted(glob("persona/*txt"))
+        await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(personas[persona_num]))[0]}.")
 
-        elif query.data == "c_all_websites":
-            keyboard = [
-                [InlineKeyboardButton("CSE 24 Website", url="https://ruetcse24.vercel.app/")],
-                [InlineKeyboardButton("Facebook", url="https://www.facebook.com/profile.php?id=61574730479807"), InlineKeyboardButton("Profiles", url="https://ruetcse24.vercel.app/profiles")],
-                [InlineKeyboardButton("Cancel", callback_data="cancel")]
-            ]
-            aw_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("CSE 24 RELATED ALL WEBSITES:", reply_markup=aw_markup)
+    elif query.data == "g_classroom":
+        await query.edit_message_text("CSE Google classroom code: ```2o2ea2k3```\n\nMath G. Classroom code: ```aq4vazqi```\n\nChemistry G. Classroom code: ```wnlwjtbg```", parse_mode="Markdown")
 
-        elif query.data == "c_circulate_routine":
-            await query.edit_message_text("Please wait while bot is circulating the routine.")
-            asyncio.create_task(circulate_routine(query, content))
+    elif query.data == "c_all_websites":
+        keyboard = [
+            [InlineKeyboardButton("CSE 24 Website", url="https://ruetcse24.vercel.app/")],
+            [InlineKeyboardButton("Facebook", url="https://www.facebook.com/profile.php?id=61574730479807"), InlineKeyboardButton("Profiles", url="https://ruetcse24.vercel.app/profiles")],
+            [InlineKeyboardButton("Cancel", callback_data="cancel")]
+        ]
+        aw_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("CSE 24 RELATED ALL WEBSITES:", reply_markup=aw_markup)
 
-        elif query.data == "c_toggle_routine":
-            keyboard = [
-                [InlineKeyboardButton("Sure", callback_data="c_tr_sure"), InlineKeyboardButton("Cancel", callback_data="c_tr_cancel")]
-            ]
-            tr_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("Are you sure you want to toggle the routine?", reply_markup=tr_markup)
+    elif query.data == "c_circulate_routine":
+        await query.edit_message_text("Please wait while bot is circulating the routine.")
+        asyncio.create_task(circulate_routine(query, content))
 
-        elif query.data == "c_tr_sure":
-            with open("routine/lab_routine.txt", "r+", encoding="utf-8") as f:
-                active = f.read()
-                f.seek(0)
-                f.truncate(0)
-                if active == "first":
-                    f.write("second")
-                elif active=="second":
-                    f.write("first")
-                await query.edit_message_text("Routine Succesfully Toggled.")
+    elif query.data == "c_toggle_routine":
+        keyboard = [
+            [InlineKeyboardButton("Sure", callback_data="c_tr_sure"), InlineKeyboardButton("Cancel", callback_data="c_tr_cancel")]
+        ]
+        tr_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("Are you sure you want to toggle the routine?", reply_markup=tr_markup)
 
-        elif query.data == "c_tr_cancel":
-            await query.edit_message_text("Thanks.")
+    elif query.data == "c_tr_sure":
+        with open("routine/lab_routine.txt", "r+", encoding="utf-8") as f:
+            active = f.read()
+            f.seek(0)
+            f.truncate(0)
+            if active == "first":
+                f.write("second")
+            elif active=="second":
+                f.write("first")
+            await query.edit_message_text("Routine Succesfully Toggled.")
 
-        elif query.data == "cancel":
-            await query.delete_message()
+    elif query.data == "c_tr_cancel":
+        await query.edit_message_text("Thanks.")
 
-        elif query.data == "c_show_memory":
-            await see_memory(update, content, query)
+    elif query.data == "cancel":
+        await query.delete_message()
 
-        elif query.data == "c_delete_memory":
-            await delete_memory(update, content, query)
+    elif query.data == "c_show_memory":
+        await see_memory(update, content, query)
 
-        elif query.data == "c_ch_show":
-            with open(f"Conversation/conversation-{user_id}.txt", "rb") as file:
-                if os.path.getsize(f"Conversation/conversation-{user_id}.txt") == 0:
-                    await query.edit_message_text("You don't have any conversation history.")
-                else:
-                    await query.edit_message_text("Your conversation history:")
-                    await content.bot.send_document(chat_id=user_id, document=file)
+    elif query.data == "c_delete_memory":
+        await delete_memory(update, content, query)
 
-        elif query.data == "c_ch_reset":
-            await reset(update, content, query)
-
-        elif query.data == "c_admin_help":
-            if user_id in all_admins:
-                keyboard = [
-                    [InlineKeyboardButton("Read Documentation", url = "https://github.com/sifat1996120/Phantom_bot")],
-                     [InlineKeyboardButton("Cancel", callback_data="cancel")]
-                ]
-                markup = InlineKeyboardMarkup(keyboard)
-                with open("admin/admin_help.shadow", "rb") as file:
-                    help_data = fernet.decrypt(file.read()).decode("utf-8")
-                    help_data = help_data if help_data else "Sorry no document. Try again later."
-                await query.edit_message_text(help_data, reply_markup=markup)
+    elif query.data == "c_ch_show":
+        with open(f"Conversation/conversation-{user_id}.txt", "rb") as file:
+            if os.path.getsize(f"Conversation/conversation-{user_id}.txt") == 0:
+                await query.edit_message_text("You don't have any conversation history.")
             else:
-                await query.edit_message_text("Sorry you are not a Admin.")
-        
-        elif query.data == "c_manage_ai_model":
+                await query.edit_message_text("Your conversation history:")
+                await content.bot.send_document(chat_id=user_id, document=file)
+
+    elif query.data == "c_ch_reset":
+        await reset(update, content, query)
+
+    elif query.data == "c_admin_help":
+        if user_id in all_admins:
             keyboard = [
-                [InlineKeyboardButton("Add Model", callback_data="c_add_model"), InlineKeyboardButton("Delete Model", callback_data="c_delete_model")],
-                [InlineKeyboardButton("Cancel", callback_data="cancel")]
+                [InlineKeyboardButton("Read Documentation", url = "https://github.com/sifat1996120/Phantom_bot")],
+                    [InlineKeyboardButton("Cancel", callback_data="cancel")]
             ]
             markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("From here you can manage the AI model this bot use to provide response.\n\nChoose an option:", reply_markup=markup, parse_mode="Markdown")
+            with open("admin/admin_help.shadow", "rb") as file:
+                help_data = fernet.decrypt(file.read()).decode("utf-8")
+                help_data = help_data if help_data else "Sorry no document. Try again later."
+            await query.edit_message_text(help_data, reply_markup=markup)
+        else:
+            await query.edit_message_text("Sorry you are not a Admin.")
+    
+    elif query.data == "c_manage_ai_model":
+        keyboard = [
+            [InlineKeyboardButton("Add Model", callback_data="c_add_model"), InlineKeyboardButton("Delete Model", callback_data="c_delete_model")],
+            [InlineKeyboardButton("Cancel", callback_data="cancel")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("From here you can manage the AI model this bot use to provide response.\n\nChoose an option:", reply_markup=markup, parse_mode="Markdown")
 
-        elif query.data == "c_show_all_user":
-            conn = sqlite3.connect("info/user_data.db")
-            cursor = conn.cursor()
-            cursor.execute("SELECT user_id from users")
-            rows = cursor.fetchall()
-            users = tuple(row[0] for row in rows)
-            user_data = "All registered users are listed below:\n"
-            for i, user in enumerate(users):
-                user_data += f"{i+1}. {user}\n"
-            await query.edit_message_text(user_data)
-        
-        elif query.data == "c_inform_all":
-            asyncio.create_task(inform_all(query, content))
+    elif query.data == "c_show_all_user":
+        conn = sqlite3.connect("info/user_data.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT user_id from users")
+        rows = cursor.fetchall()
+        users = tuple(row[0] for row in rows)
+        user_data = "All registered users are listed below:\n"
+        for i, user in enumerate(users):
+            user_data += f"{i+1}. {user}\n"
+        await query.edit_message_text(user_data)
+    
+    elif query.data == "c_inform_all":
+        asyncio.create_task(inform_all(query, content))
 
 
-    except Exception as e:
-        print(f"Error in button_handler function.\n\nError Code -{e}")
-        await query.edit_message_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
-        return ConversationHandler.END
+    # except Exception as e:
+    #     print(f"Error in button_handler function.\n\nError Code -{e}")
+    #     await query.edit_message_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
+    #     return ConversationHandler.END
 
 
 
