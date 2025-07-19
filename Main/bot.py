@@ -844,35 +844,49 @@ async def inform_all(query, content:ContextTypes.DEFAULT_TYPE) -> None:
 #fuction to circulate message
 async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE):
     try:
+        keyboard = [
+            ["Routine", "CT"],
+            ["Settings", "Resources"]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
+ 
+        message_type = content.user_data.get("circulate_message_query")
         all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
         message = update.message.text.strip()
         msg = await update.message.reply_text("Please wait while bot is circulating the message.")
         sent = 0
         failed = 0
         failed_list = "Failed to send message to those user:\n"
+        if message_type=="c_notice":
+            notice = f"```NOTICE\n\n{message}\n```"
+        else:
+            notice = message
         for user in all_users:
             try:
                 await content.bot.send_message(
                     chat_id=user,
-                    text="*** IMPORTANT NOTICE ***\n\n" + message,
-                    parse_mode="Markdown"
+                    text=add_escape_character(notice),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
                 )
                 sent += 1
             except:
                 try:
                     await content.bot.send_message(
                         chat_id=user,
-                        text=add_escape_character("*** IMPORTANT NOTICE ***\n\n" + message),
-                        parse_mode="MarkdownV2"
+                        text=notice,
+                        parse_mode="Markdown",
+                        reply_markup=reply_markup
                     )
                     sent += 1
                 except:
                     try:
                         await content.bot.send_message(
                             chat_id=user,
-                            text="*** IMPORTANT NOTICE ***\n\n" + message,
+                            text= f"NOTICE\n\n{message}" if message_type=="c_notice" else message,
+                            reply_markup=reply_markup
                         )
-                        sent += 1
+                        sent += 1 
 
                     except Exception as e:
                         failed += 1
@@ -1044,8 +1058,8 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
 #fuction for start command
 async def start(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = [
-        ["ROUTINE", "CT"],
-        ["SETTINGS ", "RESOURCES"]
+        ["Routine", "CT"],
+        ["Settings", "Resources"]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
     try:
@@ -1306,15 +1320,16 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             message = await update.message.reply_text("Downloading Image...")
             caption = update.message.caption if update.message.caption else "Describe this imgae, if this image have question answer this."
             photo_file = await update.message.photo[-1].get_file()
-            photo = await photo_file.download_as_bytearray()
+            ext = os.path.splitext(os.path.basename(photo_file.file_path))[1]
+            file_id = photo_file.file_unique_id
+            await photo_file.download_to_drive(f"media/{file_id}.{ext}")
+            photo = Image.open(f"media/{file_id}.{ext}")
             chat_id = update.effective_chat.id
             prompt = await create_prompt(update, content, caption, chat_id, 1)
 
 
-            await message.edit_text("Analyzing Image...\nThis may take a while.")
-            def gemini_photo_worker(photo, caption):
-                photo = BytesIO(photo)
-                image = Image.open(photo)
+            await message.edit_text("🤖 Analyzing video...\nThis may take a while ⏳")
+            def gemini_photo_worker(image, caption):
                 for i, api_key in enumerate(gemini_api_keys):
                     try:
                         client = genai.Client(api_key=api_key)
@@ -1333,6 +1348,7 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                         print(f"Error getting response for API-{i}\n\nError Code - {e}")
                 return "Can't get response for your request"
             
+            os.remove(f"media/{file_id}.{ext}")
             response = await asyncio.to_thread(gemini_photo_worker, photo, prompt)
             await update.message.reply_text("Response for the Image:\n\n" + response)
             await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
@@ -1695,7 +1711,7 @@ async def admin_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) ->
             return
         if user_id in all_admins:
             keyboard = [
-                [InlineKeyboardButton("Inform All", callback_data="c_inform_all")],
+                [InlineKeyboardButton("Circulate CT Routine", callback_data="c_inform_all")],
                 [InlineKeyboardButton("Circulate Message", callback_data="c_circulate_message"), InlineKeyboardButton("Show All User", callback_data="c_show_all_user")],
                 [InlineKeyboardButton("Circulate Routine", callback_data="c_circulate_routine"), InlineKeyboardButton("Toggle Routine", callback_data="c_toggle_routine")],
                 [InlineKeyboardButton("Manage Admin", callback_data="c_manage_admin"), InlineKeyboardButton("Manage AI Model", callback_data="c_manage_ai_model")],
@@ -1730,13 +1746,17 @@ async def help(update: Update, content : ContextTypes.DEFAULT_TYPE) -> None:
 #function to take message for circulate message
 async def message_taker(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        query = update.callback_query
+        await query.answer()
+        print(query.data)
+        content.user_data["circulate_message_query"] = query.data
         keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
         mt_markup = InlineKeyboardMarkup(keyboard)
         await update.callback_query.edit_message_text("Enter the message here:", reply_markup=mt_markup)
         return "CM"
     except Exception as e:
         print(f"Error in message_taker function.\n\nError Code -{e}")
-        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
+        await query.edit_message_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -1942,7 +1962,12 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
         else:
             try:
+                conn = sqlite3.connect("info/user_data.db")
+                cursor = conn.cursor()
+                cursor.execute("SELECT roll FROM users")
                 roll = int(roll)
+                rows = cursor.fetchall()
+                all_rolls = tuple(row[0] for row in rows)
             except:
                 msg = await update.message.reply_text("Invalid Roll Number.")
                 content.user_data["tr_message_id"] = msg.message_id
@@ -1956,6 +1981,10 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 await update.message.delete()
                 return ConversationHandler.END
             else:
+                if roll in all_rolls:
+                    content.user_data["roll"] = roll
+                    await update.message.reply_text("This account already exists.\n\nPlease enter your password to login:")
+                    return "TUP"
                 content.user_data["roll"] = roll
                 keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
                 markup = InlineKeyboardMarkup(keyboard)
@@ -1970,6 +1999,32 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
         print(f"Error in roll_action function.\n\nError Code -{e}")
         await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
+
+
+#function to take user password for login or confidential report
+async def take_user_password(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        user_password = update.message.text.strip()
+        conn = sqlite3.connect("info/user_data.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT password FROM users WHERE roll = ?", (content.user_data.get("roll"),))
+        password = cursor.fetchone()[0]
+        if user_password == password:
+            keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            with open("info/getting_api.shadow", "rb") as file:
+                help_data = add_escape_character(fernet.decrypt(file.read()).decode("utf-8"))
+                msg = await update.message.reply_text(help_data, reply_markup=markup, parse_mode="MarkdownV2")
+            content.user_data["ra_message_id"] = msg.message_id
+            await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
+            await update.message.delete()
+            return "AH"
+        else:
+            await update.message.reply_text("Wrong Password..\n\nIf you are having problem contact admin. Or mail here: shadow_mist0@proton.me")
+            return ConversationHandler.END
+    except Exception as e:
+        print(f"Error in take_user_password function.\n\nError Code - {e}")
+        await update.message.reply_text("Internal Error. Please contact admin or Try Again later.")
 
 
 #function to handler skip
@@ -2070,8 +2125,8 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
         password = content.user_data.get("password")
         if password == c_password:
             keyboard = [
-                ["ROUTINE", "CT"],
-                ["SETTINGS ", "RESOURCES"]
+                ["Routine", "CT"],
+                ["Settings", "Resources"]
             ]
             reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
             try:
@@ -2091,7 +2146,8 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 """,
                 tuple(info for info in user_info)
                 )
-                persona = 4 if user_info[2] == "male" else 0
+                all_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in sorted(glob("persona/*txt"))]
+                persona = all_persona.index("Pikachu") if user_info[2] == "male" else all_persona.index("Aarohi")
                 data = {
                     "id" : user_info[0],
                     "name" : user_info[1],
@@ -2354,8 +2410,9 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
         user_id = query.from_user.id
     settings = await get_settings(user_id)
     c_model = tuple(f"model{i}" for i in range(len(gemini_model_list)))
-    personas = glob("persona/*txt")
-    c_persona = tuple(f"persona{i}" for i in range(len(personas)))
+    personas = sorted(glob("persona/*txt"))
+    c_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in personas]
+    c_persona.remove("memory_persona")
 
     if query.data == "c_model":
         keyboard = []
@@ -2406,18 +2463,25 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
 
     elif query.data == "c_persona":
         personas = sorted(glob("persona/*txt"))
-        personas.remove("persona/memory_persona.txt")
+        conn = sqlite3.connect("info/user_data.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT gender FROM users WHERE user_id = ?", (query.from_user.id, ))
+        gender = cursor.fetchone()[0]
+        if gender == "female":
+            try:
+                c_persona.remove("Maria")
+            except Exception as r:
+                print(f"Error in c_data part. Error Code - {e}")
         settings = await get_settings(user_id)
         keyboard = []
-        for i in range(0, len(personas), 2):
+        for i in range(0, len(c_persona), 2):
             row = []
-            name = os.path.splitext(os.path.basename(personas[i]))[0]
+            name = c_persona[i]
             if name != "memory_persona":
-                row.append(InlineKeyboardButton(text=name, callback_data="persona"+str(i)))
-            if i+1 < len(personas):
-                name = os.path.splitext(os.path.basename(personas[i+1]))[0]
-                if name != "memory_persona":
-                    row.append(InlineKeyboardButton(text = name, callback_data="persona"+str(i+1)))
+                row.append(InlineKeyboardButton(text=name, callback_data=name))
+            if i+1 < len(c_persona):
+                name = c_persona[i+1]
+                row.append(InlineKeyboardButton(text = name, callback_data=name))
             keyboard.append(row)
         keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
         markup = InlineKeyboardMarkup(keyboard)
@@ -2442,7 +2506,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
     elif query.data in c_model :
         conn = sqlite3.connect("settings/user_settings.db")
         cursor = conn.cursor()
-        model_num = int(query.data[5:])
+        model_num = all_persona = sorted(glob("persona/*txt"))
         if gemini_model_list[model_num] != "gemini-2.5-pro":
             cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model_num, user_id))
             conn.commit()
@@ -2467,7 +2531,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
     elif query.data in c_persona:
         conn = sqlite3.connect("settings/user_settings.db")
         cursor = conn.cursor()
-        persona_num = int(query.data[7:])
+        persona_num = personas.index(f"persona/{query.data}.txt")
         cursor.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona_num, user_id))
         conn.commit()
         conn.close()
@@ -2544,7 +2608,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                     [InlineKeyboardButton("Cancel", callback_data="cancel")]
             ]
             markup = InlineKeyboardMarkup(keyboard)
-            with open("admin/admin_help.shadow", "rb") as file:
+            with open("info/admin_help.shadow", "rb") as file:
                 help_data = fernet.decrypt(file.read()).decode("utf-8")
                 help_data = help_data if help_data else "Sorry no document. Try again later."
             await query.edit_message_text(help_data, reply_markup=markup)
@@ -2572,6 +2636,13 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
     
     elif query.data == "c_inform_all":
         asyncio.create_task(inform_all(query, content))
+    
+    elif query.data == "c_circulate_message":
+        keyboard = [
+            [InlineKeyboardButton("Notice", callback_data="c_notice"), InlineKeyboardButton("Normal Message", callback_data="c_normal_message")] 
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(add_escape_character("Notice will send message in this format\n```NOTICE\n<Your Message>\n```\nNormal will send message as bot response.\n\nChoose an option:"), reply_markup=markup, parse_mode="MarkdownV2")
 
 
     # except Exception as e:
@@ -2630,6 +2701,7 @@ async def main():
             states = {
                 "TG" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_gender)],
                 "TR" : [CallbackQueryHandler(take_roll, pattern="^(c_male|c_female)$")],
+                "TUP" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_user_password)],
                 "RA" : [MessageHandler(filters.TEXT & ~filters.COMMAND, roll_action)],
                 "AH" : [
                         CallbackQueryHandler(handle_skip, pattern="^c_skip$"),
@@ -2660,7 +2732,7 @@ async def main():
 
         #conversation handler for circulate message
         circulate_message_conv = ConversationHandler(
-            entry_points = [CallbackQueryHandler(message_taker, pattern="^c_circulate_message$")],
+            entry_points = [CallbackQueryHandler(message_taker, pattern="^(c_notice|c_normal_message)$")],
             states = {
                 "CM" : [MessageHandler(
                     filters.TEXT & ~filters.COMMAND,
@@ -2715,4 +2787,5 @@ async def main():
 
 
 if __name__=="__main__":
+    asyncio.run(main())
     asyncio.run(main())
