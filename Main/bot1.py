@@ -381,6 +381,7 @@ def gemini_non_stream(user_message, api, settings):
         tools=[]
         tools.append(types.Tool(google_search=types.GoogleSearch))
         tools.append(types.Tool(url_context=types.UrlContext))
+        tools.append(types.Tool(function_declarations=[create_image_function]))
         
         if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
             config = types.GenerateContentConfig(
@@ -419,6 +420,75 @@ def gemini_create_image(prompt, api):
         )
     )
     return response
+
+
+
+#All function declaration that gemini will be controlling It is rocommended not to touch them
+
+
+#fucntion declaration for creating image
+create_image_function = {
+    "name" : "create_image",
+    "description" : "Generates a image",
+    "parameters" : {
+        "type" : "object",
+        "properties" : {
+            "prompt" : {
+                "type" : "string",
+                "description" : "The decription of the image with artsyle and theme to generate",
+            }
+        },
+        "required" : ["prompt"]
+    }
+}
+
+
+async def create_image(update:Update, content: ContextTypes.DEFAULT_TYPE, prompt):
+    try:
+        user_id = update.effective_user.id
+        msg = await update.message.reply_text("Image creation is in process, This may take a while please wait patiently.")
+        for i, api_key in enumerate(gemini_api_keys):
+            try:
+                response = await asyncio.to_thread(gemini_create_image, prompt, api_key)
+                break
+            except Exception as e:
+                print(f"Error for API-{i}.\n\nError code -{e}")
+        await content.bot.delete_message(chat_id=user_id, message_id=msg.message_id)
+        for part in response.candidates[0].content.parts:
+            if part.text is not None:
+                data = part.text
+                if len(data)>4080:
+                    data = [data[i:i+4080] for i in range(0, len(data), 4080)]
+                    for d in data:
+                        try:
+                            await update.message.reply_text(add_escape_character(d), parse_mode="MarkdownV2")
+                        except:
+                            try:
+                                await update.message.reply_text(d, parse_mode="Markdown")
+                            except:
+                                await update.message.reply_text(d)
+                else:
+                    try:
+                        await update.message.reply_text(add_escape_character(data), parse_mode="MarkdownV2")
+                    except:
+                        try:
+                            await update.message.reply_text(data, parse_mode="Markdown")
+                        except:
+                            await update.message.reply_text(data)
+            elif part.inline_data is not None:
+                image = Image.open(BytesIO(part.inline_data.data))
+                bio = BytesIO()
+                image.save(bio, "PNG")
+                bio.seek(0)
+                await content.bot.send_photo(chat_id=user_id, photo=bio, caption="Created By AI")
+    except Exception as e:
+        print(f"Error in gemini_create_image function.\n\nError Code-{e}")
+        await update.message.reply_text("Image creation failed.")
+        try:
+            await content.bot.delete_message(chat_id=user_id, message_id=msg.message_id)
+        except:
+            pass
+
 
 
 #A function to delete n times convo from conversation history
@@ -1143,7 +1213,11 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                 except Exception as e:
                     print(f"Error getting gemini response for API-{i}. \n Error Code -{e}")
                     continue
-            if response is not None:
+            if response.candidates[0].content.parts[0].function_call:
+                function_call = response.candidates[0].content.parts[0].function_call
+                print(f"name : {function_call.name}")
+                print(f"name : {function_call.args}")
+            elif response:
                 await send_message(update, content, response, user_message, settings)
             else:
                 print("Failed to get a response from gemini.")
@@ -1165,7 +1239,6 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text("You are not registered.", reply_markup=markup)
             return
-        user_name = f"{update.effective_user.first_name or update.effective_user.last_name or "Unknown"}".strip()
         user_message = (update.message.text or "...").strip()
         if (update.message and update.message.chat.type == "private") or (update.message.chat.type != "private" and (f"@{bot_name}" in user_message.lower() or f"{bot_name}" in user_message.lower() or "mama" in user_message.lower() or "@" in user_message.lower() or "bot" in user_message.lower() or "pika" in user_message.lower())):
             await update.message.chat.send_action(action = ChatAction.TYPING)
@@ -1191,49 +1264,9 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             await update.message.delete()
             return
         elif any(trigger in user_message.lower() for trigger in ["create image", "create a image", "make image", "make a image", "prompt=", "prompt ="]):
-            try:
-                msg = await update.message.reply_text("Image creation is in process, This may take a while please wait patiently.")
-                for i, api_key in enumerate(gemini_api_keys):
-                    try:
-                        response = await asyncio.to_thread(gemini_create_image, user_message, api_key)
-                        break
-                    except Exception as e:
-                        print(f"Error for API-{i}.\n\nError code -{e}")
-                await content.bot.delete_message(chat_id=user_id, message_id=msg.message_id)
-                for part in response.candidates[0].content.parts:
-                    if part.text is not None:
-                        data = part.text
-                        if len(data)>4080:
-                            data = [data[i:i+4080] for i in range(0, len(data), 4080)]
-                            for d in data:
-                                try:
-                                    await update.message.reply_text(add_escape_character(d), parse_mode="MarkdownV2")
-                                except:
-                                    try:
-                                        await update.message.reply_text(d, parse_mode="Markdown")
-                                    except:
-                                        await update.message.reply_text(d)
-                        else:
-                            try:
-                                await update.message.reply_text(add_escape_character(data), parse_mode="MarkdownV2")
-                            except:
-                                try:
-                                    await update.message.reply_text(data, parse_mode="Markdown")
-                                except:
-                                    await update.message.reply_text(data)
-                    elif part.inline_data is not None:
-                        image = Image.open(BytesIO(part.inline_data.data))
-                        bio = BytesIO()
-                        image.save(bio, "PNG")
-                        bio.seek(0)
-                        await content.bot.send_photo(chat_id=user_id, photo=bio, caption="Created By AI")
-            except Exception as e:
-                print(f"Error in gemini_create_image function.\n\nError Code-{e}")
-                await update.message.reply_text("Image creation failed.")
-                try:
-                    await content.bot.delete_message(chat_id=user_id, message_id=msg.message_id)
-                except:
-                    pass
+            user_message = update.message.text.strip()
+            prompt = await create_prompt(update, content, user_message, user_id, 1)
+            await create_image(update, content, prompt)
         else:
             #await user_message_handler(update, content, bot_name)
             await queue.put((update, content, bot_name))
@@ -2417,7 +2450,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
     except:
         user_id = query.from_user.id
     settings = await get_settings(user_id)
-    c_model = tuple(model for model in gemini_model_list)
+    c_model = tuple(f"model{i}" for i in range(len(gemini_model_list)))
     personas = sorted(glob("persona/*txt"))
     c_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in personas]
     c_persona.remove("memory_persona")
@@ -2426,9 +2459,9 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
         keyboard = []
         for i in range(0, len(gemini_model_list), 2):
             row =[]
-            row.append(InlineKeyboardButton(text=gemini_model_list[i], callback_data=gemini_model_list[i]))
+            row.append(InlineKeyboardButton(text=gemini_model_list[i], callback_data=f"model{i}"))
             if i+1 < len(gemini_model_list):
-                row.append(InlineKeyboardButton(text=gemini_model_list[i+1], callback_data=gemini_model_list[i+1]))
+                row.append(InlineKeyboardButton(text=gemini_model_list[i+1], callback_data=f"model{i+1}"))
             keyboard.append(row)
         keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
         model_markup = InlineKeyboardMarkup(keyboard)
@@ -2514,7 +2547,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
     elif query.data in c_model :
         conn = sqlite3.connect("settings/user_settings.db")
         cursor = conn.cursor()
-        model_num = c_model.index(query.data)
+        model_num = all_persona = sorted(glob("persona/*txt"))
         if gemini_model_list[model_num] != "gemini-2.5-pro":
             cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model_num, user_id))
             conn.commit()
