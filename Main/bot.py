@@ -85,7 +85,7 @@ def get_token():
         return TOKENs
     except Exception as e:
         print(f"Error Code -{e}")
-TOKEN = get_token()[0]
+TOKEN = get_token()[2]
 
 
 #all registered user
@@ -863,10 +863,19 @@ async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE
             notice = message
         for user in all_users:
             try:
-                await content.bot.send_message(
+                if message_type == "c_notice":
+                    await content.bot.send_message(
+                        chat_id=user,
+                        text=notice,
+                        parse_mode="Markdown",
+                        reply_markup=reply_markup
+                    )
+                    sent += 1
+                else:
+                    await content.bot.send_message(
                     chat_id=user,
-                    text=add_escape_character(notice),
-                    parse_mode="MarkdownV2",
+                    text=notice,
+                    parse_mode="HTML",
                     reply_markup=reply_markup
                 )
                 sent += 1
@@ -874,8 +883,8 @@ async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE
                 try:
                     await content.bot.send_message(
                         chat_id=user,
-                        text=notice,
-                        parse_mode="Markdown",
+                        text=add_escape_character(notice),
+                        parse_mode="MarkdownV2",
                         reply_markup=reply_markup
                     )
                     sent += 1
@@ -1160,17 +1169,17 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
         user_message = (update.message.text or "...").strip()
         if (update.message and update.message.chat.type == "private") or (update.message.chat.type != "private" and (f"@{bot_name}" in user_message.lower() or f"{bot_name}" in user_message.lower() or "mama" in user_message.lower() or "@" in user_message.lower() or "bot" in user_message.lower() or "pika" in user_message.lower())):
             await update.message.chat.send_action(action = ChatAction.TYPING)
-        if user_message == "ROUTINE" and update.message.chat.type == "private":
+        if user_message == "Routine" and update.message.chat.type == "private":
             await routine_handler(update, content)
             return
-        elif user_message == "SETTINGS" and update.message.chat.type == "private":
+        elif user_message == "Settings" and update.message.chat.type == "private":
             await handle_settings(update, content)
             await update.message.delete()
             return
         elif user_message == "CT" and update.message.chat.type == "private":
             await handle_ct(update, content)
             return
-        elif user_message == "RESOURCES" and update.message.chat.type == "private":
+        elif user_message == "Resources" and update.message.chat.type == "private":
             keyboard = [
                 [InlineKeyboardButton("Drive", url="https://drive.google.com/drive/folders/1xbyCdj3XQ9AsCCF8ImI13HCo25JEhgUJ"), InlineKeyboardButton("Syllabus", url="https://drive.google.com/file/d/1pVF40-E0Oe8QI-EZp9S7udjnc0_Kquav/view?usp=drive_link")],
                 [InlineKeyboardButton("Orientation Files", url = "https://drive.google.com/drive/folders/10_-xTV-FsXnndtDiw_StqH2Zy9tQcWq0"), InlineKeyboardButton("Lab Cover Page", url="https://ruet-cover-page.github.io/")],
@@ -1748,7 +1757,6 @@ async def message_taker(update:Update, content:ContextTypes.DEFAULT_TYPE) -> Non
     try:
         query = update.callback_query
         await query.answer()
-        print(query.data)
         content.user_data["circulate_message_query"] = query.data
         keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
         mt_markup = InlineKeyboardMarkup(keyboard)
@@ -2639,7 +2647,8 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
     
     elif query.data == "c_circulate_message":
         keyboard = [
-            [InlineKeyboardButton("Notice", callback_data="c_notice"), InlineKeyboardButton("Normal Message", callback_data="c_normal_message")] 
+            [InlineKeyboardButton("Notice", callback_data="c_notice"), InlineKeyboardButton("Normal Message", callback_data="c_normal_message")],
+            [InlineKeyboardButton("Cancel", callback_data="cancel")]
         ]
         markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(add_escape_character("Notice will send message in this format\n```NOTICE\n<Your Message>\n```\nNormal will send message as bot response.\n\nChoose an option:"), reply_markup=markup, parse_mode="MarkdownV2")

@@ -39,4 +39,4 @@ dependencies = [
 bot-start = "Main.bot:main"
 
 [tool.setuptools]
-packages = ["Main", "info", "routine"]
+packages = ["Main", "info"]
