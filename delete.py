@@ -7,5 +7,5 @@ shutil.rmtree("memory")
 shutil.rmtree("persona")
 shutil.rmtree("routine")
 shutil.rmtree("settings")
+shutil.rmtree("info")
  
-os.remove("info/user_data.db")

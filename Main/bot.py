@@ -9,6 +9,7 @@ import threading
 import requests
 from glob import glob
 from io import BytesIO
+from fpdf import FPDF
 from flask import Flask, request
 from cryptography.fernet import Fernet
 from datetime import datetime, timedelta
@@ -272,8 +273,23 @@ def create_routine_file():
         print(f"Error in create_routine_file function. Error Code - {e}")
 
 
+#function to create info file locally from MongoDB
+def create_info_file():
+    os.makedirs("info",exist_ok=True)
+    colllection = db["info"]
+    for file in colllection.find({"type" : "info"}):
+        file_name = file["name"]
+        path = f"info/{file_name}.txt" if file_name == "group_training_data" else f"info/{file_name}.shadow"
+        if file_name == "group_training_data":
+            with open(path, "w") as f:
+                f.write(file["data"])
+        else:
+            with open(path, "wb") as f:
+                f.write(fernet.encrypt(file["data"].encode()))
+
 
 #calling all those function to create offline file from MongoDB
+create_info_file()
 create_memory_file()
 create_persona_file()
 create_routine_file()
@@ -281,7 +297,6 @@ create_settings_file()
 create_user_data_file()
 create_admin_pass_file()
 create_conversation_file()
-
 
 
 #All the global function 
@@ -556,8 +571,8 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 data += "\n***END OF RULES***\n\n\n"
             data += "****TRAINING DATA****"
             if (settings[6] == 4 or settings[6] == 0) and media == 0:
-                with open("info/group_training_data.shadow", "rb") as file:
-                    data += fernet.decrypt(file.read()).decode("utf-8")
+                with open("info/group_training_data.txt", "r") as file:
+                    data += file.read()
             data += "****END OF TRAINIG DATA****"
             data += "***MEMORY***\n"
             with open(f"memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
@@ -582,8 +597,8 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 data += fernet.decrypt(f.read()).decode("utf-8")
                 data += "\n***END OF RULES***\n\n\n"
             data += "******TRAINING DATA******\n\n"
-            with open("info/group_training_data.shadow", "rb") as f:
-                data += fernet.decrypt(f.read()).decode("utf-8")
+            with open("info/group_training_data.txt", "r") as f:
+                data += f.read()
                 data += "******END OF TRAINING DATA******\n\n"
             data += "***MEMORY***\n"
             with open(f"memory/memory-group.txt", "a+", encoding="utf-8") as f:
@@ -1124,11 +1139,11 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
         else:
             settings = await get_settings(user_id)
             if not settings:
-                update.message.reply_text("You are not registered.")
+                await update.message.reply_text("You are not registered.")
                 return
             if update.message.chat.type != "private":
                 group_id = update.effective_chat.id
-                settings = (group_id,"group",1,0,0.7,0,1)
+                settings = (group_id,"group",1,0,0.7,0,4)
             prompt = await create_prompt(update, content, user_message, user_id, 0)
             for i in range(len(gemini_api_keys)):
                 try:
@@ -1192,10 +1207,11 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             return
         elif any(trigger in user_message.lower() for trigger in ["create image", "create a image", "make image", "make a image", "prompt=", "prompt ="]):
             try:
+                prompt = await create_prompt(update, content, user_message, user_id, 1)
                 msg = await update.message.reply_text("Image creation is in process, This may take a while please wait patiently.")
                 for i, api_key in enumerate(gemini_api_keys):
                     try:
-                        response = await asyncio.to_thread(gemini_create_image, user_message, api_key)
+                        response = await asyncio.to_thread(gemini_create_image, prompt, api_key)
                         break
                     except Exception as e:
                         print(f"Error for API-{i}.\n\nError code -{e}")
@@ -1337,7 +1353,7 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             prompt = await create_prompt(update, content, caption, chat_id, 1)
 
 
-            await message.edit_text("🤖 Analyzing video...\nThis may take a while ⏳")
+            await message.edit_text("🤖 Analyzing Image...\nThis may take a while ⏳")
             def gemini_photo_worker(image, caption):
                 for i, api_key in enumerate(gemini_api_keys):
                     try:
@@ -1663,7 +1679,7 @@ async def handle_settings(update : Update, content : ContextTypes.DEFAULT_TYPE) 
             [InlineKeyboardButton("Memory", callback_data="c_memory"), InlineKeyboardButton("cancel", callback_data="cancel")]
         ]
         settings_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("You change the bot configuration from here.\nBot Configuration Menu:", reply_markup=settings_markup)
+        await update.message.reply_text("You can change the bot configuration from here.\nBot Configuration Menu:", reply_markup=settings_markup)
     except Exception as e:
         await send_to_channel(update, content, channel_id, f"Error in handle_settings function \n\nError Code -{e}")
         print(f"Error in handle_settings function. \n\n Error Code -{e}")
@@ -1720,7 +1736,7 @@ async def admin_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) ->
             return
         if user_id in all_admins:
             keyboard = [
-                [InlineKeyboardButton("Circulate CT Routine", callback_data="c_inform_all")],
+                [InlineKeyboardButton("Circulate CT Routine", callback_data="c_circulate_ct"), InlineKeyboardButton("Take Attendance", callback_data="c_take_attendance")],
                 [InlineKeyboardButton("Circulate Message", callback_data="c_circulate_message"), InlineKeyboardButton("Show All User", callback_data="c_show_all_user")],
                 [InlineKeyboardButton("Circulate Routine", callback_data="c_circulate_routine"), InlineKeyboardButton("Toggle Routine", callback_data="c_toggle_routine")],
                 [InlineKeyboardButton("Manage Admin", callback_data="c_manage_admin"), InlineKeyboardButton("Manage AI Model", callback_data="c_manage_ai_model")],
@@ -2394,7 +2410,244 @@ async def take_model_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
-        
+
+#function to take attendance detail
+async def take_attendance_detail(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        query = update.callback_query
+        await query.answer()
+        keybaord = [
+            [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
+        ]
+        markup = InlineKeyboardMarkup(keybaord)
+        msg = await query.edit_message_text("Enter the teacher name:", reply_markup=markup)
+        content.user_data["message_id"] = msg.message_id
+        return "TTN"
+    except Exception as e:
+        print(f"Error in take_attendance function.\n\nError code - {e}")
+        return ConversationHandler.END
+
+
+#function to take teachers name
+async def take_teachers_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        name = update.message.text.strip()
+        if not name.isalpha():
+            return ConversationHandler.END
+        keybaord = [
+            [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
+        ]
+        markup = InlineKeyboardMarkup(keybaord)
+        msg = await update.message.reply_text("Enter the subject name:", reply_markup=markup)
+        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("message_id"))
+        await update.message.delete()
+        content.user_data["teacher"] = name
+        content.user_data["message_id"] = msg.message_id
+        return "TSN"
+    except Exception as e:
+        print(f"Error in take_teachers_name function. Error Code - {e}")
+        await update.message.reply_text("Internal Error. Contact admin or try again later.")
+        return ConversationHandler.END
+    
+
+#function to take subjet name for attendance
+async def take_subject_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        name = update.message.text.strip()
+        if not name.isalpha():
+            return ConversationHandler.END
+        keybaord = [
+            [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
+        ]
+        markup = InlineKeyboardMarkup(keybaord)
+        msg = await update.message.reply_text("Enter the time limit as seconds, Make sure to give only number: ", reply_markup=markup)
+        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("message_id"))
+        await update.message.delete()
+        content.user_data["subject"] = name
+        content.user_data["message_id"] = msg.message_id
+        return "TTL"
+    except Exception as e:
+        print(f"Error in take_subject_name function. Error Code - {e}")
+        await update.message.reply_text("Internal Error. Contact admin or try again later.")
+        return ConversationHandler.END
+
+
+#function to take time limit for attendance
+async def take_time_limit(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        limit = update.message.text.strip()
+        if not limit.isdigit():
+            return ConversationHandler.END
+        keybaord = [
+            [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
+        ]
+        markup = InlineKeyboardMarkup(keybaord)
+        content.user_data["time_limit"] = limit
+        msg = await update.message.reply_text("Enter a one time password that will be used to verify the attendance: ", reply_markup=markup)
+        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("message_id"))
+        content.user_data["message_id"] = msg.message_id
+        await update.message.delete()
+        return "TOTP"
+    except Exception as e:
+        print(f"Error in take_subject_name function. Error Code - {e}")
+        await update.message.reply_text("Internal Error. Contact admin or try again later.")
+        return ConversationHandler.END
+
+
+#function to take one time password for attendance
+async def take_one_time_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        password = update.message.text.strip()
+        date = datetime.today().strftime("%d-%m-%Y")
+        collection = db[f"Attendance-{date}"]
+        msg = await update.message.reply_text("Please wait while bot is sending the attendance circular.")
+        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("message_id"))
+        await update.message.delete()
+        teacher = content.user_data.get("teacher")
+        subject = content.user_data.get("subject")
+        limit = int(content.user_data.get("time_limit"))
+        data = {
+            "type" : f"attendance-{date}",
+            "teacher" : teacher,
+            "subject" : subject,
+            "present" : [],
+            "absent" : []
+        }
+        with open("info/one_time_password.txt", "w") as f:
+            f.write(password)
+        with open("info/active_attendance.txt", "w") as f:
+            f.write(f"{subject}-{teacher}")
+        collection.insert_one(data)
+        content.user_data["message_id"] = msg.message_id
+        asyncio.create_task(circulate_attendance(update, content, teacher, subject, limit))
+        asyncio.create_task(delete_attendace_circular(update, content, limit))
+        return ConversationHandler.END
+    except Exception as e:
+        print(f"Error in take_subject_name function. Error Code - {e}")
+        await update.message.reply_text("Internal Error. Contact admin or try again later.")
+        return ConversationHandler.END
+
+user_message_id = {}
+
+#function to circulate attendance to all 60 user
+async def circulate_attendance(update:Update, content:ContextTypes.DEFAULT_TYPE, teacher, subject, limit):
+    try:
+        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("message_id"))
+        message = await update.message.reply_text("The attendace circular has been circulated successfully. Please wait the time limit to end..")
+        all_students = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
+        sent = 0
+        failed = 0
+        failed_list = "FAILED TO SEND ATTENDANCE TO THOSE USER:\n"
+        for student in all_students:
+            keyboard = [
+                [InlineKeyboardButton("Mark Attendance", callback_data="c_mark_attendance")]
+            ]
+            markup = InlineKeyboardMarkup(keyboard)
+            data = (
+                "IMPORTANT NOTICE\n"
+                "📋 Attendance :\n"
+                f"Teacher : {teacher}\n"
+                f"Subject : {subject}\n"
+                f"Please Mark Your Attendnce in {limit} seconds"
+            )
+            try:
+                msg = await content.bot.send_message(chat_id=student, text=data, reply_markup=markup)
+                user_message_id[f"{student}"] = msg.message_id
+                sent += 1
+            except:
+                failed += 1
+                failed_list += f"{student}\n"
+            report = (
+                    f"📊 Notification sent to {sent} users\n"
+                    f"⚠️ Failed to send to {failed} users\n"
+                )
+            await message.edit_text(report)
+        if failed != 0:
+            await update.message.reply_text(failed_list)
+    except Exception as e:
+        print(f"Error in circulate_attendance function. Error Code - {e}")
+        await update.message.reply_text("Internal Error. Contact admin or try again later.")
+        return ConversationHandler.END
+
+
+async def delete_attendace_circular(update:Update, content:ContextTypes.DEFAULT_TYPE, limit):
+    try:
+        await asyncio.sleep(limit+5)
+        for key, value in user_message_id.items():
+            try:
+                await content.bot.delete_message(chat_id=int(key), message_id=value)
+            except Exception as e:
+                print(e)
+        await process_attendance_data(update, content)
+    except Exception as e:
+        print(f"Error in delete_attendance_circular function.\n\nError Code - {e}")
+        return ConversationHandler.END
+
+
+#function to prepare pdf to send attendance data
+async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        message = await update.message.reply_text("Processing data...\nPlease wait...")
+        os.makedirs("media", exist_ok=True)
+        all_rolls = [roll for roll in range(2403120, 2403181)]
+        date = datetime.today().strftime("%d-%m-%Y")
+        with open("info/active_attendance.txt", "r") as f:
+            list = f.read().split("-")
+        present_students = tuple(db[f"Attendance-{date}"].find_one({"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"})["present"])
+        conn = sqlite3.connect("info/user_data.db")
+        cursor = conn.cursor()
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=10, style="B")
+        pdf.cell(190,10,"ATTENDANCE SHEET",ln=1, align="C")
+        pdf.set_font("Arial",size=8)
+        pdf.cell(62, 5, f"date: {date}", align="L")
+        pdf.cell(62, 5, f"Subject: {list[1]}", align="C")
+        pdf.cell(62, 5, f"Teacher: {list[0]}",ln=1,align="R")
+        pdf.cell(10,5,"SI", border=1)
+        pdf.cell(60,5,"Roll", border=1)
+        pdf.cell(60,5,"Name", border=1)
+        pdf.cell(60,5,"Status", border=1, ln=1)
+        for roll in all_rolls:
+            if roll in present_students:
+                pdf.set_text_color(0,0,0)
+                pdf.cell(10,4,f"{roll-2403120}", border=1)
+                pdf.cell(60,4,f"{roll}", border=1)
+                try:
+                    cursor.execute("SELECT name FROM users WHERE roll = ?", (roll, ))
+                    name = cursor.fetchone()[0]
+                except:
+                    name = "Unknown"
+                pdf.cell(60,4,name, border=1)
+                pdf.cell(60,4,"Present", border=1, ln=1)
+            else:
+                pdf.set_text_color(255,0,0)
+                pdf.cell(10,4,f"{roll-2403120}", border=1)
+                pdf.cell(60,4,f"{roll}", border=1)
+                try:
+                    cursor.execute("SELECT name FROM users WHERE roll = ?", (roll, ))
+                    name = cursor.fetchone()[0]
+                except:
+                    name = "Unknown"
+                pdf.cell(60,4,name, border=1)
+                pdf.cell(60,4,"Absent", border=1, ln=1)
+        pdf.output(f"media/attendance-{date}-{list[0]}.pdf")
+        with open(f"media/attendance-{date}-{list[0]}.pdf", "rb") as f:
+            pdf_file = BytesIO(f.read())
+            pdf_file.name = f"attendance-{date}-{list[0]}.pdf"
+        for admin in all_admins:
+            await content.bot.send_document(chat_id=admin, document=pdf_file, caption=f"Attendance sheet of {list[0]} by {list[1]} for {date}")
+            await content.bot.delete_message(chat_id=update.effective_user.id, message_id=message.message_id)
+        try:
+            os.remove("info/one_time_password.txt")
+            os.remove("info/active_attendance.txt")
+            os.remove(f"media/attendance-{date}-{list[0]}.pdf")
+        except:
+            pass
+    except Exception as e:
+        print(f"Error in Processing_attendance_data function.\n\nError Code - {e}")
+        return ConversationHandler.END
+
 
 #function to cancel conversation by cancel button
 async def cancel_conversation(update: Update, content: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2405,259 +2658,307 @@ async def cancel_conversation(update: Update, content: ContextTypes.DEFAULT_TYPE
         print(f"Error in cancel_conversation function.\n\nError Code -{e}")
         await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
+    
+
+#function to take one time password for attendance from the user
+async def take_otp(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        query = update.callback_query
+        await query.answer()
+        user_id = query.from_user.id
+        if user_id not in all_users:
+            keyboard = [
+                [InlineKeyboardButton("Register", callback_data="c_register"), InlineKeyboardButton("Cancel", callback_data="cancel")]
+            ]
+            markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("You are not registerd yet.", reply_markup=markup)
+        await query.edit_message_text("Enter the one time password that is given by the CR:")
+        return "VOTP"
+    except Exception as e:
+        print(f"Error in take_otp function.\n\nError Code -{e}")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
+        return ConversationHandler.END
+
+
+#function to verify one time password
+async def verify_otp(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    user_password = update.message.text.strip()
+    try:
+        password = open("info/one_time_password.txt").read()
+    except Exception as e:
+        print(e)
+    if user_password == password:
+        date = datetime.today().strftime("%d-%m-%Y")
+        collection = db[f"Attendance-{date}"]
+        with open("info/active_attendance.txt", "r") as f:
+            list = f.read().split("-")
+        collection.update_one(
+            {"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"},
+            {"$push" : {"present" : update.effective_user.id}}
+        )
+        conn = sqlite3.connect("info/user_data.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, roll FROM users WHERE user_id = ?", (update.effective_user.id,))
+        info = cursor.fetchone()
+        conn.close()
+        await update.message.reply_text(f"Name: {info[0]}\nRoll: {info[1]}\nYour attendance submitted successfully.\n\nIf you are seeing wrong information here please contact admin.")
+        return ConversationHandler.END
+    else:
+        await update.message.reply_text("Wrong Password.")
+        return ConversationHandler.END
+
 
 
 #A function to handle button response
 async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
-    #try:
-    query = update.callback_query
-    await query.answer()
     try:
-        user_id = update.effective_user.id
-    except:
-        user_id = query.from_user.id
-    settings = await get_settings(user_id)
-    c_model = tuple(model for model in gemini_model_list)
-    personas = sorted(glob("persona/*txt"))
-    c_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in personas]
-    c_persona.remove("memory_persona")
-
-    if query.data == "c_model":
-        keyboard = []
-        for i in range(0, len(gemini_model_list), 2):
-            row =[]
-            row.append(InlineKeyboardButton(text=gemini_model_list[i], callback_data=gemini_model_list[i]))
-            if i+1 < len(gemini_model_list):
-                row.append(InlineKeyboardButton(text=gemini_model_list[i+1], callback_data=gemini_model_list[i+1]))
-            keyboard.append(row)
-        keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
-        model_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(f"Current Model: {gemini_model_list[settings[2]]}\nChoose a model:", reply_markup=model_markup, parse_mode="Markdown")
-
-    elif query.data == "c_streaming":
-        keyboard = [
-            [InlineKeyboardButton("ON", callback_data="c_streaming_on"), InlineKeyboardButton("OFF", callback_data="c_streaming_off")]    
-        ]
-        markup = InlineKeyboardMarkup(keyboard)
+        query = update.callback_query
+        await query.answer()
+        try:
+            user_id = update.effective_user.id
+        except:
+            user_id = query.from_user.id
         settings = await get_settings(user_id)
-        c_s = "ON" if settings[5] == 1 else "OFF"
-        await query.edit_message_text(f"Streaming let you stream the bot response in real time.\nCurrent setting : {c_s}", reply_markup=markup)
-
-    elif query.data == "c_streaming_on":
-        conn = sqlite3.connect("settings/user_settings.db")
-        cursor = conn.cursor()
-        cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (1, user_id))
-        conn.commit()
-        conn.close()
-        await asyncio.to_thread(
-            db[f"{user_id}"].update_one,
-                {"id" : user_id},
-                {"$set" : {"settings.5":1}}
-        )
-        await query.edit_message_text("Streaming has turned on.")
-
-    elif query.data == "c_streaming_off":
-        conn = sqlite3.connect("settings/user_settings.db")
-        cursor = conn.cursor()
-        cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (0, user_id))
-        conn.commit()
-        conn.close()
-        await asyncio.to_thread(
-            db[f"{user_id}"].update_one,
-                {"id" : user_id},
-                {"$set" : {"settings.5":0}}
-        )
-        await query.edit_message_text("Streaming has turned off.")
-
-    elif query.data == "c_persona":
+        c_model = tuple(model for model in gemini_model_list)
         personas = sorted(glob("persona/*txt"))
-        conn = sqlite3.connect("info/user_data.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT gender FROM users WHERE user_id = ?", (query.from_user.id, ))
-        gender = cursor.fetchone()[0]
-        if gender == "female":
-            try:
-                c_persona.remove("Maria")
-            except Exception as r:
-                print(f"Error in c_data part. Error Code - {e}")
-        settings = await get_settings(user_id)
-        keyboard = []
-        for i in range(0, len(c_persona), 2):
-            row = []
-            name = c_persona[i]
-            if name != "memory_persona":
-                row.append(InlineKeyboardButton(text=name, callback_data=name))
-            if i+1 < len(c_persona):
-                name = c_persona[i+1]
-                row.append(InlineKeyboardButton(text = name, callback_data=name))
-            keyboard.append(row)
-        keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
-        markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(f"Persona will shape your bot response as personality.\n\nCurrent Persona: {os.path.splitext(os.path.basename(personas[settings[6]]))[0]}\n\nIt is recommended not to change the persona. Choose an option:", reply_markup=markup, parse_mode="Markdown")
+        c_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in personas]
+        c_persona.remove("memory_persona")
 
-    elif query.data == "c_memory":
-        keyboard = [
-            [InlineKeyboardButton("Show Memory", callback_data="c_show_memory"), InlineKeyboardButton("Delete Memory", callback_data="c_delete_memory")],
-            [InlineKeyboardButton("Cancel", callback_data="cancel")]
-        ]
-        memory_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("Memory is created based on you conversation history to provide more personalized response.", reply_markup=memory_markup, parse_mode="Markdown")
+        if query.data == "c_model":
+            keyboard = []
+            for i in range(0, len(gemini_model_list), 2):
+                row =[]
+                row.append(InlineKeyboardButton(text=gemini_model_list[i], callback_data=gemini_model_list[i]))
+                if i+1 < len(gemini_model_list):
+                    row.append(InlineKeyboardButton(text=gemini_model_list[i+1], callback_data=gemini_model_list[i+1]))
+                keyboard.append(row)
+            keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
+            model_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(f"Current Model: {gemini_model_list[settings[2]]}\nChoose a model:", reply_markup=model_markup, parse_mode="Markdown")
 
-    elif query.data == "c_conv_history":
-        keyboard = [
-            [InlineKeyboardButton("Show", callback_data="c_ch_show"), InlineKeyboardButton("Reset", callback_data="c_ch_reset")],
-            [InlineKeyboardButton("Cancel", callback_data="cancel")]
-        ]
-        ch_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("Conversation history holds your conversation with the bot.", reply_markup=ch_markup, parse_mode="Markdown")
-
-    elif query.data in c_model :
-        conn = sqlite3.connect("settings/user_settings.db")
-        cursor = conn.cursor()
-        model_num = c_model.index(query.data)
-        if gemini_model_list[model_num] != "gemini-2.5-pro":
-            cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model_num, user_id))
-            conn.commit()
-            conn.close()
-            await asyncio.to_thread(
-            db[f"{user_id}"].update_one,
-                    {"id" : user_id},
-                    {"$set" : {"settings.2":model_num}}
-            )
-            await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
-        elif gemini_model_list[model_num] == "gemini-2.5-pro":
-            cursor.execute("UPDATE user_settings SET model = ?, thinking_budget = ? WHERE id = ? AND thinking_budget = 0", (model_num, 1024, user_id))
-            conn.commit()
-            conn.close()
-            await asyncio.to_thread(
-            db[f"{user_id}"].update_one,
-                    {"id" : user_id},
-                    {"$set" : {"settings.2":model_num, "settings.3" : 1024}}
-            )
-            await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
-
-    elif query.data in c_persona:
-        conn = sqlite3.connect("settings/user_settings.db")
-        cursor = conn.cursor()
-        persona_num = personas.index(f"persona/{query.data}.txt")
-        cursor.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona_num, user_id))
-        conn.commit()
-        conn.close()
-        await reset(update, content, query)
-        await asyncio.to_thread(
-            db[f"{user_id}"].update_one,
-                {"id" : user_id},
-                {"$set" : {"settings.6":persona_num}}
-        )
-        personas = sorted(glob("persona/*txt"))
-        await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(personas[persona_num]))[0]}.")
-
-    elif query.data == "g_classroom":
-        await query.edit_message_text("CSE Google classroom code: ```2o2ea2k3```\n\nMath G. Classroom code: ```aq4vazqi```\n\nChemistry G. Classroom code: ```wnlwjtbg```", parse_mode="Markdown")
-
-    elif query.data == "c_all_websites":
-        keyboard = [
-            [InlineKeyboardButton("CSE 24 Website", url="https://ruetcse24.vercel.app/")],
-            [InlineKeyboardButton("Facebook", url="https://www.facebook.com/profile.php?id=61574730479807"), InlineKeyboardButton("Profiles", url="https://ruetcse24.vercel.app/profiles")],
-            [InlineKeyboardButton("Cancel", callback_data="cancel")]
-        ]
-        aw_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("CSE 24 RELATED ALL WEBSITES:", reply_markup=aw_markup)
-
-    elif query.data == "c_circulate_routine":
-        await query.edit_message_text("Please wait while bot is circulating the routine.")
-        asyncio.create_task(circulate_routine(query, content))
-
-    elif query.data == "c_toggle_routine":
-        keyboard = [
-            [InlineKeyboardButton("Sure", callback_data="c_tr_sure"), InlineKeyboardButton("Cancel", callback_data="c_tr_cancel")]
-        ]
-        tr_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("Are you sure you want to toggle the routine?", reply_markup=tr_markup)
-
-    elif query.data == "c_tr_sure":
-        with open("routine/lab_routine.txt", "r+", encoding="utf-8") as f:
-            active = f.read()
-            f.seek(0)
-            f.truncate(0)
-            if active == "first":
-                f.write("second")
-            elif active=="second":
-                f.write("first")
-            await query.edit_message_text("Routine Succesfully Toggled.")
-
-    elif query.data == "c_tr_cancel":
-        await query.edit_message_text("Thanks.")
-
-    elif query.data == "cancel":
-        await query.delete_message()
-
-    elif query.data == "c_show_memory":
-        await see_memory(update, content, query)
-
-    elif query.data == "c_delete_memory":
-        await delete_memory(update, content, query)
-
-    elif query.data == "c_ch_show":
-        with open(f"Conversation/conversation-{user_id}.txt", "rb") as file:
-            if os.path.getsize(f"Conversation/conversation-{user_id}.txt") == 0:
-                await query.edit_message_text("You don't have any conversation history.")
-            else:
-                await query.edit_message_text("Your conversation history:")
-                await content.bot.send_document(chat_id=user_id, document=file)
-
-    elif query.data == "c_ch_reset":
-        await reset(update, content, query)
-
-    elif query.data == "c_admin_help":
-        if user_id in all_admins:
+        elif query.data == "c_streaming":
             keyboard = [
-                [InlineKeyboardButton("Read Documentation", url = "https://github.com/sifat1996120/Phantom_bot")],
-                    [InlineKeyboardButton("Cancel", callback_data="cancel")]
+                [InlineKeyboardButton("ON", callback_data="c_streaming_on"), InlineKeyboardButton("OFF", callback_data="c_streaming_off")]    
             ]
             markup = InlineKeyboardMarkup(keyboard)
-            with open("info/admin_help.shadow", "rb") as file:
-                help_data = fernet.decrypt(file.read()).decode("utf-8")
-                help_data = help_data if help_data else "Sorry no document. Try again later."
-            await query.edit_message_text(help_data, reply_markup=markup)
-        else:
-            await query.edit_message_text("Sorry you are not a Admin.")
-    
-    elif query.data == "c_manage_ai_model":
-        keyboard = [
-            [InlineKeyboardButton("Add Model", callback_data="c_add_model"), InlineKeyboardButton("Delete Model", callback_data="c_delete_model")],
-            [InlineKeyboardButton("Cancel", callback_data="cancel")]
-        ]
-        markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("From here you can manage the AI model this bot use to provide response.\n\nChoose an option:", reply_markup=markup, parse_mode="Markdown")
+            settings = await get_settings(user_id)
+            c_s = "ON" if settings[5] == 1 else "OFF"
+            await query.edit_message_text(f"Streaming let you stream the bot response in real time.\nCurrent setting : {c_s}", reply_markup=markup)
 
-    elif query.data == "c_show_all_user":
-        conn = sqlite3.connect("info/user_data.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT user_id from users")
-        rows = cursor.fetchall()
-        users = tuple(row[0] for row in rows)
-        user_data = "All registered users are listed below:\n"
-        for i, user in enumerate(users):
-            user_data += f"{i+1}. {user}\n"
-        await query.edit_message_text(user_data)
-    
-    elif query.data == "c_inform_all":
-        asyncio.create_task(inform_all(query, content))
-    
-    elif query.data == "c_circulate_message":
-        keyboard = [
-            [InlineKeyboardButton("Notice", callback_data="c_notice"), InlineKeyboardButton("Normal Message", callback_data="c_normal_message")],
-            [InlineKeyboardButton("Cancel", callback_data="cancel")]
-        ]
-        markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(add_escape_character("Notice will send message in this format\n```NOTICE\n<Your Message>\n```\nNormal will send message as bot response.\n\nChoose an option:"), reply_markup=markup, parse_mode="MarkdownV2")
+        elif query.data == "c_streaming_on":
+            conn = sqlite3.connect("settings/user_settings.db")
+            cursor = conn.cursor()
+            cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (1, user_id))
+            conn.commit()
+            conn.close()
+            await asyncio.to_thread(
+                db[f"{user_id}"].update_one,
+                    {"id" : user_id},
+                    {"$set" : {"settings.5":1}}
+            )
+            await query.edit_message_text("Streaming has turned on.")
 
+        elif query.data == "c_streaming_off":
+            conn = sqlite3.connect("settings/user_settings.db")
+            cursor = conn.cursor()
+            cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (0, user_id))
+            conn.commit()
+            conn.close()
+            await asyncio.to_thread(
+                db[f"{user_id}"].update_one,
+                    {"id" : user_id},
+                    {"$set" : {"settings.5":0}}
+            )
+            await query.edit_message_text("Streaming has turned off.")
 
-    # except Exception as e:
-    #     print(f"Error in button_handler function.\n\nError Code -{e}")
-    #     await query.edit_message_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
-    #     return ConversationHandler.END
+        elif query.data == "c_persona":
+            personas = sorted(glob("persona/*txt"))
+            conn = sqlite3.connect("info/user_data.db")
+            cursor = conn.cursor()
+            cursor.execute("SELECT gender FROM users WHERE user_id = ?", (query.from_user.id, ))
+            gender = cursor.fetchone()[0]
+            if gender == "female":
+                try:
+                    c_persona.remove("Maria")
+                except Exception as r:
+                    print(f"Error in c_data part. Error Code - {e}")
+            settings = await get_settings(user_id)
+            keyboard = []
+            for i in range(0, len(c_persona), 2):
+                row = []
+                name = c_persona[i]
+                if name != "memory_persona":
+                    row.append(InlineKeyboardButton(text=name, callback_data=name))
+                if i+1 < len(c_persona):
+                    name = c_persona[i+1]
+                    row.append(InlineKeyboardButton(text = name, callback_data=name))
+                keyboard.append(row)
+            keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
+            markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(f"Persona will shape your bot response as personality.\n\nCurrent Persona: {os.path.splitext(os.path.basename(personas[settings[6]]))[0]}\n\nIt is recommended not to change the persona. Choose an option:", reply_markup=markup, parse_mode="Markdown")
+
+        elif query.data == "c_memory":
+            keyboard = [
+                [InlineKeyboardButton("Show Memory", callback_data="c_show_memory"), InlineKeyboardButton("Delete Memory", callback_data="c_delete_memory")],
+                [InlineKeyboardButton("Cancel", callback_data="cancel")]
+            ]
+            memory_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("Memory is created based on you conversation history to provide more personalized response.", reply_markup=memory_markup, parse_mode="Markdown")
+
+        elif query.data == "c_conv_history":
+            keyboard = [
+                [InlineKeyboardButton("Show", callback_data="c_ch_show"), InlineKeyboardButton("Reset", callback_data="c_ch_reset")],
+                [InlineKeyboardButton("Cancel", callback_data="cancel")]
+            ]
+            ch_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("Conversation history holds your conversation with the bot.", reply_markup=ch_markup, parse_mode="Markdown")
+
+        elif query.data in c_model :
+            conn = sqlite3.connect("settings/user_settings.db")
+            cursor = conn.cursor()
+            model_num = c_model.index(query.data)
+            if gemini_model_list[model_num] != "gemini-2.5-pro":
+                cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model_num, user_id))
+                conn.commit()
+                conn.close()
+                await asyncio.to_thread(
+                db[f"{user_id}"].update_one,
+                        {"id" : user_id},
+                        {"$set" : {"settings.2":model_num}}
+                )
+                await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
+            elif gemini_model_list[model_num] == "gemini-2.5-pro":
+                cursor.execute("UPDATE user_settings SET model = ?, thinking_budget = ? WHERE id = ? AND thinking_budget = 0", (model_num, 1024, user_id))
+                conn.commit()
+                conn.close()
+                await asyncio.to_thread(
+                db[f"{user_id}"].update_one,
+                        {"id" : user_id},
+                        {"$set" : {"settings.2":model_num, "settings.3" : 1024}}
+                )
+                await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
+
+        elif query.data in c_persona:
+            conn = sqlite3.connect("settings/user_settings.db")
+            cursor = conn.cursor()
+            persona_num = personas.index(f"persona/{query.data}.txt")
+            cursor.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona_num, user_id))
+            conn.commit()
+            conn.close()
+            await reset(update, content, query)
+            await asyncio.to_thread(
+                db[f"{user_id}"].update_one,
+                    {"id" : user_id},
+                    {"$set" : {"settings.6":persona_num}}
+            )
+            personas = sorted(glob("persona/*txt"))
+            await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(personas[persona_num]))[0]}.")
+
+        elif query.data == "g_classroom":
+            await query.edit_message_text("CSE Google classroom code: ```2o2ea2k3```\n\nMath G. Classroom code: ```aq4vazqi```\n\nChemistry G. Classroom code: ```wnlwjtbg```", parse_mode="Markdown")
+
+        elif query.data == "c_all_websites":
+            keyboard = [
+                [InlineKeyboardButton("CSE 24 Website", url="https://ruetcse24.vercel.app/")],
+                [InlineKeyboardButton("Facebook", url="https://www.facebook.com/profile.php?id=61574730479807"), InlineKeyboardButton("Profiles", url="https://ruetcse24.vercel.app/profiles")],
+                [InlineKeyboardButton("Cancel", callback_data="cancel")]
+            ]
+            aw_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("CSE 24 RELATED ALL WEBSITES:", reply_markup=aw_markup)
+
+        elif query.data == "c_circulate_routine":
+            await query.edit_message_text("Please wait while bot is circulating the routine.")
+            asyncio.create_task(circulate_routine(query, content))
+
+        elif query.data == "c_toggle_routine":
+            keyboard = [
+                [InlineKeyboardButton("Sure", callback_data="c_tr_sure"), InlineKeyboardButton("Cancel", callback_data="c_tr_cancel")]
+            ]
+            tr_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("Are you sure you want to toggle the routine?", reply_markup=tr_markup)
+
+        elif query.data == "c_tr_sure":
+            with open("routine/lab_routine.txt", "r+", encoding="utf-8") as f:
+                active = f.read()
+                f.seek(0)
+                f.truncate(0)
+                if active == "first":
+                    f.write("second")
+                elif active=="second":
+                    f.write("first")
+                await query.edit_message_text("Routine Succesfully Toggled.")
+
+        elif query.data == "c_tr_cancel":
+            await query.edit_message_text("Thanks.")
+
+        elif query.data == "cancel":
+            await query.delete_message()
+
+        elif query.data == "c_show_memory":
+            await see_memory(update, content, query)
+
+        elif query.data == "c_delete_memory":
+            await delete_memory(update, content, query)
+
+        elif query.data == "c_ch_show":
+            with open(f"Conversation/conversation-{user_id}.txt", "rb") as file:
+                if os.path.getsize(f"Conversation/conversation-{user_id}.txt") == 0:
+                    await query.edit_message_text("You don't have any conversation history.")
+                else:
+                    await query.edit_message_text("Your conversation history:")
+                    await content.bot.send_document(chat_id=user_id, document=file)
+
+        elif query.data == "c_ch_reset":
+            await reset(update, content, query)
+
+        elif query.data == "c_admin_help":
+            if user_id in all_admins:
+                keyboard = [
+                    [InlineKeyboardButton("Read Documentation", url = "https://github.com/sifat1996120/Phantom_bot")],
+                        [InlineKeyboardButton("Cancel", callback_data="cancel")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                with open("info/admin_help.shadow", "rb") as file:
+                    help_data = fernet.decrypt(file.read()).decode("utf-8")
+                    help_data = help_data if help_data else "Sorry no document. Try again later."
+                await query.edit_message_text(help_data, reply_markup=markup)
+            else:
+                await query.edit_message_text("Sorry you are not a Admin.")
+        
+        elif query.data == "c_manage_ai_model":
+            keyboard = [
+                [InlineKeyboardButton("Add Model", callback_data="c_add_model"), InlineKeyboardButton("Delete Model", callback_data="c_delete_model")],
+                [InlineKeyboardButton("Cancel", callback_data="cancel")]
+            ]
+            markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("From here you can manage the AI model this bot use to provide response.\n\nChoose an option:", reply_markup=markup, parse_mode="Markdown")
+
+        elif query.data == "c_show_all_user":
+            conn = sqlite3.connect("info/user_data.db")
+            cursor = conn.cursor()
+            cursor.execute("SELECT user_id from users")
+            rows = cursor.fetchall()
+            users = tuple(row[0] for row in rows)
+            user_data = "All registered users are listed below:\n"
+            for i, user in enumerate(users):
+                user_data += f"{i+1}. {user}\n"
+            await query.edit_message_text(user_data)
+        
+        elif query.data == "c_circulate_ct":
+            asyncio.create_task(inform_all(query, content))
+        
+        elif query.data == "c_circulate_message":
+            keyboard = [
+                [InlineKeyboardButton("Notice", callback_data="c_notice"), InlineKeyboardButton("Normal Message", callback_data="c_normal_message")],
+                [InlineKeyboardButton("Cancel", callback_data="cancel")]
+            ]
+            markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(add_escape_character("Notice will send message in this format\n```NOTICE\n<Your Message>\n```\nNormal will send message as bot response.\n\nChoose an option:"), reply_markup=markup, parse_mode="MarkdownV2")
+
+    except Exception as e:
+        print(f"Error in button_handler function.\n\nError Code -{e}")
+        await query.edit_message_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
+        return ConversationHandler.END
 
 
 
@@ -2674,6 +2975,27 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
 async def main():
     try:
         app = ApplicationBuilder().token(TOKEN).request(request).concurrent_updates(True).build()
+
+        #conversation handler to verify user attendance
+        verify_attendance_conv = ConversationHandler(
+            entry_points = [CallbackQueryHandler(take_otp, pattern="^c_mark_attendance$")],
+            states = {
+                "VOTP" : [MessageHandler(filters.TEXT & ~ filters.COMMAND, verify_otp)]
+            },
+            fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv$")]
+        )
+
+        #conversation to handle taking attendance for cse sec c
+        take_attendance_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(take_attendance_detail, pattern="^c_take_attendance$")],
+            states = {
+                "TTN" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_teachers_name)],
+                "TSN" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_subject_name)],
+                "TTL" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_time_limit)],
+                "TOTP" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_one_time_password)]
+            },
+            fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv$")]
+        )
 
         #conversation handler for managing model
         manage_ai_model_conv = ConversationHandler(
@@ -2765,8 +3087,10 @@ async def main():
         app.add_handler(thinking_conv)
         app.add_handler(temperature_conv)
         app.add_handler(manage_admin_conv)
+        app.add_handler(take_attendance_conv)
         app.add_handler(manage_ai_model_conv)
         app.add_handler(circulate_message_conv)
+        app.add_handler(verify_attendance_conv)
         app.add_handler(CommandHandler("help", help))
         app.add_handler(CommandHandler("start",start))
         app.add_handler(CallbackQueryHandler(button_handler))
