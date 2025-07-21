@@ -2,6 +2,7 @@ import re
 import os
 import time
 import html
+import shutil
 import sqlite3
 import asyncio
 import warnings
@@ -86,7 +87,7 @@ def get_token():
         return TOKENs
     except Exception as e:
         print(f"Error Code -{e}")
-TOKEN = get_token()[0]
+TOKEN = get_token()[1]
 
 
 #all registered user
@@ -297,6 +298,36 @@ create_settings_file()
 create_user_data_file()
 create_admin_pass_file()
 create_conversation_file()
+
+
+
+
+#a function to restart renew all the bot info
+async def restart(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        shutil.rmtree("info", ignore_errors=True)
+        shutil.rmtree("media", ignore_errors=True)
+        shutil.rmtree("admin", ignore_errors=True)
+        shutil.rmtree("memory", ignore_errors=True)
+        shutil.rmtree("persona", ignore_errors=True)
+        shutil.rmtree("routine", ignore_errors=True)
+        shutil.rmtree("settings", ignore_errors=True)
+        shutil.rmtree("Conversation", ignore_errors=True)
+        create_info_file()
+        create_memory_file()
+        create_persona_file()
+        create_routine_file()
+        create_settings_file()
+        create_user_data_file()
+        create_admin_pass_file()
+        create_conversation_file()
+    except Exception as e:
+        print(f"Error in restart function.\n\nError Code - {e}")
+        
+        
+        
+
+
 
 
 #All the global function 
@@ -832,17 +863,24 @@ async def inform_all(query, content:ContextTypes.DEFAULT_TYPE) -> None:
             )
         full_message = "\n".join(message)
         try:
-            sent = 0
             failed = 0
             failed_list = "Failed to send message to those user:\n"
-            for user in all_users:
+            tasks = []
+
+            async def send_ct_routine(user):
+                nonlocal failed, failed_list
                 try:
                     await content.bot.send_message(chat_id=user, text=full_message, parse_mode="HTML")
-                    sent += 1
+                    return True
                 except:
                     failed += 1
                     failed_list += str(user) + "\n"
-                await query.edit_message_text(f"Plese wait, your request is in process.\n\nSent to {sent} user and failed for {failed} user.")
+                    return False
+
+            for user in all_users:
+                tasks.append(send_ct_routine(user))
+            result = await asyncio.gather(*tasks)
+            sent = sum(result)
             report = (
                     f"📊 Notification sent to {sent} users\n"
                     f"⚠️ Failed to send to {failed} users\n"
@@ -869,23 +907,47 @@ async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE
         all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
         message = update.message.text.strip()
         msg = await update.message.reply_text("Please wait while bot is circulating the message.")
-        sent = 0
         failed = 0
+        tasks = []
         failed_list = "Failed to send message to those user:\n"
         if message_type=="c_notice":
             notice = f"```NOTICE\n\n{message}\n```"
         else:
             notice = message
-        for user in all_users:
+        async def send_notice(user):
+            nonlocal failed, failed_list
             try:
                 if message_type == "c_notice":
-                    await content.bot.send_message(
-                        chat_id=user,
-                        text=notice,
-                        parse_mode="Markdown",
-                        reply_markup=reply_markup
-                    )
-                    sent += 1
+                    try:
+                        await content.bot.send_message(
+                            chat_id=user,
+                            text=notice,
+                            parse_mode="Markdown",
+                            reply_markup=reply_markup
+                        )
+                        return True
+                    except:
+                        try:
+                            await content.bot.send_message(
+                                chat_id=user,
+                                text=add_escape_character(notice),
+                                parse_mode="MarkdownV2",
+                                reply_markup=reply_markup
+                            )
+                            return True
+                        except:
+                            try:
+                                await content.bot.send_message(
+                                    chat_id=user,
+                                    text=notice,
+                                    reply_markup=reply_markup
+                                )
+                                return True
+                            except Exception as e:
+                                print(e)
+                                failed += 1
+                                failed_list += f"{user}\n"
+                                return False
                 else:
                     await content.bot.send_message(
                     chat_id=user,
@@ -893,7 +955,7 @@ async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE
                     parse_mode="HTML",
                     reply_markup=reply_markup
                 )
-                sent += 1
+                return True
             except:
                 try:
                     await content.bot.send_message(
@@ -902,7 +964,7 @@ async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE
                         parse_mode="MarkdownV2",
                         reply_markup=reply_markup
                     )
-                    sent += 1
+                    return True
                 except:
                     try:
                         await content.bot.send_message(
@@ -910,13 +972,19 @@ async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE
                             text= f"NOTICE\n\n{message}" if message_type=="c_notice" else message,
                             reply_markup=reply_markup
                         )
-                        sent += 1 
+                        return True 
 
                     except Exception as e:
                         failed += 1
                         failed_list += str(user) + "\n"
                         print(e)
-            await msg.edit_text(f"Plese wait, your request is in process.\n\nSent to {sent} user and failed for {failed} user.")
+                        return False
+
+        for user in all_users:
+            tasks.append(send_notice(user))
+        result = await asyncio.gather(*tasks)
+        sent = sum(result)
+
         report = (
                 f"📊 Notification sent to {sent} users\n"
                 f"⚠️ Failed to send to {failed} users\n"
@@ -937,19 +1005,25 @@ async def circulate_routine(query, content:ContextTypes.DEFAULT_TYPE) -> None:
             rt = "routine/rt1.png"
         else:
             rt = "routine/rt2.png"
-        sent = 0
         failed = 0
+        tasks = []
         failed_list = "Failed to send routine to those user:\n"
+
+        async def send_ct_routine(user):
+                nonlocal failed, failed_list
+                try:
+                    with open(rt,"rb") as photo:
+                        await content.bot.send_photo(chat_id=user, photo=photo, caption="Renewed Routine")
+                    return True
+                except:
+                    failed += 1
+                    failed_list += str(user) + "\n"
+                    return False
+
         for user in all_users:
-            try:
-                with open(rt,"rb") as photo:
-                    await content.bot.send_photo(chat_id=user, photo=photo, caption="Renewed Routine")
-                sent += 1
-            except Exception as e:
-                print(e)
-                failed += 1
-                failed_list += str(user) + "\n"
-            await query.edit_message_text(f"Plese wait, your request is in process.\n\nSent to {sent} user and failed for {failed} user.")
+            tasks.append(send_ct_routine(user))
+        result = await asyncio.gather(*tasks)
+        sent = sum(result)
         report = (
                 f"📊 Notification sent to {sent} users\n"
                 f"⚠️ Failed to send to {failed} users\n"
@@ -2421,7 +2495,7 @@ async def take_attendance_detail(update:Update, content:ContextTypes.DEFAULT_TYP
         ]
         markup = InlineKeyboardMarkup(keybaord)
         msg = await query.edit_message_text("Enter the teacher name:", reply_markup=markup)
-        content.user_data["message_id"] = msg.message_id
+        content.user_data["tad_msg_id"] = msg.message_id
         return "TTN"
     except Exception as e:
         print(f"Error in take_attendance function.\n\nError code - {e}")
@@ -2433,16 +2507,15 @@ async def take_teachers_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
         name = update.message.text.strip()
         if not name.isalpha():
+            await update.message.reply_text("Operation Failed. \nName should not contain any special character and number.")
             return ConversationHandler.END
         keybaord = [
             [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
         ]
         markup = InlineKeyboardMarkup(keybaord)
         msg = await update.message.reply_text("Enter the subject name:", reply_markup=markup)
-        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("message_id"))
-        await update.message.delete()
+        content.user_data["ttn_msg_id"] = msg.message_id
         content.user_data["teacher"] = name
-        content.user_data["message_id"] = msg.message_id
         return "TSN"
     except Exception as e:
         print(f"Error in take_teachers_name function. Error Code - {e}")
@@ -2455,16 +2528,15 @@ async def take_subject_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
         name = update.message.text.strip()
         if not name.isalpha():
+            await update.message.reply_text("Operation Failed. \nSubject name should not contain any special character and number.")
             return ConversationHandler.END
         keybaord = [
             [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
         ]
         markup = InlineKeyboardMarkup(keybaord)
         msg = await update.message.reply_text("Enter the time limit as seconds, Make sure to give only number: ", reply_markup=markup)
-        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("message_id"))
-        await update.message.delete()
+        content.user_data["tsn_msg_id"] = msg.message_id
         content.user_data["subject"] = name
-        content.user_data["message_id"] = msg.message_id
         return "TTL"
     except Exception as e:
         print(f"Error in take_subject_name function. Error Code - {e}")
@@ -2477,6 +2549,7 @@ async def take_time_limit(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
         limit = update.message.text.strip()
         if not limit.isdigit():
+            await update.message.reply_text("Operation Failed. \nTime limit should only contain number.")
             return ConversationHandler.END
         keybaord = [
             [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
@@ -2484,9 +2557,7 @@ async def take_time_limit(update:Update, content:ContextTypes.DEFAULT_TYPE):
         markup = InlineKeyboardMarkup(keybaord)
         content.user_data["time_limit"] = limit
         msg = await update.message.reply_text("Enter a one time password that will be used to verify the attendance: ", reply_markup=markup)
-        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("message_id"))
-        content.user_data["message_id"] = msg.message_id
-        await update.message.delete()
+        content.user_data["ttl_msg_id"] = msg.message_id
         return "TOTP"
     except Exception as e:
         print(f"Error in take_subject_name function. Error Code - {e}")
@@ -2501,8 +2572,10 @@ async def take_one_time_password(update:Update, content:ContextTypes.DEFAULT_TYP
         date = datetime.today().strftime("%d-%m-%Y")
         collection = db[f"Attendance-{date}"]
         msg = await update.message.reply_text("Please wait while bot is sending the attendance circular.")
-        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("message_id"))
-        await update.message.delete()
+        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tad_msg_id"))
+        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ttn_msg_id"))
+        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tsn_msg_id"))
+        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ttl_msg_id"))
         teacher = content.user_data.get("teacher")
         subject = content.user_data.get("subject")
         limit = int(content.user_data.get("time_limit"))
@@ -2513,7 +2586,7 @@ async def take_one_time_password(update:Update, content:ContextTypes.DEFAULT_TYP
             "present" : [],
             "absent" : []
         }
-        with open("info/one_time_password.txt", "w") as f:
+        with open(f"info/one_time_password-{date}-{subject}.txt", "w") as f:
             f.write(password)
         with open("info/active_attendance.txt", "w") as f:
             f.write(f"{subject}-{teacher}")
@@ -2535,35 +2608,53 @@ async def circulate_attendance(update:Update, content:ContextTypes.DEFAULT_TYPE,
         await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("message_id"))
         message = await update.message.reply_text("The attendace circular has been circulated successfully. Please wait the time limit to end..")
         all_students = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
-        sent = 0
         failed = 0
+        tasks = []
+        user_id = update.effective_user.id
         failed_list = "FAILED TO SEND ATTENDANCE TO THOSE USER:\n"
-        for student in all_students:
-            keyboard = [
-                [InlineKeyboardButton("Mark Attendance", callback_data="c_mark_attendance")]
-            ]
-            markup = InlineKeyboardMarkup(keyboard)
-            data = (
-                "IMPORTANT NOTICE\n"
-                "📋 Attendance :\n"
-                f"Teacher : {teacher}\n"
-                f"Subject : {subject}\n"
-                f"Please Mark Your Attendnce in {limit} seconds"
-            )
+        keyboard = [
+            [InlineKeyboardButton("Mark Attendance", callback_data="c_mark_attendance")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        data = (
+            "📢 *IMPORTANT NOTICE*\n"
+            f"📋 *Attendance*:\n"
+            f"👨‍🏫 Teacher: {teacher}\n"
+            f"📚 Subject: {subject}\n"
+            f"⏳ Please mark your attendance in {limit} seconds!"
+        )
+        async def send_attendance(student):
+            nonlocal failed, failed_list
             try:
-                msg = await content.bot.send_message(chat_id=student, text=data, reply_markup=markup)
-                user_message_id[f"{student}"] = msg.message_id
-                sent += 1
-            except:
+                if int(student) != user_id:
+                    msg = await content.bot.send_message(chat_id=student, text=data, reply_markup=markup, parse_mode="Markdown")
+                    user_message_id[f"{student}"] = msg.message_id
+                    return True
+                else:
+                    return True
+            except Exception as e:
+                print(e)
                 failed += 1
                 failed_list += f"{student}\n"
-            report = (
-                    f"📊 Notification sent to {sent} users\n"
-                    f"⚠️ Failed to send to {failed} users\n"
-                )
-            await message.edit_text(report)
+                return False
+            
+        for student in all_students:
+            tasks.append(send_attendance(student))
+            
+        results = await asyncio.gather(*tasks)
+        sent = sum(results)
+        report = (
+                f"📋 Attendance Circular sent to {sent} users\n"
+                f"⚠️ Failed to send to {failed} users\n"
+            )
+        await message.edit_text(report)
         if failed != 0:
             await update.message.reply_text(failed_list)
+            msg = await update.message.reply_text(data, reply_markup=markup, parse_mode="Markdown")
+            user_message_id[f"{user_id}"] = msg.message_id
+        else:
+            msg = await update.message.reply_text(data, reply_markup=markup, parse_mode="Markdown")
+            user_message_id[f"{user_id}"] = msg.message_id
     except Exception as e:
         print(f"Error in circulate_attendance function. Error Code - {e}")
         await update.message.reply_text("Internal Error. Contact admin or try again later.")
@@ -2578,7 +2669,7 @@ async def delete_attendace_circular(update:Update, content:ContextTypes.DEFAULT_
                 await content.bot.delete_message(chat_id=int(key), message_id=value)
             except Exception as e:
                 print(e)
-        await process_attendance_data(update, content)
+        asyncio.create_task(process_attendance_data(update, content))
     except Exception as e:
         print(f"Error in delete_attendance_circular function.\n\nError Code - {e}")
         return ConversationHandler.END
@@ -2602,8 +2693,8 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
         pdf.cell(190,10,"ATTENDANCE SHEET",ln=1, align="C")
         pdf.set_font("Arial",size=8)
         pdf.cell(62, 5, f"date: {date}", align="L")
-        pdf.cell(62, 5, f"Subject: {list[1]}", align="C")
-        pdf.cell(62, 5, f"Teacher: {list[0]}",ln=1,align="R")
+        pdf.cell(62, 5, f"Subject: {list[0]}", align="C")
+        pdf.cell(62, 5, f"Teacher: {list[1]}",ln=1,align="R")
         pdf.cell(10,5,"SI", border=1)
         pdf.cell(60,5,"Roll", border=1)
         pdf.cell(60,5,"Name", border=1)
@@ -2636,16 +2727,23 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
             pdf_file = BytesIO(f.read())
             pdf_file.name = f"attendance-{date}-{list[0]}.pdf"
         for admin in all_admins:
-            await content.bot.send_document(chat_id=admin, document=pdf_file, caption=f"Attendance sheet of {list[0]} by {list[1]} for {date}")
-            await content.bot.delete_message(chat_id=update.effective_user.id, message_id=message.message_id)
+            try:
+                await content.bot.send_document(chat_id=admin, document=pdf_file, caption=f"Attendance sheet of {list[0]} by {list[1]} for {date}")
+            except:
+                pdf_file.seek(0)
+                print("Admin not found to send document")
+            try:
+                await content.bot.delete_message(chat_id=update.effective_user.id, message_id=message.message_id)
+            except:
+                pass
         try:
-            os.remove("info/one_time_password.txt")
+            os.remove(f"info/one_time_password-{date}-{list[0]}.txt")
             os.remove("info/active_attendance.txt")
             os.remove(f"media/attendance-{date}-{list[0]}.pdf")
         except:
             pass
     except Exception as e:
-        print(f"Error in Processing_attendance_data function.\n\nError Code - {e}")
+        print(f"Error in process_attendance_data function.\n\nError Code - {e}")
         return ConversationHandler.END
 
 
@@ -2682,29 +2780,40 @@ async def take_otp(update:Update, content:ContextTypes.DEFAULT_TYPE):
 
 #function to verify one time password
 async def verify_otp(update:Update, content:ContextTypes.DEFAULT_TYPE):
-    user_password = update.message.text.strip()
     try:
-        password = open("info/one_time_password.txt").read()
-    except Exception as e:
-        print(e)
-    if user_password == password:
         date = datetime.today().strftime("%d-%m-%Y")
-        collection = db[f"Attendance-{date}"]
+        user_password = update.message.text.strip()
         with open("info/active_attendance.txt", "r") as f:
             list = f.read().split("-")
-        collection.update_one(
-            {"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"},
-            {"$push" : {"present" : update.effective_user.id}}
-        )
+        try:
+            password = open(f"info/one_time_password-{date}-{list[0]}.txt").read()
+        except Exception as e:
+            print(e)
+            return ConversationHandler.END
+        user_id = update.effective_user.id
         conn = sqlite3.connect("info/user_data.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT name, roll FROM users WHERE user_id = ?", (update.effective_user.id,))
+        cursor.execute("SELECT name, roll FROM users WHERE user_id = ?", (user_id,))
         info = cursor.fetchone()
+        user_roll = info[1]
         conn.close()
-        await update.message.reply_text(f"Name: {info[0]}\nRoll: {info[1]}\nYour attendance submitted successfully.\n\nIf you are seeing wrong information here please contact admin.")
-        return ConversationHandler.END
-    else:
-        await update.message.reply_text("Wrong Password.")
+        if user_password == password:
+            collection = db[f"Attendance-{date}"]
+            collection.update_one(
+                {"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"},
+                {"$push" : {"present" : user_roll}}
+            )
+            await update.message.reply_text(f"Name: {info[0]}\nRoll: {info[1]}\nYour attendance submitted successfully.\n\nIf you are seeing wrong information here please contact admin.")
+            return ConversationHandler.END
+        else:
+            await update.message.reply_text("Wrong Password.\n\nEnter your password again: ")
+            if os.path.exists(f"info/one_time_password-{date}-{list[0]}.txt"):
+                return "VOTP"
+            else:
+                return ConversationHandler.END
+    except Exception as e:
+        print(f"Error in verify_otp function.\n\nError Code -{e}")
+        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
 
 
@@ -3093,6 +3202,7 @@ async def main():
         app.add_handler(verify_attendance_conv)
         app.add_handler(CommandHandler("help", help))
         app.add_handler(CommandHandler("start",start))
+        app.add_handler(CommandHandler("restart",restart))
         app.add_handler(CallbackQueryHandler(button_handler))
         app.add_handler(CommandHandler("admin", admin_handler))
         app.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
