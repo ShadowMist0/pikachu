@@ -87,7 +87,7 @@ def get_token():
         return TOKENs
     except Exception as e:
         print(f"Error Code -{e}")
-TOKEN = get_token()[1]
+TOKEN = get_token()[0]
 
 
 #all registered user
@@ -2283,6 +2283,9 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Passwords are not identical. Try again later.")
             await content.bot.delete_message(chat_id = update.effective_user.id, message_id=content.user_data.get("tp_message_id"))
             await update.message.delete()
+            if content.user_data.get("from_totp") == "true":
+                del content.user_data.get["from_totp"]
+                return await take_otp(update,content)
             return ConversationHandler.END
     except Exception as e:
         print(f"Error in confirm_password function.\n\nError Code -{e}")
@@ -2769,7 +2772,9 @@ async def take_otp(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("Register", callback_data="c_register"), InlineKeyboardButton("Cancel", callback_data="cancel")]
             ]
             markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text("You are not registerd yet.", reply_markup=markup)
+            await query.edit_message_text("You are not registerd yet.", reply_markup=markup)
+            content.user_data["from_totp"] = "true"
+            return ConversationHandler.END
         await query.edit_message_text("Enter the one time password that is given by the CR:")
         return "VOTP"
     except Exception as e:
