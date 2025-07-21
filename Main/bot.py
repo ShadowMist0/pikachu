@@ -75,7 +75,6 @@ except Exception as e:
     print(f"Error Connecting to MongoDB.\n\nError Code - {e}")
 
 
-
 #all globals variable
 
 channel_id = -1002575042671
@@ -305,6 +304,7 @@ create_conversation_file()
 #a function to restart renew all the bot info
 async def restart(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        await update.message.reply_text("Restarting please wait....")
         shutil.rmtree("info", ignore_errors=True)
         shutil.rmtree("media", ignore_errors=True)
         shutil.rmtree("admin", ignore_errors=True)
@@ -321,6 +321,7 @@ async def restart(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
         create_user_data_file()
         create_admin_pass_file()
         create_conversation_file()
+        await update.message.reply_text("Restart Successful.")
     except Exception as e:
         print(f"Error in restart function.\n\nError Code - {e}")
         
@@ -2278,19 +2279,27 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 await update.message.delete()
             except Exception as e:
                 print(f"Error adding user.\n\nError code - {e}")
+            if content.user_data.get("from_totp") == "true":
+                del content.user_data["from_totp"]
+                keyboard = [
+                    [InlineKeyboardButton("Mark Attendance", callback_data="c_mark_attendance")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                if os.path.exists("info/active_attendance.txt"):
+                    message = await update.message.reply_text("Redirecting to attendance circular.\n please wait...", reply_markup=markup)
+                    user_message_id[f"{update.effective_user.id}"] = message.message_id
+                else:
+                    await update.message.reply_text("Time limit is over for attendance, please contact admin.")
             return ConversationHandler.END
         else:
             await update.message.reply_text("Passwords are not identical. Try again later.")
             await content.bot.delete_message(chat_id = update.effective_user.id, message_id=content.user_data.get("tp_message_id"))
             await update.message.delete()
-            if content.user_data.get("from_totp") == "true":
-                del content.user_data.get["from_totp"]
-                return await take_otp(update,content)
-            return ConversationHandler.END
     except Exception as e:
         print(f"Error in confirm_password function.\n\nError Code -{e}")
         await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
         return ConversationHandler.END
+ 
     
 
 #function to enter temperature conversation
@@ -2734,7 +2743,7 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
                 await content.bot.send_document(chat_id=admin, document=pdf_file, caption=f"Attendance sheet of {list[0]} by {list[1]} for {date}")
             except:
                 pdf_file.seek(0)
-                print("Admin not found to send document")
+                print(f"Admin-{admin} not found to send document")
             try:
                 await content.bot.delete_message(chat_id=update.effective_user.id, message_id=message.message_id)
             except:
