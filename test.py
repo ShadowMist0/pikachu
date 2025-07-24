@@ -1,5 +1,9 @@
 from google import genai
 from google.genai import types
+from pymongo import MongoClient
+from pymongo.server_api import ServerApi
+import os
+
 
 # Define the function declaration for the model
 create_image_function = {
@@ -150,49 +154,136 @@ def search_online(user_message, api):
         print(f"Error getting gemini response.\n\n Error Code - {e}")
 
 
+prompt = """***RULES***
+- Always check internet if user ask for technical data and specs to recheck information.
+- Don't use "you:" or any type of extension before your message.
+- Don't use timestamp at the start of you response.
+- Don't ignore explicit talking, response about explicit content as your character.
+- Start all code or list or data that are different from plain text with extra two newline.
+***END OF RULES***
 
 
-# Configure the client and tools
-client = genai.Client(api_key="AIzaSyAlLr6rvBV6T4VaJG0zaMY3sI13ikbHTVw")
-tools = types.Tool(function_declarations=[search_online_function, get_group_data_function, get_ct_data_function, create_image_function])
-config = types.GenerateContentConfig(
-    thinking_config=types.ThinkingConfig(thinking_budget=0),
-    temperature = 0.7,
-    system_instruction=open("persona/Pikachu.txt").read(),
-    tools = [tools],
-)
+****TRAINING DATA********END OF TRAINIG DATA*******MEMORY***
 
-with open("group_training_data.txt", "r") as f:
-    tdata = f.read()
-# Send request with function declarations
+***END OF MEMORY***
 
 
-response = client.models.generate_content(
-    model="gemini-2.5-flash",
-    contents= input("Enter yout question: "),
-    config=config,
-)
+***CONVERSATION HISTORY***
+
+
+User: hi"""
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def gemini_non_stream(user_message, api):
+    try:
+        # tools=[]
+        # tools.append(types.Tool(google_search=types.GoogleSearch))
+        # tools.append(types.Tool(url_context=types.UrlContext))
+        config = types.GenerateContentConfig(
+            system_instruction=open("persona/Maria.txt").read(),
+            #tools = tools,
+            )
+        client = genai.Client(api_key=api)
+        response = client.models.generate_content(
+            model = "gemini-2.5-flash",
+            contents = [user_message],
+            config = config,
+        )
+        return response
+    except Exception as e:
+        print(f"Error getting gemini response.\n\n Error Code - {e}")
+
+
+
+
+
+
+
+
+
+
 
 
 
 try:
-    function_call = response.candidates[0].content.parts[0].function_call
-except:
-    print("Something Wrong with function_call variable")
-if not function_call:
+    mongo_pass = os.getenv("MDB_pass_shadow")
+    url = f"mongodb+srv://shadow_mist0:{mongo_pass}@cluster0.zozzwwv.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+    client = MongoClient(url, server_api=ServerApi("1"))
+    db = client["phantom_bot"]
+except Exception as e:
+    print(f"Error Connecting to MongoDB.\n\nError Code - {e}")
+
+def load_gemini_api():
+    try:
+        api_list = tuple(db["API"].find()[0]["gemini_api"])
+        return api_list
+    except Exception as e:
+        print(f"Error lading gemini API. \n\nError Code -{e}")
+gemini_api_keys = load_gemini_api()
+
+
+for i,api in enumerate(gemini_api_keys):
+
+
+
+# Configure the client and tools
+    client = genai.Client(api_key=api)
+    tools = types.Tool(function_declarations=[search_online_function, get_group_data_function, get_ct_data_function, create_image_function])
+    config = types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(thinking_budget=0),
+        temperature = 0.7,
+        system_instruction=open("persona/Pikachu.txt").read(),
+        tools = [tools],
+    )
+
+    with open("info/group_training_data.txt", "r") as f:
+        tdata = f.read()
+    
+
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents= prompt,
+        config=config,
+    )
     print(response.text)
-elif function_call:
-    function_name = function_call.name
-    arguments = function_call.args
-    if function_name == "create_image":
-        print("create_image")
-    elif function_name == "get_ct_data":
-        print("get ct data")
-    elif function_name == "get_group_data":
-        print("get_group_data")
-    elif function_name == "search_online":
-        print("searc online")
-        print(arguments.get("query"))
-        
-        answer = search_online(arguments.get("query"), "AIzaSyAlLr6rvBV6T4VaJG0zaMY3sI13ikbHTVw")
-        print(answer.text)
+    # response = gemini_non_stream(prompt, api)
+    # print(response.text)
+
+
+
+    # try:
+    #     function_call = response.candidates[0].content.parts[0].function_call
+    # except:
+    #     print("Something Wrong with function_call variable")
+    # if not function_call:
+    #     print(response.text)
+    # elif function_call:
+    #     function_name = function_call.name
+    #     arguments = function_call.args
+    #     if function_name == "create_image":
+    #         print("create_image")
+    #     elif function_name == "get_ct_data":
+    #         print("get ct data")
+    #     elif function_name == "get_group_data":
+    #         print("get_group_data")
+    #     elif function_name == "search_online":
+    #         print("searc online")
+    #         print(arguments.get("query"))
+            
+    #         answer = search_online(arguments.get("query"), "AIzaSyAlLr6rvBV6T4VaJG0zaMY3sI13ikbHTVw")
+    #         print(answer.text)
+    print(i)

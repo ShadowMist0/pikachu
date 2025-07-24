@@ -29,7 +29,8 @@ dependencies = [
     "cryptography",
     "pillow",
     "pymongo",
-    "fpdf"
+    "fpdf",
+    "geopy"
 ]
 
 [project.urls]

@@ -3,22 +3,35 @@ import os
 import time
 import html
 import shutil
-import sqlite3
+import random
 import asyncio
+import sqlite3
+import requests
 import warnings
 import threading
-import requests
+from fpdf import FPDF
+from PIL import Image
 from glob import glob
 from io import BytesIO
-from fpdf import FPDF
+from google import genai
+from google.genai import types
+from pymongo import MongoClient
 from flask import Flask, request
+from geopy.distance import geodesic
 from cryptography.fernet import Fernet
-from datetime import datetime, timedelta
+from pymongo.server_api import ServerApi
+from telegram.constants import ChatAction
+from telegram.request import HTTPXRequest
+from telegram.error import RetryAfter, TimedOut
+from datetime import datetime, timedelta, timezone
+from telegram._utils.warnings import PTBUserWarning
+from google.genai.types import GenerateContentResponse
 from telegram import (
     Update,
     ReplyKeyboardMarkup,
     InlineKeyboardButton,
-    InlineKeyboardMarkup
+    InlineKeyboardMarkup,
+    KeyboardButton
 )
 from telegram.ext import(
     ApplicationBuilder,
@@ -29,15 +42,13 @@ from telegram.ext import(
     ConversationHandler,
     CallbackQueryHandler,
 )
-from telegram.constants import ChatAction
-from telegram.error import RetryAfter, TimedOut
-from pymongo import MongoClient
-from pymongo.server_api import ServerApi
-from telegram._utils.warnings import PTBUserWarning
-from telegram.request import HTTPXRequest
-from google import genai
-from google.genai import types
-from PIL import Image
+
+
+
+
+
+
+
 
 
 
@@ -93,6 +104,13 @@ TOKEN = get_token()[0]
 def load_all_user():
     try:
         users = tuple(int(user) for user in db.list_collection_names() if user.isdigit())
+        all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
+        for user in users:
+            if user not in all_users:
+                db["all_user"].update_one(
+                    {"type" : "all_user"},
+                    {"$push" : {"users" : user}}
+                )
         return users
     except Exception as e:
         print(f"Error in load_all_user fnction.\n\n Error code -{e}")
@@ -136,35 +154,42 @@ FIREBASE_URL = 'https://last-197cd-default-rtdb.firebaseio.com/routines.json'
 
 #function to create settings file MongoDB to offline for optimization
 def create_settings_file():
-    os.makedirs("settings", exist_ok=True)
-    conn = sqlite3.connect("settings/user_settings.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS user_settings(
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            model INTEGER,
-            thinking_budget INTEGER,
-            temperature REAL,
-            streaming INTEGER,
-            persona INTEGER
-        )
-    """)
-    for user in all_users:
-        settings = tuple(db[f"{user}"].find()[0]["settings"])
+    try:
+        print("settings, ", end="")
+        shutil.rmtree("settings", ignore_errors=True)
+        os.makedirs("settings", exist_ok=True)
+        conn = sqlite3.connect("settings/user_settings.db")
+        cursor = conn.cursor()
         cursor.execute("""
-            INSERT OR IGNORE INTO user_settings 
-            (id, name, model, thinking_budget, temperature, streaming, persona)
-            VALUES (?,?,?,?,?,?,?)
-    """, settings
-    )
-    conn.commit()
-    conn.close()
+            CREATE TABLE IF NOT EXISTS user_settings(
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                model INTEGER,
+                thinking_budget INTEGER,
+                temperature REAL,
+                streaming INTEGER,
+                persona INTEGER
+            )
+        """)
+        for user in all_users:
+            settings = tuple(db[f"{user}"].find()[0]["settings"])
+            cursor.execute("""
+                INSERT OR IGNORE INTO user_settings 
+                (id, name, model, thinking_budget, temperature, streaming, persona)
+                VALUES (?,?,?,?,?,?,?)
+        """, settings
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Error in create_settings_file funcion.\n\nError Code - {e}")
 
 
 #function to create offline file for conversation history
 def create_conversation_file():
     try:
+        print("conversation file")
+        shutil.rmtree("Conversation", ignore_errors=True)
         os.makedirs("Conversation", exist_ok=True)
         for user in all_users:
             conv_data = db[f"{user}"].find()[0]["conversation"]
@@ -188,6 +213,8 @@ def create_conversation_file():
 #function to create offline file for memory
 def create_memory_file():
     try:
+        print("memory, ", end="")
+        shutil.rmtree("memory", ignore_errors=True)
         os.makedirs("memory", exist_ok=True)
         for user in all_users:
             mem_data = db[f"{user}"].find()[0]["memory"]
@@ -201,7 +228,6 @@ def create_memory_file():
             with open(f"memory/memory-group.txt", "w") as file:
                 file.write(mem_data)
         except:
-            print("Group memory doesn't exist")
             with open(f"memory/memory-group.txt", "w") as file:
                 pass
     except Exception as e:
@@ -211,6 +237,8 @@ def create_memory_file():
 #function to create offline file for memory
 def create_persona_file():
     try:
+        print("persona, ", end="")
+        shutil.rmtree("persona", ignore_errors=True)
         os.makedirs("persona", exist_ok=True)
         personas = [persona for persona in db["persona"].find({"type":"persona"})]
         for persona in personas:
@@ -222,43 +250,59 @@ def create_persona_file():
     
 #function to create user_data file MongoDB to offline for optimization
 def create_user_data_file():
-    os.makedirs("info", exist_ok=True)
-    conn = sqlite3.connect("info/user_data.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users(
-            user_id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            gender TEXT,
-            roll INTEGER,
-            password TEXT,
-            api TEXT
-        )
-    """)
-    for user in all_users:
-        user_data = tuple(data for data in db[f"{user}"].find_one({"id":user})["user_data"])
+    try:
+        print("user_data, ", end="")
+        if os.path.exists("info/user_data.db"):
+            try:
+                os.remove("info/user_data.db")
+            except:
+                pass
+        os.makedirs("info", exist_ok=True)
+        conn = sqlite3.connect("info/user_data.db")
+        cursor = conn.cursor()
         cursor.execute("""
-            INSERT OR IGNORE INTO users 
-            (user_id, name, gender, roll, password, api)
-            VALUES (?,?,?,?,?,?)
-    """, user_data
-    )
-    conn.commit()
-    conn.close()
+            CREATE TABLE IF NOT EXISTS users(
+                user_id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                gender TEXT,
+                roll INTEGER,
+                password TEXT,
+                api TEXT
+            )
+        """)
+        for user in all_users:
+            user_data = tuple(data for data in db[f"{user}"].find_one({"id":user})["user_data"])
+            cursor.execute("""
+                INSERT OR IGNORE INTO users 
+                (user_id, name, gender, roll, password, api)
+                VALUES (?,?,?,?,?,?)
+        """, user_data
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Error in create_user_data_file function. \n\nError Code- {e}")
 
 
 #function to create a password file for admin
 def create_admin_pass_file():
-    os.makedirs("admin", exist_ok=True)
-    content = db["admin"].find_one({"type" : "admin"})["admin_password"]
-    content = fernet.encrypt(content.encode())
-    with open("admin/admin_password.shadow", "wb") as f:
-        f.write(content)
+    try:
+        print("admin, ", end="")
+        shutil.rmtree("admin", ignore_errors=True)
+        os.makedirs("admin", exist_ok=True)
+        content = db["admin"].find_one({"type" : "admin"})["admin_password"]
+        content = fernet.encrypt(content.encode())
+        with open("admin/admin_password.shadow", "wb") as f:
+            f.write(content)
+    except Exception as e:
+        print(f"Error in create_admin_pass_file function.\n\nError Code - {e}")
 
 
 #function to create routine folder offline
 def create_routine_file():
     try:
+        print("routine, ", end="")
+        shutil.rmtree("routine", ignore_errors=True)
         os.makedirs("routine", exist_ok=True)
         with open("routine/lab_routine.txt", "w") as f:
             data = db["routine"].find_one({"type" : "routine"})["lab_routine"]
@@ -275,29 +319,39 @@ def create_routine_file():
 
 #function to create info file locally from MongoDB
 def create_info_file():
-    os.makedirs("info",exist_ok=True)
-    colllection = db["info"]
-    for file in colllection.find({"type" : "info"}):
-        file_name = file["name"]
-        path = f"info/{file_name}.txt" if file_name == "group_training_data" else f"info/{file_name}.shadow"
-        if file_name == "group_training_data":
-            with open(path, "w") as f:
-                f.write(file["data"])
-        else:
-            with open(path, "wb") as f:
-                f.write(fernet.encrypt(file["data"].encode()))
+    try:
+        print("Creating info, ", end="")
+        shutil.rmtree("info", ignore_errors=True)
+        os.makedirs("info",exist_ok=True)
+        colllection = db["info"]
+        for file in colllection.find({"type" : "info"}):
+            file_name = file["name"]
+            path = f"info/{file_name}.txt" if file_name == "group_training_data" else f"info/{file_name}.shadow"
+            if file_name == "group_training_data":
+                with open(path, "w") as f:
+                    f.write(file["data"])
+            else:
+                with open(path, "wb") as f:
+                    f.write(fernet.encrypt(file["data"].encode()))
+    except Exception as e:
+        print(f"Error in create_info_file function.\n\nError Code - {e}")
 
 
 #calling all those function to create offline file from MongoDB
-create_info_file()
-create_memory_file()
-create_persona_file()
-create_routine_file()
-create_settings_file()
-create_user_data_file()
-create_admin_pass_file()
-create_conversation_file()
-
+async def load_all_files():
+    try:
+        print("Loading all files and folder...")
+        await asyncio.to_thread(create_info_file)
+        await asyncio.to_thread(create_memory_file)
+        await asyncio.to_thread(create_persona_file)
+        await asyncio.to_thread(create_routine_file)
+        await asyncio.to_thread(create_settings_file)
+        await asyncio.to_thread(create_user_data_file)
+        await asyncio.to_thread(create_admin_pass_file)
+        await asyncio.to_thread(create_conversation_file)
+        print("Successfully loaded all file and folder.")
+    except Exception as e:
+        print(f"Error in load_all_file function. \n\nError code - {e}")
 
 
 
@@ -305,28 +359,185 @@ create_conversation_file()
 async def restart(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
         await update.message.reply_text("Restarting please wait....")
-        shutil.rmtree("info", ignore_errors=True)
-        shutil.rmtree("media", ignore_errors=True)
-        shutil.rmtree("admin", ignore_errors=True)
-        shutil.rmtree("memory", ignore_errors=True)
-        shutil.rmtree("persona", ignore_errors=True)
-        shutil.rmtree("routine", ignore_errors=True)
-        shutil.rmtree("settings", ignore_errors=True)
-        shutil.rmtree("Conversation", ignore_errors=True)
-        create_info_file()
-        create_memory_file()
-        create_persona_file()
-        create_routine_file()
-        create_settings_file()
-        create_user_data_file()
-        create_admin_pass_file()
-        create_conversation_file()
+        await asyncio.to_thread(create_info_file)
+        await asyncio.to_thread(create_memory_file)
+        await asyncio.to_thread(create_persona_file)
+        await asyncio.to_thread(create_routine_file)
+        await asyncio.to_thread(create_settings_file)
+        await asyncio.to_thread(create_user_data_file)
+        await asyncio.to_thread(create_admin_pass_file)
+        await asyncio.to_thread(create_conversation_file)
         await update.message.reply_text("Restart Successful.")
     except Exception as e:
         print(f"Error in restart function.\n\nError Code - {e}")
         
         
         
+#all function description and function for gemini to use
+#NOT RECOMMENDED TO TOUCH
+
+
+
+# Define the function declaration for the model
+create_image_function = {
+    "name" : "create_image",
+    "description" :"Generates a highly detailed and visually appealing image based on the user's prompt — designed to go beyond plain representations and create beautiful, vivid, and stylized visuals that capture the essence of the subject.",
+    "parameters" : {
+        "type" : "object",
+        "properties" : {
+            "prompt" : {
+                "type" : "string",
+                "description" : "A rich, descriptive prompt that guides the image generation — include details like subject, environment, lighting, emotion, style, and mood to get the most beautiful and expressive result.",
+            },
+        },
+        "required" : ["prompt"],
+    },
+}
+
+
+search_online_function = {
+    "name": "search_online",
+    "description": (
+        "Performs a real-time online search to retrieve accurate and current information. "
+        "Can search the web based on a query or extract context from a specific URL if provided."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "The search term or question to look up online. Or A specific URL to fetch and extract information from with a perfect command for what to do."
+            },
+        },
+        "required" : ["query"],
+    },
+}
+
+
+get_group_data_function ={
+    "name" : "get_group_data",
+    "description" : (
+        "Fetch data that holds all the message and description about our class and all the user and give response from it"
+        "This are the class member:\n"
+        """ 1. Umme Kulsum
+
+            2. Urboshi Mahmud
+            3. Shahriar Joy
+            4. Tasnimul Hassan Tanim
+            5. Mahdi Haque
+            6. Suprio Roy Chowdhury
+            7. Tahmim Ullah
+            8. Shafayet Hossain Shuvo
+            9. Athai Dey
+            10. Abdullah Sifat
+            11. Tanvir Chowdhury
+            12. Esika Tanzum
+            13. Saroar Jahan Tius
+            14. Tafsirul Ahmed Azan
+            15. Muhammad Khushbo Nahid
+            16. Reyano Kabir
+            17. MD Tasdid Hossain
+            18. Fazle Rabbi
+            19. Fahad Kabir
+            20. Md Shibli Sadik Sihab
+            21. Tasaouf Ahnaf
+            22. Shariqul Islam
+            23. Shohanur Rahman Shadhin
+            24. Rabib Rehman
+            25. Sumon Majumder
+            26. Shadman Ahmed
+            27. Bitto Saha
+            28. Nazmus Saquib Sinan
+            29. Fajle Hasan Rabbi
+            30. Nilay Paul
+            31. Afra Tahsin Anika
+            32. MD Shoykot Molla
+            33. Arefin Noused Ratul
+            34. Avijet Chakraborty
+            35. A Bid
+            36. Aftab Uddin Antu
+            37. Prantik Paul
+            38. Eram Ohid
+            39. Sazedul Islam
+            40. Mirajul Islam
+            41. Sayem Bin Salim
+            42. Fardin Numan
+            43. Anjum Shahitya
+            44. Tanvir Ahmed
+            45. Sujoy Rabidas
+            46. Samiul Islam Wrivu
+            47. Md. Sami Sadik
+            48. Aminul Islam Sifat
+            49. Salman Ahmed Sabbir
+            50. Aqm Mahdi Haque
+            51. Mehedi Hasan
+            52. Shahriar Joy
+            53. Mawa Tanha
+            54. Sara Arpa
+            55. Md Tausif Al Sahad
+            56. Mubin R.
+            57. Abdul Mukit
+            58. Arnob Benedict Tudu
+            59. Sajid Ahmed
+            60. Yasir Arafat
+            61. Morchhalin Alam Amio"""
+        "Get info about CR, teacher etc"
+    ),
+    "parameters" : {
+        "type" : "object",
+        "properties" : {
+            
+        }
+    }
+}
+
+
+get_ct_data_function = {
+    "name" : "get_ct_data",
+    "description" : "Fetch data of upcoming class test or CT",
+    "parameters" : {
+        "type" :"object",
+        "properties" : {
+
+        }
+    }
+}
+
+
+def search_online(user_message, api):
+    try:
+        print("searching...")
+        tools=[]
+        tools.append(types.Tool(google_search=types.GoogleSearch))
+        tools.append(types.Tool(url_context=types.UrlContext))
+        
+        config = types.GenerateContentConfig(
+            temperature = 0.7,
+            tools = tools,
+            system_instruction=open("persona/Pikachu.txt").read(),
+            response_modalities=["TEXT"],
+        )
+        client = genai.Client(api_key=api)
+        response = client.models.generate_content(
+            model = "gemini-2.5-flash",
+            contents = [user_message],
+            config = config,
+        )
+        return response
+    except Exception as e:
+        print(f"Error getting gemini response.\n\n Error Code - {e}")
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -357,37 +568,46 @@ gemini_api_keys = load_gemini_api()
 
 #adding escape character for markdown rule
 def add_escape_character(text):
-    escape_chars = r'_*\[\]()~>#+-=|{}.!'
-    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
+    try:
+        escape_chars = r'_*\[\]()~>#+-=|{}.!'
+        return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
+    except Exception as e:
+        print(f"Error in add_escape_character function.\n\nError Code - {e}")
+        return text
 
 
 #function to get settings
 async def get_settings(user_id):
-    conn = sqlite3.connect("settings/user_settings.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM user_settings WHERE id = ?", (user_id,))
-    row = cursor.fetchone()
-    if not row:
-        return (999999, "XX", 1, 0, 0.7, 0, 4)
-    if row[2] > len(gemini_model_list)-1:
-        row = list(row)
-        row[2] = len(gemini_model_list)-1
-        await asyncio.to_thread(db[f"{user_id}"].update_one,
-            {"id" : user_id},
-            {"$set" : {"settings" : row}}
-        )
-        cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (row[2], user_id))
-        if gemini_model_list[-1] == "gemini-2.5-pro":
-            row[3] = row[3] if row[3] > 128 else 1024
+    try:
+        conn = sqlite3.connect("settings/user_settings.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM user_settings WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        if not row:
+            return (999999, "XX", 1, 0, 0.7, 0, 4)
+        if row[2] > len(gemini_model_list)-1:
+            row = list(row)
+            row[2] = len(gemini_model_list)-1
             await asyncio.to_thread(db[f"{user_id}"].update_one,
                 {"id" : user_id},
                 {"$set" : {"settings" : row}}
             )
-            cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (row[3], user_id))
-        row = tuple(row)
-    conn.commit()
-    conn.close()
-    return row
+            cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (row[2], user_id))
+            if gemini_model_list[-1] == "gemini-2.5-pro":
+                row[3] = row[3] if row[3] > 128 else 1024
+                await asyncio.to_thread(db[f"{user_id}"].update_one,
+                    {"id" : user_id},
+                    {"$set" : {"settings" : row}}
+                )
+                cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (row[3], user_id))
+            row = tuple(row)
+        conn.commit()
+        conn.close()
+        return row
+    except Exception as e:
+        print(f"Error in get_settings fucntion.\n\nError Code - {e}")
+        return (999999, "XX", 1, 0, 0.7, 0, 4)
+
 
 #gemini response for stream on
 def gemini_stream(user_message, api, settings):
@@ -428,7 +648,6 @@ def gemini_non_stream(user_message, api, settings):
         tools=[]
         tools.append(types.Tool(google_search=types.GoogleSearch))
         tools.append(types.Tool(url_context=types.UrlContext))
-        
         if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
             config = types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
@@ -457,15 +676,18 @@ def gemini_non_stream(user_message, api, settings):
 
 #function to create image using gemini api
 def gemini_create_image(prompt, api):
-    client = genai.Client(api_key=api)
-    response = client.models.generate_content(
-        model = "gemini-2.0-flash-preview-image-generation",
-        contents = prompt,
-        config = types.GenerateContentConfig(
-            response_modalities=["TEXT", "IMAGE"],
+    try:
+        client = genai.Client(api_key=api)
+        response = client.models.generate_content(
+            model = "gemini-2.0-flash-preview-image-generation",
+            contents = prompt,
+            config = types.GenerateContentConfig(
+                response_modalities=["TEXT", "IMAGE"],
+            )
         )
-    )
-    return response
+        return response
+    except Exception as e:
+        print(f"Error in gemini_create_image function.\n\nError Code - {e}")
 
 
 #A function to delete n times convo from conversation history
@@ -524,7 +746,7 @@ def delete_n_convo(user_id, n):
 
 
 #creating memory, SPECIAL_NOTE: THIS FUNCTION ALWAYS REWRITE THE WHOLE MEMORY, SO THE MEMORY SIZE IS LIMITED TO THE RESPONSE SIZE OF GEMINI, IT IS DONE THIS WAY BECAUSE OTHERWISE THERE WILL BE DUPLICATE DATA 
-async def create_memory(api, user_id):
+async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, user_id):
     try:
         if user_id > 0:
             with open("persona/memory_persona.txt", "r", encoding="utf-8") as f:
@@ -563,30 +785,51 @@ async def create_memory(api, user_id):
                 system_instruction =  instruction,
             ),
         )
-        if user_id > 0:
-            with open(f"memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
-                f.write(response.text)
-                f.seek(0)
-                memory = f.read()
-                print(memory)
-            await asyncio.to_thread(db[f"{user_id}"].update_one,
-                {"id" : user_id},
-                {"$set" : {"memory" : memory}}
-            )
-            print("done")
-            await asyncio.to_thread(delete_n_convo, user_id, 10)
-            print("delete")
-        elif user_id < 0:
-            group_id = user_id
-            with open(f"memory/memory-group.txt", "a+", encoding="utf-8") as f:
-                f.write(response.text)
-                f.seek(0)
-                memory = f.read()
-            await asyncio.to_thread(db[f"group"].update_one,
-                {"id" : "group"},
-                {"$set" : {"memory" : memory}}
-            )
-            await asyncio.to_thread(delete_n_convo, group_id,100)
+        if response.prompt_feedback and response.prompt_feedback.block_reason:
+            await update.message.reply_text(f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason} Conversation history is erased.")
+            if os.path.exists(f"Conversation/conversation-{user_id}.txt"):
+                with open(f"Conversation/conversation-{user_id}.txt", "w") as f:
+                    pass
+                await asyncio.to_thread(db[f"{user_id}"].update_one,
+                    {"id" : user_id},
+                    {"$set" : {"conversation" : None}}
+                )
+            return True
+        if response.text is not None:
+            if user_id > 0:
+                with open(f"memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
+                    f.write(response.text)
+                    f.seek(0)
+                    memory = f.read()
+                await asyncio.to_thread(db[f"{user_id}"].update_one,
+                    {"id" : user_id},
+                    {"$set" : {"memory" : memory}}
+                )
+                await asyncio.to_thread(delete_n_convo, user_id, 10)
+            elif user_id < 0:
+                group_id = user_id
+                with open(f"memory/memory-group.txt", "a+", encoding="utf-8") as f:
+                    f.write(response.text)
+                    f.seek(0)
+                    memory = f.read()
+                await asyncio.to_thread(db[f"group"].update_one,
+                    {"id" : "group"},
+                    {"$set" : {"memory" : memory}}
+                )
+                await asyncio.to_thread(delete_n_convo, group_id,100)
+            return True
+        else:
+            if (gemini_api_keys.index(api) > len(gemini_api_keys)-3):
+                if os.path.exists(f"Conversation/conversation-{user_id}.txt"):
+                    with open(f"Conversation/conversation-{user_id}.txt", "w") as f:
+                        pass
+                    await asyncio.to_thread(db[f"{user_id}"].update_one,
+                        {"id" : user_id},
+                        {"$set" : {"conversation" : None}}
+                    )
+                    return True
+            else:
+                return False
     except Exception as e:
         print(f"Failed to create memory\n Error code-{e}")
 
@@ -616,6 +859,8 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 data += "***CONVERSATION HISTORY***\n\n"
                 data += f.read()
                 data += "\nUser: " + user_message
+                f.seek(0)
+                print(f.read().count("You: "))
                 f.seek(0)
                 if(f.read().count("You: ")>20):
                     asyncio.create_task(background_memory_creation(update, content, user_id))
@@ -774,57 +1019,61 @@ def get_ct_data():
 
 #function to handle ct command
 async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
-    ct_data = get_ct_data()
-    if ct_data == None:
-        await update.message.reply_text("Couldn't Connect to FIREBASE URL. Try again later.")
-        return
-    elif not ct_data:
-        await update.message.reply_text("📭 No CTs scheduled yet.")
-        return
-    else:
-        now = datetime.now()
-        upcoming = []
-
-        for ct_id, ct in ct_data.items():
-            try:
-                ct_date = datetime.strptime(ct['date'], "%Y-%m-%d")
-                if ct_date >= now:
-                    days_left = (ct_date - now).days
-                    upcoming.append({
-                        'subject': ct.get('subject', 'No Subject'),
-                        'date': ct_date,
-                        'days_left': days_left,
-                        'teacher': ct.get('teacher', 'Not specified'),
-                        'syllabus': ct.get('syllabus', 'No syllabus')
-                    })
-            except (KeyError, ValueError) as e:
-                print(f"Skipping malformed CT {ct_id}: {e}")
-
-        if not upcoming:
-            await update.message.reply_text("🎉 No upcoming CTs! You're all caught up!")
+    try:
+        ct_data = get_ct_data()
+        if ct_data == None:
+            await update.message.reply_text("Couldn't Connect to FIREBASE URL. Try again later.")
             return
+        elif not ct_data:
+            await update.message.reply_text("📭 No CTs scheduled yet.")
+            return
+        else:
+            now = datetime.now()
+            upcoming = []
 
-        # Sort by nearest date
-        upcoming.sort(key=lambda x: x['date'])
+            for ct_id, ct in ct_data.items():
+                try:
+                    ct_date = datetime.strptime(ct['date'], "%Y-%m-%d")
+                    if ct_date >= now:
+                        days_left = (ct_date - now).days
+                        upcoming.append({
+                            'subject': ct.get('subject', 'No Subject'),
+                            'date': ct_date,
+                            'days_left': days_left,
+                            'teacher': ct.get('teacher', 'Not specified'),
+                            'syllabus': ct.get('syllabus', 'No syllabus')
+                        })
+                except (KeyError, ValueError) as e:
+                    print(f"Skipping malformed CT {ct_id}: {e}")
 
-        # Format message
-        message = ["📚 <b>Upcoming CTs</b>"]
-        for i, ct in enumerate(upcoming):
-            days_text = f"{ct['days_left']+1} days"
-            date_str = ct['date'].strftime("%a, %d %b")
+            if not upcoming:
+                await update.message.reply_text("🎉 No upcoming CTs! You're all caught up!")
+                return
 
-            if i == 0:
-                message.append(f"\n⏰ <b>NEXT:</b> {ct['subject']}")
-            else:
-                message.append(f"\n📅 {ct['subject']}")
+            # Sort by nearest date
+            upcoming.sort(key=lambda x: x['date'])
 
-            message.append(
-                f"🗓️ {date_str} ({days_text})\n"
-                f"👨‍🏫 {ct['teacher']}\n"
-                f"📖 {ct['syllabus']}"
-            )
+            # Format message
+            message = ["📚 <b>Upcoming CTs</b>"]
+            for i, ct in enumerate(upcoming):
+                days_text = f"{ct['days_left']+1} days"
+                date_str = ct['date'].strftime("%a, %d %b")
 
-        await update.message.reply_text("\n".join(message), parse_mode='HTML')
+                if i == 0:
+                    message.append(f"\n⏰ <b>NEXT:</b> {ct['subject']}")
+                else:
+                    message.append(f"\n📅 {ct['subject']}")
+
+                message.append(
+                    f"🗓️ {date_str} ({days_text})\n"
+                    f"👨‍🏫 {ct['teacher']}\n"
+                    f"📖 {ct['syllabus']}"
+                )
+
+            await update.message.reply_text("\n".join(message), parse_mode='HTML')
+    except Exception as e:
+        print(f"Error in handle_ct function. \n\nError Code - {e}")
+        await update.message.reply_text(f"Internal Error\n {e}. \nPlease contact admin or try again later.")
 
 
 #function to inform all the student 
@@ -1200,13 +1449,14 @@ async def handle_all_messages():
 
 #a function to add multiple workers to handle response
 async def run_workers(n):
-    for _ in range(4):
+    for _ in range(n):
         asyncio.create_task(handle_all_messages())
 
 
 #function to get response from gemini
 async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE, bot_name) -> None:
     try:
+        global gemini_api_keys
         user_message = update.message.text.strip()
         user_id = update.effective_user.id
         if update.message.chat.type != "private" and f"{bot_name.lower()}" not in user_message.lower() and "bot" not in user_message.lower() and "@" not in user_message.lower() and "mama" not in user_message.lower() and "pika" not in user_message.lower():
@@ -1220,22 +1470,29 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                 group_id = update.effective_chat.id
                 settings = (group_id,"group",1,0,0.7,0,4)
             prompt = await create_prompt(update, content, user_message, user_id, 0)
+            temp_api = list(gemini_api_keys)
             for i in range(len(gemini_api_keys)):
                 try:
+                    api = random.choice(temp_api)
+                    temp_api.remove(api)
                     if(settings[5]):
-                        response = await asyncio.to_thread(gemini_stream, prompt, gemini_api_keys[i],settings)
+                        response = await asyncio.to_thread(gemini_stream, prompt, api,settings)
                         next(response).text
                         break
                     else:
-                        response = await asyncio.to_thread(gemini_non_stream, prompt, gemini_api_keys[i],settings)
+                        response = await asyncio.to_thread(gemini_non_stream, prompt, api,settings)
                         response.text
                         break
                 except Exception as e:
-                    print(f"Error getting gemini response for API-{i}. \n Error Code -{e}")
+                    print(f"Error getting gemini response for API-{gemini_api_keys.index(api)}. \n Error Code -{e}")
                     continue
             if response is not None:
                 await send_message(update, content, response, user_message, settings)
             else:
+                if os.path.exists(f"Conversation/conversation-{user_id}.txt"):
+                    await update.message.reply_text("Failed to process your request. Try again later.")
+                    with open(f"Conversation/conversation-{user_id}.txt", "w") as f:
+                        pass
                 print("Failed to get a response from gemini.")
     except RetryAfter as e:
         await update.message.reply_text(f"Telegram Limit hit, need to wait {e.retry_after} seconds.")
@@ -1280,7 +1537,7 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             await update.message.reply_text("All the resources available for CSE SECTION C", reply_markup=resource_markup, parse_mode="Markdown")
             await update.message.delete()
             return
-        elif any(trigger in user_message.lower() for trigger in ["create image", "create a image", "make image", "make a image", "prompt=", "prompt ="]):
+        elif any(trigger in user_message.lower() for trigger in ["create image", "create a image", "make image", "make a image", "prompt=", "prompt =", "generate a image", "generate a photo"]):
             try:
                 prompt = await create_prompt(update, content, user_message, user_id, 1)
                 msg = await update.message.reply_text("Image creation is in process, This may take a while please wait patiently.")
@@ -1486,7 +1743,7 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                             client = genai.Client(api_key=api_key)
                             up_video = client.files.upload(file=path) 
                             response = client.models.generate_content(
-                                model = "gemini-2.5-pro",
+                                model = "gemini-2.5-flash",
                                 contents = [up_video, caption],
                                 config = types.GenerateContentConfig(
                                     media_resolution=types.MediaResolution.MEDIA_RESOLUTION_LOW,
@@ -1497,7 +1754,7 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                             video = open(path, "rb").read()
                             client = genai.Client(api_key=api_key)
                             response = client.models.generate_content(
-                                model = "models/gemini-2.5-pro",
+                                model = "models/gemini-2.5-flash",
                                 contents = types.Content(
                                     parts = [
                                         types.Part(
@@ -1677,7 +1934,7 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
                         client = genai.Client(api_key=api_key)
                         u_doc = client.files.upload(file=path)
                         response = client.models.generate_content(
-                            model="gemini-2.5-pro",
+                            model="gemini-2.5-flash",
                             contents = [u_doc, caption],
                             config=types.GenerateContentConfig(
                                 system_instruction=load_persona(settings)
@@ -1704,6 +1961,17 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
         print(f"Error in handle_document function.\n\n Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in handle_document function \n\nError Code -{e}")
         
+
+#function to handle location
+async def handle_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
+    try:
+        if update.message.location:
+            location = update.message.location
+            location = (location.latitude, location.longitude)
+            await update.message.reply_text(f"Your latitude is {location[0]} and longitude is {location[1]}")
+    except Exception as e:
+        print(f"Error in handle_location function. \n\nError code - {e}")
+
 
 #A function to return memory for user convention
 async def see_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> None:
@@ -1750,8 +2018,8 @@ async def handle_settings(update : Update, content : ContextTypes.DEFAULT_TYPE) 
         keyboard= [
             [InlineKeyboardButton("AI Engine", callback_data = "c_model"),InlineKeyboardButton("Temperature", callback_data="c_temperature")],
             [InlineKeyboardButton("Thinking", callback_data = "c_thinking"), InlineKeyboardButton("Persona", callback_data="c_persona")],
-            [InlineKeyboardButton("Streaming Response", callback_data="c_streaming"), InlineKeyboardButton("Conversation History", callback_data="c_conv_history")],
-            [InlineKeyboardButton("Memory", callback_data="c_memory"), InlineKeyboardButton("cancel", callback_data="cancel")]
+            [InlineKeyboardButton("Conversation History", callback_data="c_conv_history"), InlineKeyboardButton("Memory", callback_data="c_memory")],
+            [InlineKeyboardButton("cancel", callback_data="cancel")]
         ]
         settings_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("You can change the bot configuration from here.\nBot Configuration Menu:", reply_markup=settings_markup)
@@ -1783,16 +2051,16 @@ async def safe_send(bot_func, *args, retries =3, **kwargs):
 async def background_memory_creation(update: Update,content,user_id):
     try:
         if update.message.chat.type == "private":
-            await asyncio.create_task(create_memory(gemini_api_keys[-1], user_id))
-            await send_to_channel(update, content, channel_id, f"Created memory for User - {user_id}")
-            with open(f"memory/memory-{user_id}.txt", "rb") as file:
-                await content.bot.send_document(chat_id=channel_id, document = file, caption = "Heres the memory file.")
+            for api in gemini_api_keys:
+                result = await asyncio.create_task(create_memory(update, content, api, user_id))
+                if result:
+                    break
         elif update.message.chat.type != "private":
             group_id = update.effective_chat.id
-            await asyncio.create_task(create_memory(gemini_api_keys[-1], group_id))
-            await send_to_channel(update, content, channel_id, "Created memory for group")
-            with open(f"memory/memory-group.txt", "r", encoding="utf-8") as f:
-                await content.bot.send_document(chat_id=channel_id, document=file, caption="Memory for the group.")
+            for api in gemini_api_keys:
+                result = await asyncio.create_task(create_memory(update, content, api, group_id))
+                if result:
+                    break
     except Exception as e:
         print(f"Error in background_memory_creation function.\n\n Error Code -{e}")
         await send_to_channel(update, content, channel_id, f"Error in background_memory_creation function.\n\n Error Code -{e}")
@@ -2518,8 +2786,8 @@ async def take_attendance_detail(update:Update, content:ContextTypes.DEFAULT_TYP
 async def take_teachers_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
         name = update.message.text.strip()
-        if not name.isalpha():
-            await update.message.reply_text("Operation Failed. \nName should not contain any special character and number.")
+        if name.isdigit():
+            await update.message.reply_text("Operation Failed. \nName should not contain only number.")
             return ConversationHandler.END
         keybaord = [
             [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
@@ -2539,8 +2807,8 @@ async def take_teachers_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
 async def take_subject_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
         name = update.message.text.strip()
-        if not name.isalpha():
-            await update.message.reply_text("Operation Failed. \nSubject name should not contain any special character and number.")
+        if name.isdigit():
+            await update.message.reply_text("Operation Failed. \nSubject name should not contain only number.")
             return ConversationHandler.END
         keybaord = [
             [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
@@ -2559,35 +2827,51 @@ async def take_subject_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
 #function to take time limit for attendance
 async def take_time_limit(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
+        ikeyboard = [
+            [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
+        ]
         limit = update.message.text.strip()
         if not limit.isdigit():
             await update.message.reply_text("Operation Failed. \nTime limit should only contain number.")
             return ConversationHandler.END
-        keybaord = [
-            [InlineKeyboardButton("Cancel", callback_data="cancel_conv")]
+        imarkup = InlineKeyboardMarkup(ikeyboard)
+        rkeyboard = [
+            [KeyboardButton("Give location", request_location=True)]
         ]
-        markup = InlineKeyboardMarkup(keybaord)
+        rmarkup = ReplyKeyboardMarkup(rkeyboard, resize_keyboard=True, is_persistent=True, selective=False, one_time_keyboard=True)
         content.user_data["time_limit"] = limit
-        msg = await update.message.reply_text("Enter a one time password that will be used to verify the attendance: ", reply_markup=markup)
+        msg0 = await update.message.reply_text("Please give location to verify user attendance.", reply_markup=rmarkup)
+        msg = await update.message.reply_text("Attendance will be allowed within 200 meter radius.", reply_markup=imarkup)
+        content.user_data["ttl_msg0_id"] = msg0.message_id 
         content.user_data["ttl_msg_id"] = msg.message_id
-        return "TOTP"
+        return "TL"
     except Exception as e:
-        print(f"Error in take_subject_name function. Error Code - {e}")
+        print(f"Error in take_time_limit function. Error Code - {e}")
         await update.message.reply_text("Internal Error. Contact admin or try again later.")
         return ConversationHandler.END
+    
 
-
-#function to take one time password for attendance
-async def take_one_time_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
+#function to handle attendace by given location
+async def take_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
-        password = update.message.text.strip()
+        message = update.message or update.edited_message
+        keyboard = [
+            ["Routine", "CT"],
+            ["Settings", "Resources"]
+        ]
+        markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
+        if message.location:
+            location = update.message.location
+        msg = await message.reply_text("Location Recieved Successfully. Please wait while bot is sending the attendance circular.", reply_markup = markup)
+
+        #extea processing here
         date = datetime.today().strftime("%d-%m-%Y")
         collection = db[f"Attendance-{date}"]
-        msg = await update.message.reply_text("Please wait while bot is sending the attendance circular.")
         await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tad_msg_id"))
         await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ttn_msg_id"))
         await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tsn_msg_id"))
         await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ttl_msg_id"))
+        await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ttl_msg0_id"))
         teacher = content.user_data.get("teacher")
         subject = content.user_data.get("subject")
         limit = int(content.user_data.get("time_limit"))
@@ -2596,10 +2880,11 @@ async def take_one_time_password(update:Update, content:ContextTypes.DEFAULT_TYP
             "teacher" : teacher,
             "subject" : subject,
             "present" : [],
-            "absent" : []
+            "absent" : [],
+            "distance" : []
         }
-        with open(f"info/one_time_password-{date}-{subject}.txt", "w") as f:
-            f.write(password)
+        with open(f"info/location-{date}-{subject}.txt", "w") as f:
+            f.write(f"{location.latitude}\n{location.longitude}")
         with open("info/active_attendance.txt", "w") as f:
             f.write(f"{subject}-{teacher}")
         collection.insert_one(data)
@@ -2608,18 +2893,28 @@ async def take_one_time_password(update:Update, content:ContextTypes.DEFAULT_TYP
         asyncio.create_task(delete_attendace_circular(update, content, limit))
         return ConversationHandler.END
     except Exception as e:
-        print(f"Error in take_subject_name function. Error Code - {e}")
+        print(f"Error in take_location function. Error Code - {e}")
         await update.message.reply_text("Internal Error. Contact admin or try again later.")
         return ConversationHandler.END
 
+
+
 user_message_id = {}
+
+
 
 #function to circulate attendance to all 60 user
 async def circulate_attendance(update:Update, content:ContextTypes.DEFAULT_TYPE, teacher, subject, limit):
     try:
+        rkeyboard = [
+            ["Routine", "CT"],
+            ["Settings", "Resources"]
+        ]
+        rmarkup = ReplyKeyboardMarkup(rkeyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
         await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("message_id"))
-        message = await update.message.reply_text("The attendace circular has been circulated successfully. Please wait the time limit to end..")
-        all_students = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
+        message = await update.message.reply_text("The attendace circular has been circulated successfully. Please wait the time limit to end..", reply_markup=rmarkup)
+        all_student = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
+        all_students = all_users if len(all_users) > len(all_student) else all_student
         failed = 0
         tasks = []
         user_id = update.effective_user.id
@@ -2659,7 +2954,8 @@ async def circulate_attendance(update:Update, content:ContextTypes.DEFAULT_TYPE,
                 f"📋 Attendance Circular sent to {sent} users\n"
                 f"⚠️ Failed to send to {failed} users\n"
             )
-        await message.edit_text(report)
+        await update.message.reply_text(report, reply_markup=rmarkup)
+        await content.bot.delete_message(chat_id=user_id, message_id=message.message_id)
         if failed != 0:
             await update.message.reply_text(failed_list)
             msg = await update.message.reply_text(data, reply_markup=markup, parse_mode="Markdown")
@@ -2692,33 +2988,33 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
     try:
         message = await update.message.reply_text("Processing data...\nPlease wait...")
         os.makedirs("media", exist_ok=True)
-        all_rolls = [roll for roll in range(2403120, 2403181)]
+        all_rolls = [roll for roll in range(2403121, 2403181)]
         date = datetime.today().strftime("%d-%m-%Y")
         with open("info/active_attendance.txt", "r") as f:
             list = f.read().split("-")
         present_students = tuple(db[f"Attendance-{date}"].find_one({"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"})["present"])
+        student_data = db["names"].find_one({"type" : "official_data"})["data"]
         conn = sqlite3.connect("info/user_data.db")
         cursor = conn.cursor()
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", size=10, style="B")
-        pdf.cell(190,10,"ATTENDANCE SHEET",ln=1, align="C")
+        pdf.cell(190,5,"ATTENDANCE SHEET",ln=1, align="C")
         pdf.set_font("Arial",size=8)
-        pdf.cell(62, 5, f"date: {date}", align="L")
-        pdf.cell(62, 5, f"Subject: {list[0]}", align="C")
-        pdf.cell(62, 5, f"Teacher: {list[1]}",ln=1,align="R")
-        pdf.cell(10,5,"SI", border=1)
-        pdf.cell(60,5,"Roll", border=1)
-        pdf.cell(60,5,"Name", border=1)
-        pdf.cell(60,5,"Status", border=1, ln=1)
+        pdf.cell(62, 4, f"date: {date}", align="L")
+        pdf.cell(62, 4, f"Subject: {list[0]}", align="C")
+        pdf.cell(62, 4, f"Teacher: {list[1]}",ln=1,align="R")
+        pdf.cell(10,4,"SI", border=1)
+        pdf.cell(60,4,"Roll", border=1)
+        pdf.cell(60,4,"Name", border=1)
+        pdf.cell(60,4,"Status", border=1, ln=1)
         for roll in all_rolls:
             if roll in present_students:
                 pdf.set_text_color(0,0,0)
                 pdf.cell(10,4,f"{roll-2403120}", border=1)
                 pdf.cell(60,4,f"{roll}", border=1)
                 try:
-                    cursor.execute("SELECT name FROM users WHERE roll = ?", (roll, ))
-                    name = cursor.fetchone()[0]
+                    name = student_data[str(roll)][0]
                 except:
                     name = "Unknown"
                 pdf.cell(60,4,name, border=1)
@@ -2728,12 +3024,15 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
                 pdf.cell(10,4,f"{roll-2403120}", border=1)
                 pdf.cell(60,4,f"{roll}", border=1)
                 try:
-                    cursor.execute("SELECT name FROM users WHERE roll = ?", (roll, ))
-                    name = cursor.fetchone()[0]
+                    name = student_data[str(roll)][0]
                 except:
                     name = "Unknown"
                 pdf.cell(60,4,name, border=1)
                 pdf.cell(60,4,"Absent", border=1, ln=1)
+        pdf.set_text_color(0,0,0)
+        pdf.cell(190, 4, ln=1)
+        pdf.cell(50, 4, f"present: {len(present_students)}      ({round((len(present_students)/60)*100, 2)}%)",border=1)
+        pdf.cell(50, 4, f"Absent: {60 - len(present_students)}      ({round(((60 - len(present_students))/60)*100, 2)}%)", border=1)
         pdf.output(f"media/attendance-{date}-{list[0]}.pdf")
         with open(f"media/attendance-{date}-{list[0]}.pdf", "rb") as f:
             pdf_file = BytesIO(f.read())
@@ -2749,9 +3048,12 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
             except:
                 pass
         try:
-            os.remove(f"info/one_time_password-{date}-{list[0]}.txt")
-            os.remove("info/active_attendance.txt")
-            os.remove(f"media/attendance-{date}-{list[0]}.pdf")
+            if os.path.exists("info/active_attendance.txt"):
+                os.remove("info/active_attendance.txt")
+            if os.path.exists(f"info/location-{date}-{list[0]}.txt"):
+                os.remove(f"info/location-{date}-{list[0]}.txt")
+            if os.path.exists(f"media/attendance-{date}-{list[0]}.pdf"):
+                os.remove(f"media/attendance-{date}-{list[0]}.pdf")
         except:
             pass
     except Exception as e:
@@ -2770,12 +3072,17 @@ async def cancel_conversation(update: Update, content: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
     
 
-#function to take one time password for attendance from the user
-async def take_otp(update:Update, content:ContextTypes.DEFAULT_TYPE):
+#function to take location from user to validate the attendance
+async def take_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
-        query = update.callback_query
-        await query.answer()
-        user_id = query.from_user.id
+        location_help = (
+            "1. Turn on location service on your device\n"
+            "2. Go to the attachment option\n"
+            "3. Go to the location option\n"
+            "4. Press 'Share My Live Location for...'\n"
+            "5. Press share"
+        )
+        user_id = update.effective_user.id
         if user_id not in all_users:
             keyboard = [
                 [InlineKeyboardButton("Register", callback_data="c_register"), InlineKeyboardButton("Cancel", callback_data="cancel")]
@@ -2784,51 +3091,96 @@ async def take_otp(update:Update, content:ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("You are not registerd yet.", reply_markup=markup)
             content.user_data["from_totp"] = "true"
             return ConversationHandler.END
-        await query.edit_message_text("Enter the one time password that is given by the CR:")
-        return "VOTP"
+        if update.callback_query:
+            query = update.callback_query
+            await query.answer()
+            await query.edit_message_text(f"Share your location to verify the attendance, Follow the steps below:\n\n{location_help}")
+            return "VL"
+        else:
+            await update.message.reply_text(f"Follow the steps below:\n\n{location_help}")
+            return "VL"
     except Exception as e:
-        print(f"Error in take_otp function.\n\nError Code -{e}")
-        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
+        print(f"Error in take_user_location function.\n\nError Code -{e}")
         return ConversationHandler.END
 
 
-#function to verify one time password
-async def verify_otp(update:Update, content:ContextTypes.DEFAULT_TYPE):
+#function to verify user location for attendance
+async def verify_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
         date = datetime.today().strftime("%d-%m-%Y")
-        user_password = update.message.text.strip()
         with open("info/active_attendance.txt", "r") as f:
             list = f.read().split("-")
         try:
-            password = open(f"info/one_time_password-{date}-{list[0]}.txt").read()
+            with open(f"info/location-{date}-{list[0]}.txt") as file:
+                cr_location = (loc.strip() for loc in file.readlines())
         except Exception as e:
-            print(e)
+            print("The location file may not exists")
             return ConversationHandler.END
-        user_id = update.effective_user.id
-        conn = sqlite3.connect("info/user_data.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, roll FROM users WHERE user_id = ?", (user_id,))
-        info = cursor.fetchone()
-        user_roll = info[1]
-        conn.close()
-        if user_password == password:
-            collection = db[f"Attendance-{date}"]
-            collection.update_one(
-                {"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"},
-                {"$push" : {"present" : user_roll}}
-            )
-            await update.message.reply_text(f"Name: {info[0]}\nRoll: {info[1]}\nYour attendance submitted successfully.\n\nIf you are seeing wrong information here please contact admin.")
-            return ConversationHandler.END
-        else:
-            await update.message.reply_text("Wrong Password.\n\nEnter your password again: ")
-            if os.path.exists(f"info/one_time_password-{date}-{list[0]}.txt"):
-                return "VOTP"
+        message = update.message or update.edited_message
+        if not message.location:
+            await message.reply_text("Enter your location not some random message.")
+            if os.path.exists(f"info/location-{date}-{list[0]}.txt"):
+                return "VL"
             else:
+                await message.reply_text("Time limit exceded, Contact CR if you are facing problem.")
                 return ConversationHandler.END
+        elif not message.location.live_period:
+            await message.reply_text("Sorry static location will not work, give a live location.")
+            if os.path.exists(f"info/location-{date}-{list[0]}.txt"):
+                return "VL"
+            else:
+                await message.reply_text("Time limit exceded, Contact CR if you are facing problem.")
+                return ConversationHandler.END
+        if message.location and message.location.live_period:
+            location = message.location
+            message_time = message.date.replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+            message_age = (now - message_time).total_seconds()
+            if message_age > 20:
+                await message.reply_text("Sorry scammig is not allowed. Your location is not fresh. If there is an acitve live location sharing stop it and try again.")
+                return "VL"
+            if message_age < 20:
+                user_location = (location.latitude, location.longitude)
+                user_id = update.effective_user.id
+                conn = sqlite3.connect("info/user_data.db")
+                cursor = conn.cursor()
+                cursor.execute("SELECT name, roll FROM users WHERE user_id = ?", (user_id,))
+                info = cursor.fetchone()
+                user_roll = info[1]
+                conn.close()
+                
+
+                #logic to handle the location difference
+                allowed_distance = 200
+                distance = geodesic(cr_location, user_location).meters
+                if distance >= allowed_distance:
+                    await message.reply_text(f"You are not allowed to take the attendance as you are {distance} meters away from CR. If you are facing problem contact admin")
+                    return ConversationHandler.END
+                else:
+                    collection = db[f"Attendance-{date}"]
+                    collection.update_one(
+                        {"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"},
+                        {"$push" : {"present" : user_roll}}
+                    )
+                    collection.update_one(
+                        {"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"},
+                        {"$push" : {"distance" : {f"{user_roll}" : distance}}}
+                    )
+                    await message.reply_text(f"Name: {info[0]}\nRoll: {info[1]}\nYour attendance submitted successfully.\n\nIf you are seeing wrong information here please contact admin.")
+                    return ConversationHandler.END
+        else:
+            return ConversationHandler.END
     except Exception as e:
-        print(f"Error in verify_otp function.\n\nError Code -{e}")
-        await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
+        print(f"Error in verify_user_location functin.\n\n Error Code - {e}")
         return ConversationHandler.END
+
+
+
+
+
+
+
+
 
 
 
@@ -3078,6 +3430,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(add_escape_character("Notice will send message in this format\n```NOTICE\n<Your Message>\n```\nNormal will send message as bot response.\n\nChoose an option:"), reply_markup=markup, parse_mode="MarkdownV2")
 
+
     except Exception as e:
         print(f"Error in button_handler function.\n\nError Code -{e}")
         await query.edit_message_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
@@ -3098,12 +3451,16 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
 async def main():
     try:
         app = ApplicationBuilder().token(TOKEN).request(request).concurrent_updates(True).build()
+        await load_all_files()
 
         #conversation handler to verify user attendance
         verify_attendance_conv = ConversationHandler(
-            entry_points = [CallbackQueryHandler(take_otp, pattern="^c_mark_attendance$")],
+            entry_points = [CallbackQueryHandler(take_user_location, pattern="^c_mark_attendance$")],
             states = {
-                "VOTP" : [MessageHandler(filters.TEXT & ~ filters.COMMAND, verify_otp)]
+                "VL" : [
+                    MessageHandler(filters.LOCATION, verify_user_location),
+                    MessageHandler(filters.TEXT & ~ filters.COMMAND, verify_user_location)
+                ]
             },
             fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv$")]
         )
@@ -3115,7 +3472,10 @@ async def main():
                 "TTN" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_teachers_name)],
                 "TSN" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_subject_name)],
                 "TTL" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_time_limit)],
-                "TOTP" : [MessageHandler(filters.TEXT & ~filters.COMMAND, take_one_time_password)]
+                "TL" : [
+                    MessageHandler(filters.LOCATION, take_location),
+                    CallbackQueryHandler(take_location, pattern="^c_location_skip$")
+                ]
             },
             fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv$")]
         )
@@ -3219,6 +3579,7 @@ async def main():
         app.add_handler(CommandHandler("restart",restart))
         app.add_handler(CallbackQueryHandler(button_handler))
         app.add_handler(CommandHandler("admin", admin_handler))
+        #app.add_handler(MessageHandler(filters.LOCATION, handle_location))
         app.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
         app.add_handler(MessageHandler(filters.Document.ALL & ~filters.ChatType.CHANNEL, handle_document))
         app.add_handler(MessageHandler(filters.PHOTO & ~filters.ChatType.CHANNEL, handle_image))
@@ -3244,5 +3605,4 @@ async def main():
 
 
 if __name__=="__main__":
-    asyncio.run(main())
     asyncio.run(main())
