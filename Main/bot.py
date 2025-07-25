@@ -899,9 +899,10 @@ def delete_n_convo(user_id, n):
 #creating memory, SPECIAL_NOTE: THIS FUNCTION ALWAYS REWRITE THE WHOLE MEMORY, SO THE MEMORY SIZE IS LIMITED TO THE RESPONSE SIZE OF GEMINI, IT IS DONE THIS WAY BECAUSE OTHERWISE THERE WILL BE DUPLICATE DATA 
 async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, user_id):
     try:
+        settings = await get_settings(update.effective_user.id)
         if user_id > 0:
             with open("persona/memory_persona.txt", "r", encoding="utf-8") as f:
-                instruction = f.read()
+                instruction = load_persona(settings) + f.read()
             with open(f"memory/memory-{user_id}.txt", "a+", encoding = "utf-8") as f:
                 f.seek(0)
                 data = "***PREVIOUS MEMORY***\n\n"
@@ -995,7 +996,7 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
         user_message = f"[{now}] " + user_message
         if update.message.chat.type == "private":
             data = "***RULES***\n"
-            data += "Never ever user any timestamp in your response.\n"
+            data += "Never ever user any timestamp in your response. And i am telling you again dont use timestamp, again dont use timestamp in your message.\n"
             with open("info/rules.shadow", "rb" ) as f:
                 data += fernet.decrypt(f.read()).decode("utf-8")
                 data += "\n***END OF RULES***\n\n\n"
