@@ -99,7 +99,7 @@ def get_token():
         return TOKENs
     except Exception as e:
         print(f"Error Code -{e}")
-TOKEN = get_token()[0]
+TOKEN = get_token()[2]
 
 
 #all registered user
@@ -639,6 +639,7 @@ async def create_image(update:Update, content:ContextTypes.DEFAULT_TYPE, api, pr
         for part in response.candidates[0].content.parts:
             if hasattr(part, "text") and part.text is not None:
                 caption += part.text
+                await asyncio.to_thread(save_conversation, None, part.text, update.effective_user.id)
             elif hasattr(part, "inline_data") and part.inline_data is not None:
                 image = Image.open(BytesIO(part.inline_data.data))
                 bio = BytesIO()
@@ -767,6 +768,7 @@ async def gemini_stream(update, content, user_message, api, settings):
 #gemini response for stream off
 async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, user_message, api, settings):
     try:
+        user_id = update.effective_user.id
         tools=[]
         # tools.append(types.Tool(google_search=types.GoogleSearch))
         # tools.append(types.Tool(url_context=types.UrlContext))
@@ -821,14 +823,14 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 image_text = ""
                 for part in response.candidates[0].content.parts:
                     if hasattr(part, "text") and part.text is not None:
-                        image_text += part.text
-                await send_message(update, content, image_text, user_message, settings)
+                        await update.message.reply_text(part.text)
                 prompt = function_call.args["prompt"]
                 await create_image(update,content, api, prompt)
             elif function_call.name == "get_routine":
                 for part in response.candidates[0].content.parts:
                     if hasattr(part, "text") and part.text is not None:
                         await update.message.reply_text(part.text)
+                        await asyncio.to_thread(save_conversation,user_message, part.text, user_id)
                 await routine_handler(update, content)
             if not response:
                 return response
@@ -1058,7 +1060,10 @@ def save_conversation(user_message : str , gemini_response:str , user_id:int) ->
         cursor.execute("SELECT name FROM users WHERE user_id = ?", (user_id,))
         name = cursor.fetchone()[0]
         with open(f"Conversation/conversation-{user_id}.txt", "a+", encoding="utf-8") as f:
-            f.write(f"\n{name}: {user_message}\nYou: {gemini_response}\n")
+            if user_message == None:
+                f.write(f"{gemini_response}\n")
+            else:
+                f.write(f"\n{name}: {user_message}\nYou: {gemini_response}\n")
             f.seek(0)
             data = f.read()
         db[f"{user_id}"].update_one(
