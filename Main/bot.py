@@ -2,6 +2,8 @@ import re
 import os
 import time
 import html
+import pytz
+import json
 import shutil
 import random
 import asyncio
@@ -379,6 +381,16 @@ async def restart(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
 
 
 # Define the function declaration for the model
+
+#function to send the function action to the use
+async def send_action(update:Update, content:ContextTypes.DEFAULT_TYPE, action):
+    try:
+        await update.message.reply_text(action)
+    except Exception as e:
+        print(f"Error in send_action function.\n\nError Code - {e}")
+
+#all the function declaration goes here
+
 create_image_function = {
     "name" : "create_image",
     "description" :"Generates a highly detailed and visually appealing image based on the user's prompt — designed to go beyond plain representations and create beautiful, vivid, and stylized visuals that capture the essence of the subject.",
@@ -420,7 +432,6 @@ get_group_data_function ={
         "Fetch data that holds all the message and description about our class and all the user and give response from it"
         "This are the class member:\n"
         """ 1. Umme Kulsum
-
             2. Urboshi Mahmud
             3. Shahriar Joy
             4. Tasnimul Hassan Tanim
@@ -482,6 +493,17 @@ get_group_data_function ={
             60. Yasir Arafat
             61. Morchhalin Alam Amio"""
         "Get info about CR, teacher etc"
+        """Retrieves and analyzes a comprehensive dataset for the 'CSE Section C' university student group (24 Series, RUET).
+        This function is the primary source of information for any query related to the internal affairs, members, and culture of this specific group.
+        The dataset contains a complete list of its 61 members, a detailed summary of important group dynamics, and an extensive log of their informal group chat messages.
+        Use this function when asked about key individuals, teachers, inside jokes, or recurring topics of conversation within the group.
+        Key individuals include: CRs Sumon Majumder (gaming enthusiast, 1st 30) and Fazle Rabbi (serious, 2nd 30);
+        bot programmers Bitto Saha and Sifat (shadow_mist); all-rounder Mirajul Islam ('the Faculty');
+        Competitive Programming expert Nilay Paul;
+        and EEE expert Shadman Ahmed ('Dr. Snake').
+        Key teachers frequently discussed are the very strict Helal Sir (Maths), and the highly-praised Mainul Sir (EEE) and Shahiduzzaman Sir (CSE).
+        The data is rich with inside jokes like 'sikhan vai', 'kibabe sombob', 'dirim', 'dream vhai', 'sheet e to lekha nai', 'CG 4.69', and complaints about 'Helal sir er sheet'.
+        The message logs cover topics such as academic planning (class routines, CTs, lab reports), social coordination (hangouts, football, CSE Night), technical projects (group website, Telegram bot), coding (CP, GitHub), and general student banter in a mix of Bengali and English ('Banglish')."""
     ),
     "parameters" : {
         "type" : "object",
@@ -503,36 +525,128 @@ get_ct_data_function = {
     }
 }
 
+get_routine_function = {
+    "name" : "get_routine",
+    "description" : "Provide class routine",
+    "parameters" : {
+        "type" :"object",
+        "properties" : {
 
-def search_online(user_message, api):
+        }
+    }
+}
+
+
+def search_online(user_message, api, settings):
     try:
-        print("searching...")
         tools=[]
         tools.append(types.Tool(google_search=types.GoogleSearch))
         tools.append(types.Tool(url_context=types.UrlContext))
         
-        config = types.GenerateContentConfig(
-            temperature = 0.7,
-            tools = tools,
-            system_instruction=open("persona/Pikachu.txt").read(),
-            response_modalities=["TEXT"],
-        )
+        if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
+            config = types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
+                temperature = settings[4],
+                system_instruction=load_persona(settings),
+                tools = tools,
+                response_modalities=["TEXT"],
+            )
+        else:
+            config = types.GenerateContentConfig(
+                temperature = settings[4],
+                system_instruction=load_persona(settings),
+                tools = tools,
+                response_modalities=["TEXT"]
+            )
+        
         client = genai.Client(api_key=api)
         response = client.models.generate_content(
-            model = "gemini-2.5-flash",
+            model = gemini_model_list[settings[2]],
             contents = [user_message],
             config = config,
         )
         return response
     except Exception as e:
-        print(f"Error getting gemini response.\n\n Error Code - {e}")
+        print(f"Error getting gemini response in search_online function.\n\n Error Code - {e}")
+        return None
 
 
+#function to get response using group data
+async def get_group_data(update:Update, content:ContextTypes.DEFAULT_TYPE, user_message, settings, api, func_name):
+    try:
+        tools=[]
+        tools.append(types.Tool(google_search=types.GoogleSearch))
+        tools.append(types.Tool(url_context=types.UrlContext))
+        if func_name == "get_group_data":
+            data = "****TRAINING DATA****\n\n"
+            with open("info/group_training_data.txt") as f:
+                data += f.read()
+            data += "\n\n****END OF TRAINIG DATA****\n\n"
+            data += user_message
+        elif func_name == "get_ct_data":
+            data = "***ALL CT DATA***\n\n"
+            data += str(get_ct_data())
+            data += "***END OF CT DATA***\n\n"
+            data += "Rules: Recheck the time and date"
+            data += "\n\n" + user_message
+        if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
+            config = types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
+                temperature = settings[4],
+                system_instruction=load_persona(settings),
+                tools = tools,
+                response_modalities=["TEXT"],
+            )
+        else:
+            config = types.GenerateContentConfig(
+                temperature = settings[4],
+                system_instruction=load_persona(settings),
+                tools = tools,
+                response_modalities=["TEXT"],
+            )
+        
+        client = genai.Client(api_key=api)
+        response = client.models.generate_content(
+            model = gemini_model_list[settings[2]],
+            contents = [data],
+            config = config,
+        )
+        return response
+    except Exception as e:
+        print(f"Error in get_group_data function.\n\nError Code - {e}")
+        return None
 
 
-
-
-
+#function to create image based on user request
+async def create_image(update:Update, content:ContextTypes.DEFAULT_TYPE, api, prompt):
+    try:
+        message = update.message or update.edited_message
+        user_id = update.effective_user.id
+        msg = await message.reply_text("Image creation is in process, This may take a while please wait patiently.")
+        def sync_block(prompt,api):
+            client = genai.Client(api_key=api)
+            response = client.models.generate_content(
+                model = "gemini-2.0-flash-preview-image-generation",
+                contents = prompt,
+                config = types.GenerateContentConfig(
+                    response_modalities=["TEXT", "IMAGE"],
+                )
+            )
+            return response
+        response = await asyncio.to_thread(sync_block, prompt, api)
+        await content.bot.delete_message(chat_id=user_id, message_id=msg.message_id)
+        caption = ""
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, "text") and part.text is not None:
+                caption += part.text
+            elif hasattr(part, "inline_data") and part.inline_data is not None:
+                image = Image.open(BytesIO(part.inline_data.data))
+                bio = BytesIO()
+                image.save(bio, "PNG")
+                bio.seek(0)
+                await content.bot.send_photo(chat_id=user_id, photo=bio, caption=caption)
+    except Exception as e:
+        print(f"Error in create_image function.\n\nError Code - {e}")
 
 
 
@@ -610,11 +724,12 @@ async def get_settings(user_id):
 
 
 #gemini response for stream on
-def gemini_stream(user_message, api, settings):
+async def gemini_stream(update, content, user_message, api, settings):
     try:
         tools=[]
-        tools.append(types.Tool(google_search=types.GoogleSearch))
-        tools.append(types.Tool(url_context=types.UrlContext))
+        # tools.append(types.Tool(google_search=types.GoogleSearch))
+        # tools.append(types.Tool(url_context=types.UrlContext))
+        tools.append(types.Tool(function_declarations=[search_online_function]))
 
         if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
             config = types.GenerateContentConfig(
@@ -631,23 +746,31 @@ def gemini_stream(user_message, api, settings):
                 tools = tools,
                 response_modalities=["TEXT"],
             )
-        client = genai.Client(api_key=api)
-        response = client.models.generate_content_stream(
-            model = gemini_model_list[settings[2]],
-            contents = [user_message],
-            config = config,
-        )
+        def sync_block(api):
+            client = genai.Client(api_key=api)
+            response = client.models.generate_content_stream(
+                model = gemini_model_list[settings[2]],
+                contents = [user_message],
+                config = config,
+            )
+            return response
+        response = await asyncio.to_thread(sync_block, api)
+        if response.candidates[0].content.parts[0].function_call:
+            function_call = response.candidates[0].content.parts[0].function_call
+            if function_call.name == "search_online":
+                response = search_online(user_message, api, settings)
         return response
     except Exception as e:
         print(f"Error getting gemini response.\n\n Error Code - {e}")
 
 
 #gemini response for stream off
-def gemini_non_stream(user_message, api, settings):
+async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, user_message, api, settings):
     try:
         tools=[]
-        tools.append(types.Tool(google_search=types.GoogleSearch))
-        tools.append(types.Tool(url_context=types.UrlContext))
+        # tools.append(types.Tool(google_search=types.GoogleSearch))
+        # tools.append(types.Tool(url_context=types.UrlContext))
+        tools.append(types.Tool(function_declarations=[search_online_function, get_ct_data_function, get_group_data_function, create_image_function, get_routine_function]))
         if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
             config = types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
@@ -663,31 +786,57 @@ def gemini_non_stream(user_message, api, settings):
                 tools = tools,
                 response_modalities=["TEXT"]
             )
-        client = genai.Client(api_key=api)
-        response = client.models.generate_content(
-            model = gemini_model_list[settings[2]],
-            contents = [user_message],
-            config = config,
-        )
+        def sync_block(api):
+            client = genai.Client(api_key=api)
+            response = client.models.generate_content(
+                model = gemini_model_list[settings[2]],
+                contents = [user_message],
+                config = config,
+            )
+            return response
+        response = await asyncio.to_thread(sync_block, api)
+        has_function = False
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, "function_call") and part.function_call is not None:
+                has_function = True
+                function_call = part.function_call
+        if has_function:
+            if function_call.name == "search_online":
+                for part in response.candidates[0].content.parts:
+                    if hasattr(part, "text") and part.text is not None:
+                        await update.message.reply_text(part.text)
+                    if hasattr(part, "function_call") and part.function_call is not None:
+                        msg = await update.message.reply_text("Searching...")
+                        response = await asyncio.to_thread(search_online,function_call.args["query"], api, settings)
+                        if response.text is not None:
+                            await send_message(update, content, response, user_message, settings)
+                        await content.bot.delete_message(chat_id = update.effective_user.id, message_id=msg.message_id)
+            elif function_call.name == "get_group_data":
+                response = await get_group_data(update, content, user_message, settings, api, function_call.name)
+                return response
+            elif function_call.name == "get_ct_data":
+                response = await get_group_data(update, content, user_message, settings, api, function_call.name)
+                return response
+            elif function_call.name == "create_image":
+                image_text = ""
+                for part in response.candidates[0].content.parts:
+                    if hasattr(part, "text") and part.text is not None:
+                        image_text += part.text
+                await send_message(update, content, image_text, user_message, settings)
+                prompt = function_call.args["prompt"]
+                await create_image(update,content, api, prompt)
+            elif function_call.name == "get_routine":
+                for part in response.candidates[0].content.parts:
+                    if hasattr(part, "text") and part.text is not None:
+                        await update.message.reply_text(part.text)
+                await routine_handler(update, content)
+            if not response:
+                return response
+            return False
         return response
     except Exception as e:
         print(f"Error getting gemini response.\n\n Error Code - {e}")
         
-
-#function to create image using gemini api
-def gemini_create_image(prompt, api):
-    try:
-        client = genai.Client(api_key=api)
-        response = client.models.generate_content(
-            model = "gemini-2.0-flash-preview-image-generation",
-            contents = prompt,
-            config = types.GenerateContentConfig(
-                response_modalities=["TEXT", "IMAGE"],
-            )
-        )
-        return response
-    except Exception as e:
-        print(f"Error in gemini_create_image function.\n\nError Code - {e}")
 
 
 #A function to delete n times convo from conversation history
@@ -838,17 +987,21 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
 #create the conversation history as prompt
 async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_message, user_id, media):
     try:
+        bd_tz = pytz.timezone("Asia/Dhaka")
+        now = datetime.now(bd_tz).strftime("%d-%m-%Y, %H:%M:%S")
         settings = await get_settings(user_id)
+        user_message = f"[{now}] " + user_message
         if update.message.chat.type == "private":
             data = "***RULES***\n"
+            data += "Never ever user any timestamp in your response.\n"
             with open("info/rules.shadow", "rb" ) as f:
                 data += fernet.decrypt(f.read()).decode("utf-8")
                 data += "\n***END OF RULES***\n\n\n"
-            data += "****TRAINING DATA****"
-            if (settings[6] == 4 or settings[6] == 0) and media == 0:
-                with open("info/group_training_data.txt", "r") as file:
-                    data += file.read()
-            data += "****END OF TRAINIG DATA****"
+            # if (settings[6] == 4 or settings[6] == 0) and media == 0:
+            #     data += "****TRAINING DATA****"
+            #     with open("info/group_training_data.txt", "r") as file:
+            #         data += file.read()
+            #     data += "****END OF TRAINIG DATA****"
             data += "***MEMORY***\n"
             with open(f"memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
                 f.seek(0)
@@ -859,8 +1012,6 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 data += "***CONVERSATION HISTORY***\n\n"
                 data += f.read()
                 data += "\nUser: " + user_message
-                f.seek(0)
-                print(f.read().count("You: "))
                 f.seek(0)
                 if(f.read().count("You: ")>20):
                     asyncio.create_task(background_memory_creation(update, content, user_id))
@@ -1293,6 +1444,9 @@ async def circulate_routine(query, content:ContextTypes.DEFAULT_TYPE) -> None:
 #function for editing and sending message
 async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, response, user_message, settings) -> None:
     try:
+        if not response:
+            await update.message.reply_text("Failed to precess your request. Try again later.")
+            return
         if(settings[5]):
             message_object  = await update.message.reply_text("Typing...")
             buffer = ""
@@ -1476,11 +1630,19 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                     api = random.choice(temp_api)
                     temp_api.remove(api)
                     if(settings[5]):
-                        response = await asyncio.to_thread(gemini_stream, prompt, api,settings)
+                        response = await gemini_stream(update, content, prompt, api,settings)
+                        if response.prompt_feedback and response.prompt_feedback.block_reason:
+                            await update.message.reply_text(f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason} Conversation history is erased.")
+                            break
                         next(response).text
                         break
                     else:
-                        response = await asyncio.to_thread(gemini_non_stream, prompt, api,settings)
+                        response = await gemini_non_stream(update, content, prompt, api,settings)
+                        if response == False:
+                            return
+                        if response.prompt_feedback and response.prompt_feedback.block_reason:
+                            await update.message.reply_text(f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason} Conversation history is erased.")
+                            break
                         response.text
                         break
                 except Exception as e:
@@ -1488,7 +1650,7 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                     continue
             if response is not None:
                 await send_message(update, content, response, user_message, settings)
-            else:
+            elif response != False:
                 if os.path.exists(f"Conversation/conversation-{user_id}.txt"):
                     await update.message.reply_text("Failed to process your request. Try again later.")
                     with open(f"Conversation/conversation-{user_id}.txt", "w") as f:
@@ -1537,51 +1699,6 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             await update.message.reply_text("All the resources available for CSE SECTION C", reply_markup=resource_markup, parse_mode="Markdown")
             await update.message.delete()
             return
-        elif any(trigger in user_message.lower() for trigger in ["create image", "create a image", "make image", "make a image", "prompt=", "prompt =", "generate a image", "generate a photo"]):
-            try:
-                prompt = await create_prompt(update, content, user_message, user_id, 1)
-                msg = await update.message.reply_text("Image creation is in process, This may take a while please wait patiently.")
-                for i, api_key in enumerate(gemini_api_keys):
-                    try:
-                        response = await asyncio.to_thread(gemini_create_image, prompt, api_key)
-                        break
-                    except Exception as e:
-                        print(f"Error for API-{i}.\n\nError code -{e}")
-                await content.bot.delete_message(chat_id=user_id, message_id=msg.message_id)
-                for part in response.candidates[0].content.parts:
-                    if part.text is not None:
-                        data = part.text
-                        if len(data)>4080:
-                            data = [data[i:i+4080] for i in range(0, len(data), 4080)]
-                            for d in data:
-                                try:
-                                    await update.message.reply_text(add_escape_character(d), parse_mode="MarkdownV2")
-                                except:
-                                    try:
-                                        await update.message.reply_text(d, parse_mode="Markdown")
-                                    except:
-                                        await update.message.reply_text(d)
-                        else:
-                            try:
-                                await update.message.reply_text(add_escape_character(data), parse_mode="MarkdownV2")
-                            except:
-                                try:
-                                    await update.message.reply_text(data, parse_mode="Markdown")
-                                except:
-                                    await update.message.reply_text(data)
-                    elif part.inline_data is not None:
-                        image = Image.open(BytesIO(part.inline_data.data))
-                        bio = BytesIO()
-                        image.save(bio, "PNG")
-                        bio.seek(0)
-                        await content.bot.send_photo(chat_id=user_id, photo=bio, caption="Created By AI")
-            except Exception as e:
-                print(f"Error in gemini_create_image function.\n\nError Code-{e}")
-                await update.message.reply_text("Image creation failed.")
-                try:
-                    await content.bot.delete_message(chat_id=user_id, message_id=msg.message_id)
-                except:
-                    pass
         else:
             #await user_message_handler(update, content, bot_name)
             await queue.put((update, content, bot_name))
@@ -1640,7 +1757,7 @@ async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> No
         await update.message.chat.send_action(action = ChatAction.TYPING)
         try:
             settings = await get_settings(update.effective_user.id)
-            response = await asyncio.to_thread(gemini_stream, "Checking if the gemini api is working or not", user_api, settings)
+            response = await gemini_stream(update, content,  "Checking if the gemini api is working or not", user_api, settings)
             chunk = next(response)
             if(
                 user_api.startswith("AIza")
@@ -1699,20 +1816,25 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                                 system_instruction = load_persona(settings)
                             )
                         )
-                        response = response.text
-                        return response
+                        if response.prompt_feedback and response.prompt_feedback.block_reason:
+                            return f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason}."
+                        try:
+                            response.text
+                            return response
+                        except:
+                            pass
                     except Exception as e:
                         print(f"Error getting response for API-{i}\n\nError Code - {e}")
-                return "Can't get response for your request"
+                return None
             
             os.remove(f"media/{file_id}.{ext}")
             response = await asyncio.to_thread(gemini_photo_worker, photo, prompt)
-            await update.message.reply_text("Response for the Image:\n\n" + response)
+            if type(response) == str:
+                await update.message.reply_text(response)
+                await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+                return
+            await send_message(update, content, response, "<Image>" + caption, settings)
             await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
-            if update.message.chat.type == "private":
-                await asyncio.to_thread(save_conversation, "<image>" + caption, response, update.effective_chat.id)
-            else:
-                await asyncio.to_thread(save_group_conversation, "<image>" + caption, response, update.effective_chat.id)
     except Exception as e:
         print(f"Error in handle_image function.\n\nError Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in handle_image function \n\nError Code -{e}")
@@ -1767,19 +1889,24 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                                     system_instruction=load_persona(settings)
                                 )
                             )
-                        response = response.text
                         os.remove(path)
-                        return response
+                        if response.prompt_feedback and response.prompt_feedback.block_reason:
+                            return f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason}."
+                        try:
+                            response.text
+                            return response
+                        except:
+                            pass
                     except Exception as e:
                         print(f"Error getting response for api-{i}.\n\nError Code - {e}")
                 if not response:
-                    return "Failed to process your request. Try again."
+                    return None
             response = await asyncio.to_thread(gemini_analysis_worker, prompt, path, video_file)
-            if chat_type == "private":
-                await asyncio.to_thread(save_conversation, "<video>" + caption, response, chat_id)
-            else:
-                await asyncio.to_thread(save_group_conversation, "<video>" + caption, response, chat_id)
-            await update.message.reply_text("Response for the video:\n\n" + response)
+            if type(response) == str:
+                await update.message.reply_text(response)
+                await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+                return
+            await send_message(update, content, response, "<video>" + caption, settings)
             await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
         else:
             await update.message.reply_text("Operation Failed")
@@ -1817,19 +1944,24 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                                 system_instruction=load_persona(settings)
                             )
                         )
-                        response = response.text
+                        if response.prompt_feedback and response.prompt_feedback.block_reason:
+                            return f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason}."
                         os.remove(f"media/{file_name}")
-                        return response
+                        try:
+                            response.text
+                            return response
+                        except:
+                            pass
                     except Exception as e:
                         print(f"Error getting response for api-{i}.\n\nError Code - {e}")
-                return "Failed to process your request. Try again."
+                return None
 
             response = await asyncio.to_thread(gemini_audio_worker, prompt, file_name)
-            if chat_type == "private":
-                await asyncio.to_thread(save_conversation, "<audio>" + caption, response, chat_id)
-            else:
-                await asyncio.to_thread(save_group_conversation, "<audio>" + caption, response, chat_id)
-            await update.message.reply_text("Response for the audio:\n\n" + response)
+            if type(response) == str:
+                await update.message.reply_text(response)
+                await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+                return
+            await send_message(update, content, response, "<audio>" + caption, settings)
             await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
         else:
             await update.message.reply_text("This doesn't seems like a audio at all")
@@ -1867,19 +1999,24 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                                 system_instruction=load_persona(settings)
                             )
                         )
-                        response = response.text
+                        if response.prompt_feedback and response.prompt_feedback.block_reason:
+                            return f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason}."
                         os.remove(f"media/voice-{file_id}.ogg")
-                        return response
+                        try:
+                            response.text
+                            return response
+                        except:
+                            pass
                     except Exception as e:
                         print(f"Error getting response for api-{i}.\n\nError Code - {e}")
-                return "Failed to process your request. Try again."
+                return None
 
             response = await asyncio.to_thread(gemini_voice_worker, caption, file_id)
-            if chat_type == "private":
-                await asyncio.to_thread(save_conversation, "<a voice message", response, chat_id)
-            else:
-                await asyncio.to_thread(save_group_conversation, "<a voice message>", response, chat_id)
-            await update.message.reply_text("Response for the voice:\n\n" + response)
+            if type(response) == str:
+                await update.message.reply_text(response)
+                await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+                return
+            await send_message(update, content, response, "<voice>" + caption, settings)
             await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
             return
         else:
@@ -1893,7 +2030,7 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 async def handle_sticker(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
         if update.message and update.message.sticker:
-            sticker = update.message.sticker.get_file()
+            sticker = await update.message.sticker.get_file()
             message = await update.message.reply_text("Wow!! A sticker.")
             await message.edit_text("But what I am supposed to do with it, i don't know.")
         else:
@@ -1940,19 +2077,24 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
                                 system_instruction=load_persona(settings)
                             )
                         )
-                        response = response.text
+                        if response.prompt_feedback and response.prompt_feedback.block_reason:
+                            return f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason}"
                         os.remove(path)
-                        return response
+                        try:
+                            response.text
+                            return response
+                        except:
+                            pass
                     except Exception as e:
                         print(f"Error getting response for API{i}.\n\nError Code - {e}")
-                return "Failed to process your request. Try again."
+                return None
             
             response = await asyncio.to_thread(gemini_doc_worker, prompt, path)
-            if chat_type == "private":
-                await asyncio.to_thread(save_conversation, "<document>" + caption, response, chat_id)
-            else:
-                await asyncio.to_thread(save_group_conversation, "<document>" + caption, response, chat_id)
-            await update.message.reply_text("Response for the document:\n\n" + response)
+            if type(response) == str:
+                await update.message.reply_text(response)
+                await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+                return
+            await send_message(update, content, response,"<document>" + caption, settings)
             await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
             return
         else:
@@ -2385,6 +2527,7 @@ async def take_user_password(update:Update, content:ContextTypes.DEFAULT_TYPE) -
             content.user_data["ra_message_id"] = msg.message_id
             await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
             await update.message.delete()
+            content.user_data["guest"] = True
             return "AH"
         else:
             await update.message.reply_text("Wrong Password..\n\nIf you are having problem contact admin. Or mail here: shadow_mist0@proton.me")
@@ -2488,32 +2631,43 @@ async def take_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
 #function to confirm user password
 async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
+        all_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in sorted(glob("persona/*txt"))]
+        is_guest = content.user_data.get("guest")
+        keyboard = [
+            ["Routine", "CT"],
+            ["Settings", "Resources"]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
         c_password = update.message.text.strip()
         password = content.user_data.get("password")
         if password == c_password:
-            keyboard = [
-                ["Routine", "CT"],
-                ["Settings", "Resources"]
-            ]
-            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
             try:
                 conn = sqlite3.connect("info/user_data.db")
                 cursor = conn.cursor()
-                user_info = [
-                    update.effective_user.id,
-                    content.user_data.get("user_name"),
-                    content.user_data.get("gender"),
-                    content.user_data.get("roll"),
-                    content.user_data.get("password"),
-                    content.user_data.get("user_api")
-                ]
+                if is_guest:
+                    user_info = [
+                        update.effective_user.id,
+                        content.user_data.get("user_name"),
+                        content.user_data.get("gender"),
+                        0,
+                        content.user_data.get("password"),
+                        content.user_data.get("user_api")
+                    ]
+                else:
+                    user_info = [
+                        update.effective_user.id,
+                        content.user_data.get("user_name"),
+                        content.user_data.get("gender"),
+                        content.user_data.get("roll"),
+                        content.user_data.get("password"),
+                        content.user_data.get("user_api")
+                    ]
                 cursor.execute("""
                     INSERT OR IGNORE INTO users(user_id, name, gender, roll, password, api)
                     VALUES(?,?,?,?,?,?)
                 """,
                 tuple(info for info in user_info)
                 )
-                all_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in sorted(glob("persona/*txt"))]
                 persona = all_persona.index("Pikachu") if user_info[2] == "male" else all_persona.index("Aarohi")
                 data = {
                     "id" : user_info[0],
@@ -2542,7 +2696,10 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 conn.close()
                 global all_users
                 all_users = await asyncio.to_thread(load_all_user)
-                await update.message.reply_text("Registration Seccessful. Now press /start", reply_markup=reply_markup)
+                if user_info[3] == 0:
+                    await update.message.reply_text("You have been registered as a guest with limited functionality.", reply_markup=reply_markup)
+                else:
+                    await update.message.reply_text("Registration Seccessful. Now press /start", reply_markup=reply_markup)
                 await content.bot.delete_message(chat_id = update.effective_user.id, message_id=content.user_data.get("tp_message_id"))
                 await update.message.delete()
             except Exception as e:
@@ -3000,10 +3157,11 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
         pdf.add_page()
         pdf.set_font("Arial", size=10, style="B")
         pdf.cell(190,5,"ATTENDANCE SHEET",ln=1, align="C")
-        pdf.set_font("Arial",size=8)
-        pdf.cell(62, 4, f"date: {date}", align="L")
-        pdf.cell(62, 4, f"Subject: {list[0]}", align="C")
-        pdf.cell(62, 4, f"Teacher: {list[1]}",ln=1,align="R")
+        pdf.set_font("Arial",size=10,style="B")
+        pdf.cell(62, 5, f"Date: {date}", align="L")
+        pdf.cell(62, 5, f"Subject: {list[0]}", align="C")
+        pdf.cell(62, 5, f"Teacher: {list[1]}",ln=1,align="R")
+        pdf.set_font("Arial", size=8)
         pdf.cell(10,4,"SI", border=1)
         pdf.cell(60,4,"Roll", border=1)
         pdf.cell(60,4,"Name", border=1)
@@ -3030,9 +3188,12 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
                 pdf.cell(60,4,name, border=1)
                 pdf.cell(60,4,"Absent", border=1, ln=1)
         pdf.set_text_color(0,0,0)
+        pdf.set_font("Arial", size=10, style="B")
         pdf.cell(190, 4, ln=1)
-        pdf.cell(50, 4, f"present: {len(present_students)}      ({round((len(present_students)/60)*100, 2)}%)",border=1)
-        pdf.cell(50, 4, f"Absent: {60 - len(present_students)}      ({round(((60 - len(present_students))/60)*100, 2)}%)", border=1)
+        pdf.cell(25, 6, "Present", border=1, align="C")
+        pdf.cell(70, 6, f"{len(present_students)}      ({round((len(present_students)/60)*100, 2)}%)",border=1,align="C")
+        pdf.cell(25, 6, "Absent", border=1 , align="C")
+        pdf.cell(70, 6, f"{60 - len(present_students)}      ({round(((60 - len(present_students))/60)*100, 2)}%)", border=1, align="C")
         pdf.output(f"media/attendance-{date}-{list[0]}.pdf")
         with open(f"media/attendance-{date}-{list[0]}.pdf", "rb") as f:
             pdf_file = BytesIO(f.read())
@@ -3156,6 +3317,8 @@ async def verify_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE)
                 if distance >= allowed_distance:
                     await message.reply_text(f"You are not allowed to take the attendance as you are {distance} meters away from CR. If you are facing problem contact admin")
                     return ConversationHandler.END
+                elif user_roll == 0:
+                    await message.reply_text(f"Guest member are not allowed to take attendance.")
                 else:
                     collection = db[f"Attendance-{date}"]
                     collection.update_one(
