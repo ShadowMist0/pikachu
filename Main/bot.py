@@ -64,7 +64,7 @@ fernet = Fernet(key)
 
 #code to ignore warnig about per_message in conv handler and increase poll size
 warnings.filterwarnings("ignore",category=PTBUserWarning)
-request = HTTPXRequest(connection_pool_size=50, pool_timeout=30)
+tg_request = HTTPXRequest(connection_pool_size=50, pool_timeout=30)
 
 
 
@@ -3962,7 +3962,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
 
 async def main():
     try:
-        app = ApplicationBuilder().token(TOKEN).request(request).concurrent_updates(True).build()
+        app = ApplicationBuilder().token(TOKEN).request(tg_request).concurrent_updates(True).build()
         await load_all_files()
 
         #conversation handler to verify user attendance
