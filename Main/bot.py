@@ -112,7 +112,7 @@ def get_token():
         return TOKENs
     except Exception as e:
         print(f"Error Code -{e}")
-TOKEN = get_token()[0]
+TOKEN = get_token()[2]
 
 
 #all registered user
@@ -2014,7 +2014,9 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             photo = Image.open(path)
             prompt = await create_prompt(update, content, caption, chat_id, 1)
 
-
+            if not os.path.exists(path):
+                await update.message.reply_text("Invalid file.")
+                return
             await message.edit_text("🤖 Analyzing Image...\nThis may take a while ⏳")
             def gemini_photo_worker(image, caption):
                 if os.path.getsize(path)/(1024*1024) > 8:
@@ -2166,7 +2168,10 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             chat_type = update.message.chat.type
             caption = update.message.caption if update.message.caption else "Descrive the audio."
             prompt = await create_prompt(update, content, caption, chat_id, 1)
-            
+
+            if not os.path.exists(path):
+                await update.message.reply_text("Invalid file.")
+                return
             await message.edit_text("🤖 Analyzing audio...\nThis may take a while ⏳")
 
             def gemini_audio_worker(caption, path):
@@ -2233,6 +2238,9 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             file_id = update.message.voice.file_unique_id
             path = f"media/voice-{file_id}.ogg"
             await voice_file.download_to_drive(path)
+            if not os.path.exists(path):
+                await update.message.reply_text("Invalid file.")
+                return
 
             await message.edit_text("🤖 Analyzing voice...\nThis may take a while ⏳")
             def gemini_voice_worker(caption, file_id):
@@ -2307,6 +2315,9 @@ async def handle_sticker(update : Update, content : ContextTypes.DEFAULT_TYPE) -
             file = await sticker.get_file()
             os.makedirs("media", exist_ok=True)
             await file.download_to_drive(path)
+            if not os.path.exists(path):
+                await update.message.reply_text("Invalid file.")
+                return
 
             def gemini_sticker_worker(path):
                 if os.path.getsize(path)/(1024*1024) > 7:
@@ -2376,6 +2387,9 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
             caption = update.message.caption or "Describe this document."
             prompt = await create_prompt(update, content, caption, chat_id, 1)
             file_name = update.message.document.file_name
+            valid_ext = [".pdf", ".json", ".txt", ".docx"]
+            if os.path.splitext(os.path.basename(file_name))[1] not in valid_ext:
+                return
             file_id = update.message.document.file_unique_id
             mime = update.message.document.mime_type
             if mime == "application/pdf":
@@ -2386,6 +2400,9 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
                 path = f"media/{file_name}" if file_name else f"media/{file_id}.txt"
             doc_file = await update.message.document.get_file()
             await doc_file.download_to_drive(path)
+            if not os.path.exists(path):
+                await update.message.reply_text("Invalid file.")
+                return
 
             await message.edit_text("🤖 Analyzing document...\nThis may take a while ⏳")
             def gemini_doc_worker(caption, path):

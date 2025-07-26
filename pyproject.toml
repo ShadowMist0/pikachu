@@ -31,7 +31,8 @@ dependencies = [
     "pymongo",
     "fpdf",
     "geopy",
-    "pytz"
+    "pytz",
+    "flask-limiter"
 ]
 
 [project.urls]
