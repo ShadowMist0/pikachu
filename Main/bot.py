@@ -18,13 +18,16 @@ from io import BytesIO
 from google import genai
 from google.genai import types
 from pymongo import MongoClient
-from flask import Flask, request
+from flask_limiter import Limiter
+from collections import defaultdict
 from geopy.distance import geodesic
 from cryptography.fernet import Fernet
+from flask import Flask, request, abort
 from pymongo.server_api import ServerApi
 from telegram.constants import ChatAction
 from telegram.request import HTTPXRequest
 from telegram.error import RetryAfter, TimedOut
+from flask_limiter.util import get_remote_address
 from datetime import datetime, timedelta, timezone
 from telegram._utils.warnings import PTBUserWarning
 from google.genai.types import GenerateContentResponse
@@ -66,11 +69,21 @@ request = HTTPXRequest(connection_pool_size=50, pool_timeout=30)
 
 
 #a flask to ignore web pulling condition
-
 app = Flask(__name__)
+limiter = Limiter(key_func=get_remote_address)
+limiter.init_app(app)
 @app.route('/')
+@limiter.limit("20 per minute")
 def home():
-    return "Bot is runnig", 200
+    abort(404)
+
+@app.route('/secret_admin_path', methods=['GET'])
+def admin_route():
+    key = request.args.get("key")
+    if key != os.getenv("MDB_pass_shadow"):
+        abort(403, description="You are not a admin")
+    return "Bot is running"
+
 def run_web():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
@@ -99,7 +112,7 @@ def get_token():
         return TOKENs
     except Exception as e:
         print(f"Error Code -{e}")
-TOKEN = get_token()[2]
+TOKEN = get_token()[0]
 
 
 #all registered user
@@ -516,7 +529,7 @@ get_group_data_function ={
 
 get_ct_data_function = {
     "name" : "get_ct_data",
-    "description" : "Fetch data of upcoming class test or CT",
+    "description" : """Fetch data of upcoming class test or CT use this format to represent""",
     "parameters" : {
         "type" :"object",
         "properties" : {
@@ -563,6 +576,62 @@ create_memory_function = {
         "required" : ["memory_content"]
     }
 }
+
+
+
+
+information_handler_function = {
+    "name": "information_handler",
+    "description": (
+        "Handles all queries related to our class resources such as the Drive link, cover page generator, "
+        "class website, Google Classroom code, and orientation materials. Responds with a helpful message and, "
+        "if applicable with a clickable button (except for Google Classroom code)."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "info_name": {
+                "type": "string",
+                "description": (
+                    "'drive' When the user asks for the class Drive (for notes, CTs, labs, etc).\n"
+                    "'cover_page' When the user asks for a cover page generator for assignments or lab reports.\n"
+                    "'website' When asked for the official class website.\n"
+                    "'g_class_code' When the user asks for the Google Classroom code.\n"
+                    "'orientation_file' When the user wants the file that includes student list, CSE '24 syllabus, and the prospectus."
+                )
+            }
+        },
+        "required": ["info_name"]
+    }
+}
+
+
+
+async def information_handler(update:Update, content:ContextTypes.DEFAULT_TYPE, info_name):
+    try:
+        if info_name == "drive":
+            keyboard = [[InlineKeyboardButton("Drive", url="https://drive.google.com/drive/folders/1xbyCdj3XQ9AsCCF8ImI13HCo25JEhgUJ")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            return markup
+        elif info_name == "cover_page":
+            keyboard = [[InlineKeyboardButton("Lab Cover Page", url="https://ruet-cover-page.github.io/")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            return markup
+        elif info_name == "website":
+            keyboard = [[InlineKeyboardButton("All Websites", callback_data="c_all_websites")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            return markup
+        elif info_name == "g_class_code":
+            return "CSE Google classroom code: ```2o2ea2k3```\n\nMath G. Classroom code: ```aq4vazqi```\n\nChemistry G. Classroom code: ```wnlwjtbg```"
+        elif info_name == "orientation_file":
+            keyboard = [[InlineKeyboardButton("Orientation Files", url = "https://drive.google.com/drive/folders/10_-xTV-FsXnndtDiw_StqH2Zy9tQcWq0")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            return markup
+        else:
+            return "Sorry i don't have your requested data."
+    except Exception as e:
+        print(f"Error in information_handler function.\n\nError Code - {e}")
+        await update.message.reply_text("Internal Error. Contact admin or try again later.")
 
 
 def search_online(user_message, api, settings):
@@ -615,6 +684,16 @@ async def get_group_data(update:Update, content:ContextTypes.DEFAULT_TYPE, user_
             data = "***ALL CT DATA***\n\n"
             data += str(get_ct_data())
             data += "***END OF CT DATA***\n\n"
+            data += """Use this format to represent CT data
+            📚 Upcoming CTs
+
+            ⏰ NEXT: <Subject>
+            🗓️ <date>
+            👨‍🏫 <teacher name>
+            📖 <topic1>
+            →<topic2>
+            →<topic3>
+            """
             data += "Rules: Recheck the time and date"
             data += "\n\n" + user_message
         if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
@@ -808,7 +887,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
         tools=[]
         # tools.append(types.Tool(google_search=types.GoogleSearch))
         # tools.append(types.Tool(url_context=types.UrlContext))
-        tools.append(types.Tool(function_declarations=[search_online_function, get_ct_data_function, get_group_data_function, create_image_function, get_routine_function, create_memory_function]))
+        tools.append(types.Tool(function_declarations=[search_online_function, get_ct_data_function, get_group_data_function, create_image_function, get_routine_function, create_memory_function, information_handler_function]))
         if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
             config = types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
@@ -878,6 +957,26 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                         await asyncio.to_thread(save_conversation,user_message, part.text, user_id)
                 await add_memory_content(update, content, data)
                 return False
+            elif function_call.name == "information_handler":
+                markup = await information_handler(update, content, function_call.args["info_name"])
+                for part in response.candidates[0].content.parts:
+                    if hasattr(part, "text") and part.text is not None:
+                        if type(markup) == str or markup is None:
+                            await update.message.reply_text(part.text)
+                            await asyncio.to_thread(save_conversation, user_message, part.text, user_id)
+                        else:
+                            text = part.text
+                            await update.message.reply_text(text, reply_markup=markup)
+                            await asyncio.to_thread(save_conversation, user_message, text, user_id)
+                            return False
+                if type(markup) == str:
+                    await update.message.reply_text(markup, parse_mode="Markdown")
+                    await asyncio.to_thread(save_conversation, user_message, markup, user_id)
+                    return False
+                else:
+                    await update.message.reply_text("Click the button to see your requested data", reply_markup=markup)
+                    await asyncio.to_thread(save_conversation, user_message, "Click the button to see your requested data", user_id)
+                    return False
             if not response:
                 return response
             return False
@@ -1036,13 +1135,14 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
 #create the conversation history as prompt
 async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_message, user_id, media):
     try:
-        bd_tz = pytz.timezone("Asia/Dhaka")
-        now = datetime.now(bd_tz).strftime("%d-%m-%Y, %H:%M:%S")
         settings = await get_settings(user_id)
-        user_message = f"[{now}] " + user_message
         if update.message.chat.type == "private":
             data = "***RULES***\n"
-            data += "Never ever user any timestamp in your response. And i am telling you again dont use timestamp, again dont use timestamp in your message.\n"
+            data += (
+                "Never ever user any timestamp in your response."
+                "Timestamp is only for you to understand the user better and provide more realistic response"
+                "So, You must not use timestamp in your response."
+            )
             with open("info/rules.shadow", "rb" ) as f:
                 data += fernet.decrypt(f.read()).decode("utf-8")
                 data += "\n***END OF RULES***\n\n\n"
@@ -1102,6 +1202,8 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
 #function to save conversation
 def save_conversation(user_message : str , gemini_response:str , user_id:int) -> None:
     try:
+        bd_tz = pytz.timezone("Asia/Dhaka")
+        now = datetime.now(bd_tz).strftime("%d-%m-%Y, %H:%M:%S")
         conn = sqlite3.connect("info/user_data.db")
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM users WHERE user_id = ?", (user_id,))
@@ -1110,7 +1212,7 @@ def save_conversation(user_message : str , gemini_response:str , user_id:int) ->
             if user_message == None:
                 f.write(f"{gemini_response}\n")
             else:
-                f.write(f"\n{name}: {user_message}\nYou: {gemini_response}\n")
+                f.write(f"\n[{now}] {name}: {user_message}\nYou: {gemini_response}\n")
             f.seek(0)
             data = f.read()
         db[f"{user_id}"].update_one(
@@ -1729,12 +1831,54 @@ async def resources_handler(update:Update, content:ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Internal Error. Please contact admin or try again later.")
 
 
+
+#config info
+time_limit = 5
+max_request = 5
+global_time_limit = 5
+global_max_request = 100
+user_requests = defaultdict(list)
+global_requests = []
+banned_users = {}
+
+#A function and code block to protect the bot from DDOS
+async def is_ddos(update:Update,content:ContextTypes.DEFAULT_TYPE, user_id):
+    try:
+        now = time.time()
+
+        #start of the main process
+        if user_id in banned_users:
+            if now - banned_users[user_id] > 60:
+                del banned_users[user_id]
+            else:
+                return True
+        global_requests[:] = [req for req in global_requests if now - req < global_time_limit]
+        global_requests.append(now)
+        if len(global_requests) > global_max_request:
+            await update.message.reply_text("Global rate exceeded, try again later.")
+            return True
+        user_requests[user_id][:] = [req for req in user_requests[user_id] if now - req < time_limit]
+        user_requests[user_id].append(now)
+        if len(user_requests[user_id]) > max_request:
+            banned_users[user_id] = now
+            return True
+        return False
+    except Exception as e:
+        print(f"Error in is_ddos function. Error Code - {e}")
+
+
+
+
+
 #function for all other messager that are directly send to bot without any command
 async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
         bot_name_obj = await content.bot.get_my_name()
         bot_name = bot_name_obj.name.lower()
         user_id = update.effective_user.id
+        if await is_ddos(update, content, user_id):
+            await update.message.reply_text("Spamming Detected!!!\n\nYou will be banned for the next 60 seconds.")
+            return
         if user_id not in all_users and update.message.chat.type == "private":
             keyboard = [
                 [InlineKeyboardButton("Register", callback_data="c_register"), InlineKeyboardButton("Cancel", callback_data="cancel")]
@@ -1848,6 +1992,10 @@ async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> No
 #function to handle image
 async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        chat_id = update.effective_chat.id
+        if await is_ddos(update, content, chat_id):
+            await update.message.reply_text("Spamming Detected!!!\n\nYou will be banned for the next 60 seconds.")
+            return
         os.makedirs("media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
         settings = await get_settings(update.effective_user.id)
@@ -1855,16 +2003,22 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             message = await update.message.reply_text("Downloading Image...")
             caption = update.message.caption if update.message.caption else "Describe this imgae, if this image have question answer this."
             photo_file = await update.message.photo[-1].get_file()
+            file_size = photo_file.file_size/(1024*1024)
+            if file_size > 20:
+                await update.message.reply_text("Failed to process your request. Telegram bot only  supports file up to 20 MB.")
+                return
             ext = os.path.splitext(os.path.basename(photo_file.file_path))[1]
             file_id = photo_file.file_unique_id
-            await photo_file.download_to_drive(f"media/{file_id}.{ext}")
-            photo = Image.open(f"media/{file_id}.{ext}")
-            chat_id = update.effective_chat.id
+            path = f"media/{file_id}.{ext}"
+            await photo_file.download_to_drive(path)
+            photo = Image.open(path)
             prompt = await create_prompt(update, content, caption, chat_id, 1)
 
 
             await message.edit_text("🤖 Analyzing Image...\nThis may take a while ⏳")
             def gemini_photo_worker(image, caption):
+                if os.path.getsize(path)/(1024*1024) > 8:
+                    return "File size is too long for free tier. Contact admin to activate premium subscription."
                 for i, api_key in enumerate(gemini_api_keys):
                     try:
                         client = genai.Client(api_key=api_key)
@@ -1888,8 +2042,8 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                         print(f"Error getting response for API-{i}\n\nError Code - {e}")
                 return None
             
-            os.remove(f"media/{file_id}.{ext}")
             response = await asyncio.to_thread(gemini_photo_worker, photo, prompt)
+            os.remove(path)
             if type(response) == str:
                 await update.message.reply_text(response)
                 await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
@@ -1904,22 +2058,31 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 #function to handle video
 async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        chat_id = update.effective_chat.id
+        if await is_ddos(update, content, chat_id):
+            await update.message.reply_text("Spamming Detected!!!\n\nYou will be banned for the next 60 seconds.")
+            return
         os.makedirs("media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
         if update.message and update.message.video:
+            file_size = update.message.video.file_size/(1024*1024)
+            if file_size > 20:
+                await update.message.reply_text("Failed to process your request. Telegram bot only  supports file up to 20 MB.")
+                return
+            video_file = await update.message.video.get_file()
             settings = await get_settings(update.effective_user.id)
             caption = update.message.caption if update.message.caption else "Descrive this video."
             chat_type = update.message.chat.type
-            chat_id = update.effective_chat.id
             prompt = await create_prompt(update, content, caption, chat_id, 1)
             message = await update.message.reply_text("Downloading video...")
-            video_file = await update.message.video.get_file()
             file_name = update.message.video.file_name or f"video-{update.message.video.file_unique_id}.mp4"
             path = f"media/{file_name}"
             await video_file.download_to_drive(path)
             await message.edit_text("🤖 Analyzing video...\nThis may take a while ⏳")
 
             def gemini_analysis_worker(caption, path, video_file):
+                if os.path.getsize(path)/(1024*1024) > 30:
+                    return "File size is too long for free tier. Contact admin to activate premium subscription."
                 for i,api_key in enumerate(gemini_api_keys):
                     try:
                         if os.path.getsize(path)/(1024*1024) > 20:
@@ -1959,11 +2122,10 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                             pass
                     except Exception as e:
                         print(f"Error getting response for api-{i}.\n\nError Code - {e}")
-                if not response:
-                    return None
+                    return "Failed to process your request."
             
-            os.remove(path)
             response = await asyncio.to_thread(gemini_analysis_worker, prompt, path, video_file)
+            os.remove(path)
             if type(response) == str:
                 await update.message.reply_text(response)
                 await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
@@ -1980,25 +2142,40 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 #fuction to handle audio
 async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        chat_id = update.effective_chat.id
+        if await is_ddos(update, content, chat_id):
+            await update.message.reply_text("Spamming Detected!!!\n\nYou will be banned for the next 60 seconds.")
+            return
         os.makedirs("media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
         if update.message and update.message.audio:
+            file_size = update.message.audio.file_size/(1024*1024)
+            if file_size > 20:
+                await update.message.reply_text("Failed to process your request. Telegram bot only  supports file up to 20 MB.")
+                return
             message = await update.message.reply_text("Downloading audio....")
             audio_file = await update.message.audio.get_file()
-            chat_id = update.effective_chat.id
-            file_name = update.message.audio.file_name or f"audio-{update.message.audio.file_unique_id}.mp3"
-            await audio_file.download_to_drive(f"media/{file_name}")
+            f_name = update.message.audio.file_name
+            ext = os.path.splitext(os.path.basename(f_name))[1] or "mp3"
+            file_id = update.message.audio.file_unique_id
+            path =  f"media/{file_id}{ext}"
+            print(ext)
+            print(path)
+            await audio_file.download_to_drive(path)
             settings = await get_settings(chat_id)
             chat_type = update.message.chat.type
             caption = update.message.caption if update.message.caption else "Descrive the audio."
             prompt = await create_prompt(update, content, caption, chat_id, 1)
             
             await message.edit_text("🤖 Analyzing audio...\nThis may take a while ⏳")
-            def gemini_audio_worker(caption, file_name):
+
+            def gemini_audio_worker(caption, path):
+                if os.path.getsize(path)/(1024*1024) > 15:
+                    return "File size is too long for free tier. Contact admin to activate premium subscription."
                 for i, api in enumerate(gemini_api_keys):
                     try:
                         client = genai.Client(api_key=api)
-                        file = client.files.upload(file=f"media/{file_name}")
+                        file = client.files.upload(file=path)
                         response = client.models.generate_content(
                             model = "gemini-2.5-flash",
                             contents = [caption, file],
@@ -2017,8 +2194,9 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                         print(f"Error getting response for api-{i}.\n\nError Code - {e}")
                 return None
 
-            os.remove(f"media/{file_name}")
-            response = await asyncio.to_thread(gemini_audio_worker, prompt, file_name)
+            
+            response = await asyncio.to_thread(gemini_audio_worker, prompt, path)
+            os.remove(path)
             if type(response) == str:
                 await update.message.reply_text(response)
                 await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
@@ -2036,24 +2214,34 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 #function to handle voice
 async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        chat_id = update.effective_chat.id
+        if await is_ddos(update, content, chat_id):
+            await update.message.reply_text("Spamming Detected!!!\n\nYou will be banned for the next 60 seconds.")
+            return
         os.makedirs("media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
         if update.message and update.message.voice:
+            file_size = update.message.voice.file_size/(1024*1024)
+            if file_size > 20:
+                await update.message.reply_text("Failed to process your request. Telegram bot only  supports file up to 20 MB.")
+                return
             settings = await get_settings(update.effective_user.id)
             caption = ""
             chat_type = update.message.chat.type
-            chat_id = update.effective_chat.id
             message = await update.message.reply_text("Downloading voice...")
             voice_file = await update.message.voice.get_file()
             file_id = update.message.voice.file_unique_id
-            await voice_file.download_to_drive(f"media/voice-{file_id}.ogg")
+            path = f"media/voice-{file_id}.ogg"
+            await voice_file.download_to_drive(path)
 
             await message.edit_text("🤖 Analyzing voice...\nThis may take a while ⏳")
             def gemini_voice_worker(caption, file_id):
+                if os.path.getsize(path)/(1024*1024) > 15:
+                    return "File size is too long for free tier. Contact admin to activate premium subscription."
                 for i, api in enumerate(gemini_api_keys):
                     try:
                         client = genai.Client(api_key=api)
-                        file = client.files.upload(file=f"media/voice-{file_id}.ogg")
+                        file = client.files.upload(file=path)
                         response = client.models.generate_content(
                             model = "gemini-2.5-flash",
                             contents = [caption, file],
@@ -2072,8 +2260,8 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                         print(f"Error getting response for api-{i}.\n\nError Code - {e}")
                 return None
 
-            os.remove(f"media/voice-{file_id}.ogg")
             response = await asyncio.to_thread(gemini_voice_worker, caption, file_id)
+            os.remove(f"media/voice-{file_id}.ogg")
             if type(response) == str:
                 await update.message.reply_text(response)
                 await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
@@ -2091,11 +2279,18 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 #function to handle sticker
 async def handle_sticker(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        chat_id = update.effective_chat.id
+        if await is_ddos(update, content, chat_id):
+            await update.message.reply_text("Spamming Detected!!!\n\nYou will be banned for the next 60 seconds.")
+            return
         message = await update.message.reply_text("Downloading Sticker...")
         await message.edit_text("🤖 Analyzing Sticker...\nThis may take a while ⏳")
-        chat_id = update.effective_user.id
         settings = await get_settings(chat_id)
         if update.message and update.message.sticker:
+            file_size = update.message.sticker.file_size/(1024*1024)
+            if file_size > 20:
+                await update.message.reply_text("Failed to process your request. Telegram bot only  supports file up to 20 MB.")
+                return
             sticker = update.message.sticker
             file_id = sticker.file_unique_id
             caption = ""
@@ -2114,6 +2309,8 @@ async def handle_sticker(update : Update, content : ContextTypes.DEFAULT_TYPE) -
             await file.download_to_drive(path)
 
             def gemini_sticker_worker(path):
+                if os.path.getsize(path)/(1024*1024) > 7:
+                    return "File size is too long for free tier. Contact admin to activate premium subscription."
                 for i,api_key in enumerate(gemini_api_keys):
                     try:
                         sticker = open(path, "rb").read()
@@ -2162,12 +2359,19 @@ async def handle_sticker(update : Update, content : ContextTypes.DEFAULT_TYPE) -
 #function to handle document
 async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        chat_id = update.effective_chat.id
+        if await is_ddos(update, content, chat_id):
+            await update.message.reply_text("Spamming Detected!!!\n\nYou will be banned for the next 60 seconds.")
+            return
         await update.message.chat.send_action(action=ChatAction.TYPING)
         os.makedirs("media", exist_ok=True)
-        chat_id = update.effective_chat.id
         chat_type = update.message.chat.type
         settings = await get_settings(chat_id)
-        if update.message.document:
+        if update.message and update.message.document:
+            file_size = update.message.document.file_size/(1024*1024)
+            if file_size > 20:
+                await update.message.reply_text("Failed to process your request. Telegram bot only  supports file up to 20 MB.")
+                return
             message = await update.message.reply_text("Downloading Document...")
             caption = update.message.caption or "Describe this document."
             prompt = await create_prompt(update, content, caption, chat_id, 1)
@@ -2185,6 +2389,8 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
 
             await message.edit_text("🤖 Analyzing document...\nThis may take a while ⏳")
             def gemini_doc_worker(caption, path):
+                if os.path.getsize(path)/(1024*1024) > 15:
+                    return "File size is too long for free tier. Contact admin to activate premium subscription."
                 for i,api_key in enumerate(gemini_api_keys):
                     try:
                         client = genai.Client(api_key=api_key)
@@ -2198,7 +2404,6 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
                         )
                         if response.prompt_feedback and response.prompt_feedback.block_reason:
                             return f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason}"
-                        os.remove(path)
                         try:
                             response.text
                             return response
@@ -2209,6 +2414,7 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
                 return None
             
             response = await asyncio.to_thread(gemini_doc_worker, prompt, path)
+            os.remove(path)
             if type(response) == str:
                 await update.message.reply_text(response)
                 await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
@@ -2478,7 +2684,7 @@ async def admin_action(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None
 async def add_or_delete_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
         global all_admins
-        user_id = update.message.text.strip()
+        user_id = int(update.message.text.strip())
         action = content.user_data.get("admin_action")
         msg_id = content.user_data.get("aa_message_id")
         await content.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg_id)
@@ -2496,12 +2702,19 @@ async def add_or_delete_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) 
                 await update.message.reply_text(f"{user_id} is already an Admin.")
             return ConversationHandler.END
         elif action == "delete_admin":
-            if user_id in all_admins:
-                await asyncio.to_thread(
-                    db["admin"].update_one, 
-                    {"type" : "admin"},
-                    {"$pull" : {"admin" : user_id}}
-                )
+            if user_id in all_admins or str(user_id) in all_admins:
+                try:
+                    await asyncio.to_thread(
+                        db["admin"].update_one, 
+                        {"type" : "admin"},
+                        {"$pull" : {"admin" : user_id}}
+                    )
+                except:
+                    await asyncio.to_thread(
+                        db["admin"].update_one, 
+                        {"type" : "admin"},
+                        {"$pull" : {"admin" : str(user_id)}}
+                    )
                 await update.message.reply_text(f"Successfully deleted {user_id} from admin.")
                 all_admins = await asyncio.to_thread(load_admin)
             else:
