@@ -910,8 +910,8 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 contents = [user_message],
                 config = config,
             )
-            with open("response.txt", "w") as file:
-                json.dump(response.to_json_dict(), file, indent=2, ensure_ascii=False)
+            # with open("response.txt", "w") as file:
+            #     json.dump(response.to_json_dict(), file, indent=2, ensure_ascii=False)
             return response
         response = await asyncio.to_thread(sync_block, api)
         has_function = False
