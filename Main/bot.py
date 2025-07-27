@@ -61,7 +61,7 @@ from telegram.ext import(
 
 key = os.getenv("decryption_key")
 fernet = Fernet(key)
-
+base_dir = os.path.dirname(os.path.abspath(__file__))
 
 #code to ignore warnig about per_message in conv handler and increase poll size
 warnings.filterwarnings("ignore",category=PTBUserWarning)
@@ -70,7 +70,7 @@ tg_request = HTTPXRequest(connection_pool_size=50, pool_timeout=30)
 
 
 #a flask to ignore web pulling condition
-app = Flask(__name__, template_folder="website")
+app = Flask(__name__, template_folder=os.path.join(base_dir, "website"))
 limiter = Limiter(key_func=get_remote_address)
 limiter.init_app(app)
 @app.route('/')
