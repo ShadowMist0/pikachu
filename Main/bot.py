@@ -76,7 +76,7 @@ limiter.init_app(app)
 @app.route('/')
 @limiter.limit("20 per minute")
 def home():
-    return render_template("website/404.html")
+    return render_template("404.html")
 
 @app.route('/secret_admin_path', methods=['GET'])
 def admin_route():
