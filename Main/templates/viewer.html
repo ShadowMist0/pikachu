@@ -35,7 +35,6 @@
       --code-bg: #0d1117;
       --header-bg: rgba(26, 26, 26, 0.8);
       --shadow: rgba(0, 170, 255, 0.1);
-
       --transition-speed: 0.3s;
     }
 
@@ -51,289 +50,124 @@
       --shadow: rgba(0, 123, 255, 0.1);
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
-      margin: 0;
-      padding: 1rem;
-      min-height: 100vh;
-      font-family: 'Inter', sans-serif;
-      color: var(--text);
-      overflow: hidden;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      /* Darker, more subtle animated background */
+      margin: 0; padding: 0; min-height: 100vh;
+      font-family: 'Inter', sans-serif; color: var(--text);
+      overflow: hidden; display: flex; justify-content: center; align-items: center;
       background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
       transition: background var(--transition-speed), color var(--transition-speed);
     }
 
     .container {
-      display: flex;
-      width: 98vw;
-      max-width: none;
-      height: 98vh;
+      display: flex; flex-direction: column;
+      width: 100vw; height: 100vh;
       background: var(--container-bg);
-      border-radius: 16px;
-      border: 1px solid var(--border);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      overflow: hidden;
-      transition: background var(--transition-speed), border-color var(--transition-speed);
-    }
-
-    /* --- Sidebar --- */
-    .sidebar {
-      width: 280px;
-      background: var(--header-bg);
-      border-right: 1px solid var(--border);
-      padding-top: 1rem;
-      display: flex;
-      flex-direction: column;
-      transition: background var(--transition-speed);
-    }
-
-    .sidebar-header {
-      padding: 0 1rem 1rem 1rem;
-      border-bottom: 1px solid var(--border);
-    }
-
-    #file-filter {
-      width: 100%;
-      padding: 0.5rem 0.75rem;
-      background-color: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-family: 'Inter', sans-serif;
-    }
-
-    .file-tree-container {
-      flex-grow: 1;
-      overflow-y: auto;
-      padding: 0.5rem 0;
-    }
-
-    .file-tree {
-      padding: 0;
-      margin: 0;
-      list-style-type: none;
-    }
-
-    .file-tree-item {
-      padding: 0.6rem 1.25rem;
-      cursor: pointer;
-      user-select: none;
-      transition: background-color 0.2s ease;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-family: 'Fira Code', monospace;
-      font-size: 0.9rem;
-    }
-
-    .file-tree-item.file:hover {
-      background-color: rgba(0, 170, 255, 0.2);
-    }
-
-    .file-tree-item.active {
-      background-color: var(--primary);
-      color: #fff;
-      font-weight: 600;
-    }
-
-    body.light-mode .file-tree-item.active {
-      color: #fff;
-    }
-
-    .folder > .folder-name {
-      display: block;
-      width: 100%;
-    }
-
-    .folder > .folder-name::before {
-      content: '▸';
-      margin-right: 0.5rem;
-      display: inline-block;
-      transition: transform 0.2s ease;
-    }
-
-    .folder.open > .folder-name::before {
-      transform: rotate(90deg);
-    }
-
-    .file::before {
-      content: '📄';
-      margin-right: 0.5rem;
-      opacity: 0.8;
-    }
-
-    .nested {
-      display: none;
-      padding-left: 1rem;
-      list-style-type: none;
-    }
-
-    .open > .nested {
-      display: block;
-    }
-
-    /* --- Code Viewer --- */
-    .code-viewer {
-      flex-grow: 1;
-      display: flex;
-      flex-direction: column;
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
       overflow: hidden;
     }
+
+    .code-viewer { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
 
     .page-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1rem 2rem;
-      background: var(--header-bg);
-      border-bottom: 1px solid var(--border);
-      user-select: none;
-      box-shadow: 0 4px 12px var(--shadow);
-      flex-shrink: 0;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 1rem 1.5rem; background: var(--header-bg); border-bottom: 1px solid var(--border);
+      user-select: none; box-shadow: 0 4px 12px var(--shadow); flex-shrink: 0; flex-wrap: wrap; gap: 1rem;
     }
 
-    h2 {
-      font-weight: 600;
-      font-size: 1.75rem;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin: 0;
-    }
+    h2 { font-weight: 600; font-size: 1.5rem; display: flex; align-items: center; gap: 0.75rem; margin: 0; }
+    .header-buttons { display: flex; gap: 0.75rem; }
 
-    .header-buttons {
-      display: flex;
-      gap: 1rem;
-    }
-
-    .action-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.75rem 1.5rem;
-      font-weight: 600;
-      color: white;
-      border-radius: 12px;
-      text-decoration: none;
+    .action-link, .action-button {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.6rem 1.2rem; font-weight: 600; color: white;
+      border-radius: 12px; text-decoration: none;
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
       transition: transform 0.3s ease, box-shadow 0.3s ease;
-      cursor: pointer;
-      user-select: none;
-      border: none;
+      cursor: pointer; user-select: none; border: none; font-size: 0.9rem;
     }
-
-    .action-link.edit {
-        background: linear-gradient(45deg, #6a82fb, #fc5c7d);
-    }
-
-    .theme-switcher {
-      background: linear-gradient(45deg, #8a2be2, #4169e1);
-    }
-
-    .action-link:hover,
-    .action-link:focus {
-      outline: none;
-      transform: translateY(-3px);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    
+    .action-button.browse { background: linear-gradient(45deg, #3D7EAA, #ffe47a); }
+    .action-link.edit { background: linear-gradient(45deg, #6a82fb, #fc5c7d); }
+    .theme-switcher { background: linear-gradient(45deg, #8a2be2, #4169e1); }
+    .action-link:hover, .action-link:focus, .action-button:hover, .action-button:focus {
+      outline: none; transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
     }
 
     .code-container {
-      flex-grow: 1;
-      display: flex;
-      flex-direction: column;
-      margin: 1rem;
-      border-radius: 12px;
-      overflow: hidden;
-      border: 1px solid var(--border);
+      flex-grow: 1; display: flex; flex-direction: column; margin: 1rem;
+      border-radius: 12px; overflow: hidden; border: 1px solid var(--border);
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     }
 
     .code-header {
-      background: var(--header-bg);
-      padding: 0.75rem 1.25rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid var(--border);
-      user-select: none;
-      flex-shrink: 0;
+      background: var(--header-bg); padding: 0.75rem 1.25rem;
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid var(--border); user-select: none; flex-shrink: 0;
     }
 
-    .filename {
-      font-family: 'Fira Code', monospace;
-      color: var(--text);
-      opacity: 0.7;
-      font-weight: 500;
-    }
+    .filename { font-family: 'Fira Code', monospace; color: var(--text); opacity: 0.7; font-weight: 500; }
+    .btn-group { display: flex; gap: 0.75rem; }
 
-    .btn-group {
-      display: flex;
-      gap: 0.75rem;
+    .copy-btn, .download-btn {
+      background: rgba(255, 255, 255, 0.1); color: var(--text); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.5rem 0.75rem; cursor: pointer; transition: background-color 0.2s ease;
     }
-
-    .copy-btn,
-    .download-btn {
-      background: rgba(255, 255, 255, 0.1);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.5rem 0.75rem;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-    }
-    
-    .copy-btn:hover, .download-btn:hover {
-        background: rgba(255, 255, 255, 0.2);
-        color: var(--accent);
-    }
+    .copy-btn:hover, .download-btn:hover { background: rgba(255, 255, 255, 0.2); color: var(--accent); }
 
     pre {
-      margin: 0;
-      padding-left: 1rem !important; /* Adjust for line numbers */
-      background: var(--code-bg);
-      font-family: 'Fira Code', monospace;
-      font-size: 1rem;
-      line-height: 1.5;
-      overflow: auto;
-      flex-grow: 1;
+      margin: 0; padding-left: 1rem !important; background: var(--code-bg);
+      font-family: 'Fira Code', monospace; font-size: 1rem; line-height: 1.5;
+      overflow: auto; flex-grow: 1;
     }
-    
-    .line-numbers .line-numbers-rows {
-        border-right: 1px solid var(--border) !important;
-        opacity: 0.5;
-    }
+    .line-numbers .line-numbers-rows { border-right: 1px solid var(--border) !important; opacity: 0.5; }
 
-    @media (max-width: 768px) {
-      body {
-        padding: 0;
-      }
-      .container {
-        flex-direction: column;
-        width: 100vw;
-        height: 100vh;
-        border-radius: 0;
-      }
-      .sidebar {
-        width: 100%;
-        height: 250px; /* Increased height for better usability */
-        border-right: none;
-        border-bottom: 1px solid var(--border);
-      }
-      .code-viewer {
-        height: calc(100vh - 250px);
-      }
+    .file-modal {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.7); backdrop-filter: blur(10px);
+      display: none; align-items: center; justify-content: center; z-index: 1000;
+    }
+    .file-modal.show { display: flex; }
+
+    .file-modal-content {
+      background: var(--container-bg); border-radius: 16px; border: 1px solid var(--border);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4); width: 90vw; max-width: 500px;
+      height: 80vh; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .file-modal-header {
+      padding: 1rem; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .file-modal-header h3 { margin: 0; font-size: 1.2rem; }
+    #file-filter {
+      width: 100%; padding: 0.5rem 0.75rem; background-color: var(--code-bg);
+      border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'Inter', sans-serif;
+    }
+    .close-modal-btn { background: none; border: none; color: var(--text); font-size: 1.5rem; cursor: pointer; opacity: 0.7; transition: opacity 0.2s; }
+    .close-modal-btn:hover { opacity: 1; }
+
+    .file-tree-container { flex-grow: 1; overflow-y: auto; padding: 0.5rem 0; }
+    .file-tree { padding: 0; margin: 0; list-style-type: none; }
+    .file-tree-item {
+      padding: 0.6rem 1.25rem; cursor: pointer; user-select: none;
+      transition: background-color 0.2s ease; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; display: flex;
+      align-items: center; gap: 0.5rem; font-family: 'Fira Code', monospace; font-size: 0.9rem;
+    }
+    .file-tree-item.file:hover { background-color: rgba(0, 170, 255, 0.2); }
+    .folder > .folder-name { display: block; width: 100%; }
+    .folder > .folder-name::before { content: '▸'; margin-right: 0.5rem; display: inline-block; transition: transform 0.2s ease; }
+    .folder.open > .folder-name::before { transform: rotate(90deg); }
+    .file::before { content: '📄'; margin-right: 0.5rem; opacity: 0.8; }
+    .nested { display: none; padding-left: 1rem; list-style-type: none; }
+    .open > .nested { display: block; }
+    
+    @media (min-width: 768px) {
+      body { padding: 1rem; }
+      .container { border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+      h2 { font-size: 1.75rem; }
+      .action-link, .action-button { padding: 0.75rem 1.5rem; font-size: 1rem; }
     }
   </style>
 
@@ -348,8 +182,7 @@
     // --- Core Functions ---
     function copyToClipboard() {
       const content = document.getElementById('code-content').innerText;
-      navigator.clipboard.writeText(content);
-      // Add feedback if desired
+      navigator.clipboard.writeText(content).then(() => alert('Copied to clipboard!'));
     }
 
     function downloadFile() {
@@ -367,89 +200,91 @@
     function toggleTheme() {
       const isLight = document.body.classList.toggle('light-mode');
       const themeLink = document.getElementById('prism-theme');
-      themeLink.href = isLight
+      const prismTheme = isLight 
         ? 'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css'
         : 'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css';
+      themeLink.setAttribute('href', prismTheme);
     }
 
     // --- Dynamic File Tree Generation ---
-    function createFileTree(parentElement, files) {
+    // MODIFICATION 1: Function now tracks the base path to build the full relative path.
+    function createFileTree(parentElement, files, basePath = '') {
       files.forEach(file => {
         const item = document.createElement('li');
-        
+        // Create the full path for the current item
+        const currentPath = basePath ? `${basePath}/${file.name}` : file.name;
+
         if (file.type === 'folder') {
           item.classList.add('file-tree-item', 'folder');
           item.innerHTML = `<span class="folder-name">${file.name}</span>`;
           
           const nestedList = document.createElement('ul');
           nestedList.classList.add('nested');
-          createFileTree(nestedList, file.children);
+          if (file.children) {
+            // Pass the new path down to the recursive call
+            createFileTree(nestedList, file.children, currentPath);
+          }
           item.appendChild(nestedList);
 
         } else {
           item.classList.add('file-tree-item', 'file');
           item.textContent = file.name;
-          item.dataset.filename = file.name;
+          // MODIFICATION 2: Store the full relative path in the dataset.
+          item.dataset.filepath = currentPath;
         }
         parentElement.appendChild(item);
       });
     }
 
-
     // --- Event Listeners Setup ---
     document.addEventListener('DOMContentLoaded', () => {
       const fileTreeRoot = document.getElementById('file-tree');
+      const fileModal = document.getElementById('file-modal');
+      const browseBtn = document.getElementById('browse-btn');
+      const closeModalBtn = document.getElementById('close-modal-btn');
       
-      // Fetch the file structure from the backend
+      const showModal = () => fileModal.classList.add('show');
+      const hideModal = () => fileModal.classList.remove('show');
+
+      browseBtn.addEventListener('click', showModal);
+      closeModalBtn.addEventListener('click', hideModal);
+      fileModal.addEventListener('click', e => { if (e.target === fileModal) hideModal(); });
+      
+      // This fetch call is now correctly paired with the Python backend.
       fetch('/api/files')
         .then(response => response.json())
         .then(fileSystem => {
           createFileTree(fileTreeRoot, fileSystem);
           
-          // Use event delegation for file/folder clicks
           fileTreeRoot.addEventListener('click', (e) => {
-            const target = e.target;
+            const target = e.target.closest('.file-tree-item');
+            if (!target) return;
 
-            // Handle folder clicks
-            if (target.classList.contains('folder-name')) {
-              target.parentElement.classList.toggle('open');
+            if (target.classList.contains('folder')) {
+              target.classList.toggle('open');
             }
 
-            // Handle file clicks
+            // MODIFICATION 3: This is the most important change.
             if (target.classList.contains('file')) {
-              // Remove active class from previously selected file
-              const currentActive = fileTreeRoot.querySelector('.active');
-              if (currentActive) {
-                currentActive.classList.remove('active');
-              }
-              // Add active class to clicked file
-              target.classList.add('active');
-              
-              const filename = target.dataset.filename;
-              document.querySelector('.filename').textContent = filename;
-              
-              // Simulate fetching file content
-              document.getElementById('code-content').textContent = `// Content for ${filename} would be loaded here.`;
-              Prism.highlightAll();
+              const filepath = target.dataset.filepath;
+              // Instead of simulating, we navigate to the correct view page.
+              window.location.href = `/view/${filepath}`;
             }
           });
-
-          // Set initial state
-          Prism.highlightAll();
-          const firstFile = fileTreeRoot.querySelector('.file');
-          if(firstFile) firstFile.click();
         })
         .catch(error => console.error('Error fetching file tree:', error));
+        
+      // This will highlight the syntax of the file initially loaded by Flask.
+      Prism.highlightAll();
 
-      // File filter logic
       const fileFilter = document.getElementById('file-filter');
       fileFilter.addEventListener('keyup', () => {
         const filter = fileFilter.value.toLowerCase();
-        const fileItems = fileTreeRoot.querySelectorAll('.file-tree-item.file');
+        const fileItems = fileTreeRoot.querySelectorAll('li.file-tree-item');
         fileItems.forEach(item => {
-          const text = item.textContent.toLowerCase();
-          // A more robust way to hide/show for nested structures
-          item.closest('li').style.display = text.includes(filter) ? 'flex' : 'none';
+            const text = item.textContent.toLowerCase();
+            // This simple filter works for showing/hiding items.
+            item.style.display = text.includes(filter) ? 'flex' : 'none';
         });
       });
     });
@@ -457,18 +292,26 @@
   
 </head>
 <body class="dark-mode">
-  <main class="container" role="main" aria-label="File viewer with file list sidebar">
-    <aside class="sidebar" aria-label="File list">
-      <div class="sidebar-header">
-        <input type="text" id="file-filter" placeholder="Filter files...">
-      </div>
-      <div class="file-tree-container">
-        <ul class="file-tree" id="file-tree">
-          <!-- File list will be dynamically inserted here -->
-        </ul>
-      </div>
-    </aside>
 
+  <!-- File List Modal -->
+  <div class="file-modal" id="file-modal" role="dialog" aria-modal="true">
+    <div class="file-modal-content">
+        <header class="file-modal-header">
+            <h3>Browse Files</h3>
+            <button class="close-modal-btn" id="close-modal-btn" aria-label="Close file browser">×</button>
+        </header>
+        <div style="padding: 0 1rem 1rem;">
+          <input type="text" id="file-filter" placeholder="Filter files...">
+        </div>
+        <div class="file-tree-container">
+          <ul class="file-tree" id="file-tree">
+            <!-- File list will be dynamically inserted here by JavaScript -->
+          </ul>
+        </div>
+    </div>
+  </div>
+
+  <main class="container" role="main" aria-label="File viewer">
     <section class="code-viewer">
       <header class="page-header">
         <h2>
@@ -476,9 +319,11 @@
           Viewing File
         </h2>
         <div class="header-buttons">
+          <button class="action-button browse" id="browse-btn">Browse</button>
+          <!-- This href is filled in by the Flask render_template function -->
           <a class="action-link edit" href="/edit/{{ filename }}" role="button">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-            Edit File
+            Edit
           </a>
           <button class="action-link theme-switcher" onclick="toggleTheme()">Toggle Theme</button>
         </div>
@@ -486,13 +331,15 @@
 
       <article class="code-container" aria-label="Code content">
         <header class="code-header">
+          <!-- This filename is filled in by Flask -->
           <span class="filename">{{ filename }}</span>
           <div class="btn-group">
             <button class="copy-btn" onclick="copyToClipboard()">Copy</button>
             <button class="download-btn" onclick="downloadFile()">Download</button>
           </div>
         </header>
-        <pre class="line-numbers"><code id="code-content" class="language-javascript">{{ content }}</code></pre>
+        <!-- The content is filled in by Flask -->
+        <pre class="line-numbers"><code id="code-content" class="language-python">{{ content }}</code></pre>
       </article>
     </section>
   </main>
