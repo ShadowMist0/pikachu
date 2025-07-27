@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Viewing: {{ filename }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --text: #e0e0e0;
+      --primary: #00aaff;
+      --accent: #00ffaa;
+      --border: rgba(255, 255, 255, 0.1);
+      --container-bg: rgba(26, 26, 26, 0.6); /* Slightly more opaque for better readability on a dynamic bg */
+      --code-bg: #0d1117;
+      --header-bg: rgba(26, 26, 26, 0.8);
+      --shadow: rgba(0, 170, 255, 0.1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    /* --- Animated Gradient Background --- */
+    body {
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      padding: 3rem;
+      background: var(--bg); /* Fallback color */
+      overflow-x: hidden; /* Prevent horizontal scrollbar */
+    }
+
+    .animated-gradient {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1; /* Place it behind all content */
+      background: linear-gradient(-45deg, #0a192f, #1e3a5f, #23a6d5, #23d5ab);
+      background-size: 400% 400%;
+      animation: gradient-animation 15s ease infinite;
+    }
+
+    @keyframes gradient-animation {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    /* --- End of Background --- */
+
+    .main-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        position: relative;
+        z-index: 1;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1000px;
+      background: var(--container-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+
+    h2 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .back-link {
+      background: linear-gradient(45deg, var(--primary), var(--accent));
+      color: #fff;
+      padding: 0.75rem 1.5rem;
+      border-radius: 12px;
+      text-decoration: none;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      box-shadow: 0 4px 15px rgba(0, 170, 255, 0.2);
+      transition: all 0.3s ease;
+      border: none;
+    }
+
+    .back-link:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(0, 170, 255, 0.3);
+    }
+    
+    .code-container {
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    
+    .code-header {
+        background: var(--header-bg);
+        padding: 0.75rem 1.25rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--border);
+    }
+    
+    .code-header .filename {
+        font-family: 'Fira Code', monospace;
+        color: #aaa;
+    }
+    
+    .copy-btn {
+        background: rgba(42, 42, 42, 0.8);
+        color: #aaa;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-family: 'Inter', sans-serif;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+    
+    .copy-btn:hover {
+        background: rgba(58, 58, 58, 0.9);
+        color: var(--accent);
+    }
+
+    pre {
+      background: var(--code-bg);
+      padding: 1.5rem;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-family: 'Fira Code', monospace;
+      font-size: 1rem;
+      line-height: 1.5;
+      max-height: 60vh;
+      overflow: auto;
+    }
+    
+    /* Custom Scrollbar */
+    pre::-webkit-scrollbar {
+      width: 12px;
+      height: 12px;
+    }
+    pre::-webkit-scrollbar-track {
+      background: var(--header-bg);
+    }
+    pre::-webkit-scrollbar-thumb {
+      background-color: var(--primary);
+      border-radius: 20px;
+      border: 3px solid var(--header-bg);
+    }
+    pre::-webkit-scrollbar-thumb:hover {
+      background-color: var(--accent);
+    }
+  </style>
+  <script>
+    function copyToClipboard() {
+      const content = document.getElementById('code-content').innerText;
+      navigator.clipboard.writeText(content).then(() => {
+        const btn = document.getElementById('copy-btn');
+        const originalText = btn.innerHTML;
+        btn.innerText = 'Copied!';
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+        }, 1500);
+      });
+    }
+  </script>
+</head>
+<body>
+  <!-- The animated background layer -->
+  <div class="animated-gradient"></div>
+
+  <!-- All page content goes into a wrapper to sit above the background -->
+  <div class="main-content">
+    <div class="container">
+      <div class="page-header">
+        <h2>
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          Viewing File
+        </h2>
+        <a class="back-link" href="/files">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          Back to Files
+        </a>
+      </div>
+
+      <div class="code-container">
+          <div class="code-header">
+              <span class="filename">{{ filename }}</span>
+              <button class="copy-btn" id="copy-btn" onclick="copyToClipboard()">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  Copy
+              </button>
+          </div>
+          <pre><code id="code-content">{{ content }}</code></pre>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -20,10 +20,8 @@ from google.genai import types
 from pymongo import MongoClient
 from flask_limiter import Limiter
 from collections import defaultdict
-from flask import render_template
 from geopy.distance import geodesic
 from cryptography.fernet import Fernet
-from flask import Flask, request, abort
 from pymongo.server_api import ServerApi
 from telegram.constants import ChatAction
 from telegram.request import HTTPXRequest
@@ -48,6 +46,15 @@ from telegram.ext import(
     ConversationHandler,
     CallbackQueryHandler,
 )
+from flask import(
+    Flask,
+    render_template,
+    request,
+    send_from_directory,
+    abort,
+    redirect,
+    url_for
+)
 
 
 
@@ -61,7 +68,7 @@ from telegram.ext import(
 
 key = os.getenv("decryption_key")
 fernet = Fernet(key)
-base_dir = os.path.dirname(os.path.abspath(__file__))
+base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 #code to ignore warnig about per_message in conv handler and increase poll size
 warnings.filterwarnings("ignore",category=PTBUserWarning)
@@ -78,12 +85,61 @@ limiter.init_app(app)
 def home():
     return render_template("404.html"), 404
 
-# @app.route('/secret_admin_path', methods=['GET'])
-# def admin_route():
-#     key = request.args.get("key")
-#     if key != os.getenv("MDB_pass_shadow"):
-#         abort(403, description="You are not a admin")
-#     return "Bot is running"
+#admin panel route
+@app.route('/admin', methods=['GET'])
+def admin_route():
+    key = request.args.get("key")
+    if key != os.getenv("MDB_pass_shadow"):
+        abort(403, description="You are not a admin")
+    return render_template("admin.html"), 200
+
+#file browser route
+@app.route("/files", defaults={'req_path': ''})
+@app.route("/files/<path:req_path>")
+@limiter.limit("10 per minute")
+def files(req_path):
+    abs_path = os.path.join(base_dir, req_path)
+    abs_path = os.path.abspath(abs_path)
+    if not abs_path.startswith(base_dir):
+        return "Access Denied 🛑", 403
+    if os.path.isdir(abs_path):
+        try:
+            files = os.listdir(abs_path)
+            files = sorted(files, key=lambda f: (not os.path.isdir(os.path.join(abs_path, f)), f.lower()))
+            file_infos = [{"name": f, "is_dir": os.path.isdir(os.path.join(abs_path, f))} for f in files]
+            parent_path = os.path.dirname(req_path)
+            return render_template("files.html", files=file_infos, current_path=req_path, parent_path=parent_path)
+        except Exception as e:
+            print(f"Error listing files: {e}")
+            return "Error loading files", 500
+    else:
+        return redirect(url_for("view_file", filepath=req_path))
+
+# Route to view a file
+@app.route('/view/<path:filepath>')
+def view_file(filepath):
+    abs_path = os.path.join(base_dir, filepath)
+
+    if os.path.isdir(abs_path):
+        # Redirect directories to file browser
+        return redirect(url_for('files', req_path=filepath))
+    try:
+        with open(abs_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return render_template('viewer.html', filename=filepath, content=content)
+    except Exception as e:
+        return f"Can't read this file: {str(e)}", 500
+
+# Route to download a file
+@app.route('/download/<path:filepath>')
+def download_file(filepath):
+    abs_path = os.path.join(base_dir, filepath)
+    directory = os.path.dirname(abs_path)
+    filename = os.path.basename(abs_path)
+    try:
+        return send_from_directory(directory, filename, as_attachment=True)
+    except Exception as e:
+        return f"Can't download this file: {str(e)}", 500 
 
 def run_web():
     port = int(os.environ.get("PORT", 10000))
@@ -357,14 +413,16 @@ def create_info_file():
 async def load_all_files():
     try:
         print("Loading all files and folder...")
-        await asyncio.to_thread(create_info_file)
-        await asyncio.to_thread(create_memory_file)
-        await asyncio.to_thread(create_persona_file)
-        await asyncio.to_thread(create_routine_file)
-        await asyncio.to_thread(create_settings_file)
-        await asyncio.to_thread(create_user_data_file)
-        await asyncio.to_thread(create_admin_pass_file)
-        await asyncio.to_thread(create_conversation_file)
+        files = os.listdir("/")
+        print(files)
+        # await asyncio.to_thread(create_info_file)
+        # await asyncio.to_thread(create_memory_file)
+        # await asyncio.to_thread(create_persona_file)
+        # await asyncio.to_thread(create_routine_file)
+        # await asyncio.to_thread(create_settings_file)
+        # await asyncio.to_thread(create_user_data_file)
+        # await asyncio.to_thread(create_admin_pass_file)
+        # await asyncio.to_thread(create_conversation_file)
         print("Successfully loaded all file and folder.")
     except Exception as e:
         print(f"Error in load_all_file function. \n\nError code - {e}")
