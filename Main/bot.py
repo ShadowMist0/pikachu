@@ -70,7 +70,7 @@ tg_request = HTTPXRequest(connection_pool_size=50, pool_timeout=30)
 
 
 #a flask to ignore web pulling condition
-app = Flask(__name__, template_folder=os.path.join(base_dir, "website"))
+app = Flask(__name__)
 limiter = Limiter(key_func=get_remote_address)
 limiter.init_app(app)
 @app.route('/')
@@ -78,12 +78,12 @@ limiter.init_app(app)
 def home():
     return render_template("404.html"), 404
 
-@app.route('/secret_admin_path', methods=['GET'])
-def admin_route():
-    key = request.args.get("key")
-    if key != os.getenv("MDB_pass_shadow"):
-        abort(403, description="You are not a admin")
-    return "Bot is running"
+# @app.route('/secret_admin_path', methods=['GET'])
+# def admin_route():
+#     key = request.args.get("key")
+#     if key != os.getenv("MDB_pass_shadow"):
+#         abort(403, description="You are not a admin")
+#     return "Bot is running"
 
 def run_web():
     port = int(os.environ.get("PORT", 10000))
