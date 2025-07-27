@@ -75,7 +75,7 @@ limiter.init_app(app)
 @app.route('/')
 @limiter.limit("20 per minute")
 def home():
-    abort(404)
+    return "Bot is runnig"
 
 @app.route('/secret_admin_path', methods=['GET'])
 def admin_route():
@@ -112,7 +112,7 @@ def get_token():
         return TOKENs
     except Exception as e:
         print(f"Error Code -{e}")
-TOKEN = get_token()[1]
+TOKEN = get_token()[2]
 
 
 #all registered user
@@ -1733,12 +1733,14 @@ async def start(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
         if user_id in users:
             await update.message.reply_text("Hi there, I am your personal assistant. If you need any help feel free to ask me.", reply_markup=reply_markup)
             return
-        if user_id not in users:
+        if user_id not in users and update.message.chat.type == "private":
             keyboard = [
                 [InlineKeyboardButton("Register", callback_data="c_register"), InlineKeyboardButton("Cancel", callback_data="cancel")]
             ]
             markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text("You are not registerd yet.", reply_markup=markup)
+        elif user_id not in users and update.message.chat.type != "private":
+            await update.message.reply_text("You are not registered yet. Please register in private chat with the bot first.", reply_markup=reply_markup)
     except Exception as e:
         print(f"Error in start function. \n Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in start function \n\nError Code -{e}")
@@ -1840,6 +1842,7 @@ global_max_request = 100
 user_requests = defaultdict(list)
 global_requests = []
 banned_users = {}
+banned_time = 120
 
 #A function and code block to protect the bot from DDOS
 async def is_ddos(update:Update,content:ContextTypes.DEFAULT_TYPE, user_id):
@@ -1848,9 +1851,10 @@ async def is_ddos(update:Update,content:ContextTypes.DEFAULT_TYPE, user_id):
 
         #start of the main process
         if user_id in banned_users:
-            if now - banned_users[user_id] > 60:
+            if now - banned_users[user_id] > 120:  # 120 seconds ban
                 del banned_users[user_id]
             else:
+                await update.message.reply_text(f"You are banned for next {banned_time-(now - banned_users[user_id])} seconds due to spamming.")
                 return True
         global_requests[:] = [req for req in global_requests if now - req < global_time_limit]
         global_requests.append(now)
@@ -1861,6 +1865,7 @@ async def is_ddos(update:Update,content:ContextTypes.DEFAULT_TYPE, user_id):
         user_requests[user_id].append(now)
         if len(user_requests[user_id]) > max_request:
             banned_users[user_id] = now
+            await update.message.reply_text(f"Spamming Detected!!!\n\nYou are banned for the next {banned_time} seconds due to spamming.")
             return True
         return False
     except Exception as e:
@@ -1877,7 +1882,6 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
         bot_name = bot_name_obj.name.lower()
         user_id = update.effective_user.id
         if await is_ddos(update, content, user_id):
-            await update.message.reply_text("Spamming Detected!!!\n\nYou will be banned for the next 60 seconds.")
             return
         if user_id not in all_users and update.message.chat.type == "private":
             keyboard = [
@@ -1992,9 +1996,12 @@ async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> No
 #function to handle image
 async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        global gemini_api_keys
         chat_id = update.effective_chat.id
         if await is_ddos(update, content, chat_id):
-            await update.message.reply_text("Spamming Detected!!!\n\nYou will be banned for the next 60 seconds.")
+            return
+        if update.message.chat.type != "private":
+            await update.message.reply_text("This function is only available in private chat.")
             return
         os.makedirs("media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
@@ -2008,6 +2015,11 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                 await update.message.reply_text("Failed to process your request. Telegram bot only  supports file up to 20 MB.")
                 return
             ext = os.path.splitext(os.path.basename(photo_file.file_path))[1]
+            if not ext:
+                ext = ".jpg"
+            if ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+                await message.edit_text("Invalid file format. Only jpg, jpeg, png, webp and gif are supported.")
+                return
             file_id = photo_file.file_unique_id
             path = f"media/{file_id}.{ext}"
             await photo_file.download_to_drive(path)
@@ -2021,7 +2033,8 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             def gemini_photo_worker(image, caption):
                 if os.path.getsize(path)/(1024*1024) > 8:
                     return "File size is too long for free tier. Contact admin to activate premium subscription."
-                for i, api_key in enumerate(gemini_api_keys):
+                temp_api = list(gemini_api_keys)
+                for api_key in temp_api:
                     try:
                         client = genai.Client(api_key=api_key)
                         response = client.models.generate_content(
@@ -2041,7 +2054,10 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                         except:
                             pass
                     except Exception as e:
-                        print(f"Error getting response for API-{i}\n\nError Code - {e}")
+                        print(f"Error getting response for API-{gemini_api_keys.index(api_key)}\n\nError Code - {e}")
+                        temp_api.remove(api_key)
+                        if not temp_api:
+                            return "Failed to process your request. Please try again later."
                 return None
             
             response = await asyncio.to_thread(gemini_photo_worker, photo, prompt)
@@ -2060,9 +2076,12 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 #function to handle video
 async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        global gemini_api_keys
         chat_id = update.effective_chat.id
         if await is_ddos(update, content, chat_id):
-            await update.message.reply_text("Spamming Detected!!!\n\nYou will be banned for the next 60 seconds.")
+            return
+        if update.message.chat.type != "private":
+            await update.message.reply_text("This function is only available in private chat.")
             return
         os.makedirs("media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
@@ -2078,6 +2097,12 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             prompt = await create_prompt(update, content, caption, chat_id, 1)
             message = await update.message.reply_text("Downloading video...")
             file_name = update.message.video.file_name or f"video-{update.message.video.file_unique_id}.mp4"
+            if not file_name.endswith((".mp4", ".mkv", ".avi", ".mov", ".webm")):
+                await message.edit_text("Invalid file format. Only mp4, mkv, avi, mov and webm are supported.")
+                return
+            if len(file_name) > 100:
+                file_name = file_name[:100]
+            file_name = file_name.replace(" ", "_").replace("/", "_").replace("\\", "_").replace(":", "_").replace("*", "_").replace("?", "_").replace('"', "_").replace("<", "_").replace(">", "_").replace("|", "_")
             path = f"media/{file_name}"
             await video_file.download_to_drive(path)
             await message.edit_text("🤖 Analyzing video...\nThis may take a while ⏳")
@@ -2085,7 +2110,8 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             def gemini_analysis_worker(caption, path, video_file):
                 if os.path.getsize(path)/(1024*1024) > 30:
                     return "File size is too long for free tier. Contact admin to activate premium subscription."
-                for i,api_key in enumerate(gemini_api_keys):
+                temp_api = list(gemini_api_keys)
+                for api_key in temp_api:
                     try:
                         if os.path.getsize(path)/(1024*1024) > 20:
                             client = genai.Client(api_key=api_key)
@@ -2123,9 +2149,10 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                         except:
                             pass
                     except Exception as e:
-                        print(f"Error getting response for api-{i}.\n\nError Code - {e}")
-                    return "Failed to process your request."
-            
+                        print(f"Error getting response for api-{gemini_api_keys.index(api_key)}.\n\nError Code - {e}")
+                        temp_api.remove(api_key)
+                    if not temp_api:
+                        return "Failed to process your request."
             response = await asyncio.to_thread(gemini_analysis_worker, prompt, path, video_file)
             os.remove(path)
             if type(response) == str:
@@ -2144,9 +2171,12 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 #fuction to handle audio
 async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        global gemini_api_keys
         chat_id = update.effective_chat.id
         if await is_ddos(update, content, chat_id):
-            await update.message.reply_text("Spamming Detected!!!\n\nYou will be banned for the next 60 seconds.")
+            return
+        if update.message.chat.type != "private":
+            await update.message.reply_text("This function is only available in private chat.")
             return
         os.makedirs("media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
@@ -2161,8 +2191,10 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             ext = os.path.splitext(os.path.basename(f_name))[1] or "mp3"
             file_id = update.message.audio.file_unique_id
             path =  f"media/{file_id}{ext}"
-            print(ext)
-            print(path)
+            valid_ext = [".mp3", ".ogg", ".wav", ".m4a"]
+            if ext not in valid_ext:
+                await message.edit_text("Invalid file format. Only mp3, ogg, wav and m4a are supported.")
+                return
             await audio_file.download_to_drive(path)
             settings = await get_settings(chat_id)
             chat_type = update.message.chat.type
@@ -2177,9 +2209,10 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             def gemini_audio_worker(caption, path):
                 if os.path.getsize(path)/(1024*1024) > 15:
                     return "File size is too long for free tier. Contact admin to activate premium subscription."
-                for i, api in enumerate(gemini_api_keys):
+                temp_api = list(gemini_api_keys)
+                for api_key in temp_api:
                     try:
-                        client = genai.Client(api_key=api)
+                        client = genai.Client(api_key=api_key)
                         file = client.files.upload(file=path)
                         response = client.models.generate_content(
                             model = "gemini-2.5-flash",
@@ -2196,7 +2229,10 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                         except:
                             pass
                     except Exception as e:
-                        print(f"Error getting response for api-{i}.\n\nError Code - {e}")
+                        temp_api.remove(api_key)
+                        print(f"Error getting response for api-{gemini_api_keys.index(api_key)}.\n\nError Code - {e}")
+                if not temp_api:
+                    return "Failed to process your request. Please try again later."
                 return None
 
             
@@ -2219,10 +2255,17 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 #function to handle voice
 async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        global gemini_api_keys
         chat_id = update.effective_chat.id
         if await is_ddos(update, content, chat_id):
-            await update.message.reply_text("Spamming Detected!!!\n\nYou will be banned for the next 60 seconds.")
             return
+        if update.message.chat.type != "private":
+            await update.message.reply_text("This function is only available in private chat.")
+            return
+        if update.message and update.message.voice:
+            if update.message.voice.duration > 60:
+                await update.message.reply_text("Failed to process your request. Telegram bot only supports voice up to 60 seconds.")
+                return
         os.makedirs("media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
         if update.message and update.message.voice:
@@ -2246,9 +2289,10 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             def gemini_voice_worker(caption, file_id):
                 if os.path.getsize(path)/(1024*1024) > 15:
                     return "File size is too long for free tier. Contact admin to activate premium subscription."
-                for i, api in enumerate(gemini_api_keys):
+                temp_api = list(gemini_api_keys)
+                for api_key in temp_api:
                     try:
-                        client = genai.Client(api_key=api)
+                        client = genai.Client(api_key=api_key)
                         file = client.files.upload(file=path)
                         response = client.models.generate_content(
                             model = "gemini-2.5-flash",
@@ -2265,7 +2309,10 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                         except:
                             pass
                     except Exception as e:
-                        print(f"Error getting response for api-{i}.\n\nError Code - {e}")
+                        temp_api.remove(api_key)
+                        print(f"Error getting response for api-{gemini_api_keys.index(api_key)}.\n\nError Code - {e}")
+                if not temp_api:
+                    return "Failed to process your request. Please try again later."
                 return None
 
             response = await asyncio.to_thread(gemini_voice_worker, caption, file_id)
@@ -2287,9 +2334,12 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 #function to handle sticker
 async def handle_sticker(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        global gemini_api_keys
         chat_id = update.effective_chat.id
         if await is_ddos(update, content, chat_id):
-            await update.message.reply_text("Spamming Detected!!!\n\nYou will be banned for the next 60 seconds.")
+            return
+        if update.message.chat.type != "private":
+            await update.message.reply_text("This function is only available in private chat.")
             return
         message = await update.message.reply_text("Downloading Sticker...")
         await message.edit_text("🤖 Analyzing Sticker...\nThis may take a while ⏳")
@@ -2322,7 +2372,8 @@ async def handle_sticker(update : Update, content : ContextTypes.DEFAULT_TYPE) -
             def gemini_sticker_worker(path):
                 if os.path.getsize(path)/(1024*1024) > 7:
                     return "File size is too long for free tier. Contact admin to activate premium subscription."
-                for i,api_key in enumerate(gemini_api_keys):
+                temp_api = list(gemini_api_keys)
+                for api_key in temp_api:
                     try:
                         sticker = open(path, "rb").read()
                         client = genai.Client(api_key=api_key)
@@ -2348,7 +2399,10 @@ async def handle_sticker(update : Update, content : ContextTypes.DEFAULT_TYPE) -
                         except:
                             pass
                     except Exception as e:
-                        print(f"Error getting response for api-{i}.\n\nError Code - {e}")
+                        temp_api.remove(api_key)
+                        if not temp_api:
+                            return "Failed to process your request. Please try again later."
+                        print(f"Error getting response for api-{gemini_api_keys.index(api_key)}.\n\nError Code - {e}")
                 if not response:
                     return None
    
@@ -2370,9 +2424,12 @@ async def handle_sticker(update : Update, content : ContextTypes.DEFAULT_TYPE) -
 #function to handle document
 async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        global gemini_api_keys
         chat_id = update.effective_chat.id
         if await is_ddos(update, content, chat_id):
-            await update.message.reply_text("Spamming Detected!!!\n\nYou will be banned for the next 60 seconds.")
+            return
+        if update.message.chat.type != "private":
+            await update.message.reply_text("This function is only available in private chat.")
             return
         await update.message.chat.send_action(action=ChatAction.TYPING)
         os.makedirs("media", exist_ok=True)
@@ -2383,12 +2440,50 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
             if file_size > 20:
                 await update.message.reply_text("Failed to process your request. Telegram bot only  supports file up to 20 MB.")
                 return
+            if not update.message.document.file_name:
+                await update.message.reply_text("This document doesn't have a file name. Please send a document with a file name.")
+                return
+            if not update.message.document.mime_type:
+                await update.message.reply_text("This document doesn't have a mime type. Please send a document with a mime type.")
+                return
+            if not update.message.document.mime_type.startswith("application/") and not update.message.document.mime_type.startswith("text/"):
+                await update.message.reply_text("This document doesn't have a valid mime type. Please send a document with a valid mime type.")
+                return
             message = await update.message.reply_text("Downloading Document...")
             caption = update.message.caption or "Describe this document."
             prompt = await create_prompt(update, content, caption, chat_id, 1)
             file_name = update.message.document.file_name
-            valid_ext = [".pdf", ".json", ".txt", ".docx"]
+            valid_ext = [
+                ".pdf",
+                ".json",
+                ".txt",
+                ".docx",
+                ".py",
+                ".c",
+                ".cpp",
+                ".cxx",
+                ".html",
+                ".htm",
+                ".js" ,
+                ".java",
+                ".css",
+                ".xml",
+                ".php",
+                ".json",
+                ".doc",
+                ".ppt",
+                ".pptx",
+                ".xls",
+                ".xlsx",
+                ".csv",
+                ".md",
+                ".log",
+                ".yaml",
+                ".yml"
+            ]
+            print(os.path.splitext(os.path.basename(file_name))[1])
             if os.path.splitext(os.path.basename(file_name))[1] not in valid_ext:
+                await message.edit_text("Unsupported Format...")
                 return
             file_id = update.message.document.file_unique_id
             mime = update.message.document.mime_type
@@ -2408,7 +2503,8 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
             def gemini_doc_worker(caption, path):
                 if os.path.getsize(path)/(1024*1024) > 15:
                     return "File size is too long for free tier. Contact admin to activate premium subscription."
-                for i,api_key in enumerate(gemini_api_keys):
+                temp_api = list(gemini_api_keys)
+                for api_key in temp_api:
                     try:
                         client = genai.Client(api_key=api_key)
                         u_doc = client.files.upload(file=path)
@@ -2427,7 +2523,10 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
                         except:
                             pass
                     except Exception as e:
-                        print(f"Error getting response for API{i}.\n\nError Code - {e}")
+                        temp_api.remove(api_key)
+                        if not temp_api:
+                            return "Failed to process your request. Please try again later."
+                        print(f"Error getting response for API{gemini_api_keys.index(api_key)}.\n\nError Code - {e}")
                 return None
             
             response = await asyncio.to_thread(gemini_doc_worker, prompt, path)
