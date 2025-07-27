@@ -1,0 +1,77 @@
+<!-- templates/404.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>404 - Page Not Found</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #0d1117;
+      color: #c9d1d9;
+      font-family: 'Courier New', monospace;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    h1 {
+      font-size: 8rem;
+      color: #58a6ff;
+      text-shadow: 0 0 20px #58a6ff, 0 0 40px #1f6feb;
+      margin-bottom: 0;
+    }
+
+    p {
+      font-size: 1.5rem;
+      color: #8b949e;
+      text-shadow: 0 0 5px #2e8bcc;
+    }
+
+    a {
+      margin-top: 2rem;
+      padding: 12px 24px;
+      background-color: #238636;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: bold;
+      box-shadow: 0 0 10px #238636aa;
+      transition: background-color 0.3s ease, transform 0.3s ease;
+    }
+
+    a:hover {
+      background-color: #2ea043;
+      transform: scale(1.05);
+    }
+
+    .terminal {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 16px 24px;
+      border-radius: 12px;
+      border: 1px solid #30363d;
+      box-shadow: 0 0 20px #161b22;
+      margin-top: 20px;
+      font-size: 1rem;
+      max-width: 80%;
+    }
+  </style>
+</head>
+<body>
+  <h1>404</h1>
+  <p>You've hit a dead end. This page does not exist.</p>
+  <div class="terminal">
+    <code>
+      > curl https://pikachu.com <span style="color:#f85149;">lost</span><br>
+      <span style="color:#f85149;">Error:</span> 404 Not Found<br>
+      <span style="color:#8b949e;">Trace:</span> &nbsp;Bot is still running, but this page is not.<br>
+    </code>
+  </div>
+  <a href="/">⬅️ Return to Base</a>
+</body>
+</html>

@@ -20,6 +20,7 @@ from google.genai import types
 from pymongo import MongoClient
 from flask_limiter import Limiter
 from collections import defaultdict
+from flask import render_template
 from geopy.distance import geodesic
 from cryptography.fernet import Fernet
 from flask import Flask, request, abort
@@ -75,7 +76,7 @@ limiter.init_app(app)
 @app.route('/')
 @limiter.limit("20 per minute")
 def home():
-    return "Bot is runnig"
+    return render_template("website/404.html")
 
 @app.route('/secret_admin_path', methods=['GET'])
 def admin_route():
