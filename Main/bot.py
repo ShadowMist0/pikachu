@@ -70,13 +70,13 @@ tg_request = HTTPXRequest(connection_pool_size=50, pool_timeout=30)
 
 
 #a flask to ignore web pulling condition
-app = Flask(__name__)
+app = Flask(__name__, template_folder="website")
 limiter = Limiter(key_func=get_remote_address)
 limiter.init_app(app)
 @app.route('/')
 @limiter.limit("20 per minute")
 def home():
-    return render_template("404.html")
+    return render_template("404.html"), 404
 
 @app.route('/secret_admin_path', methods=['GET'])
 def admin_route():
