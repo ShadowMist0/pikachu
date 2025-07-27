@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Editing: {{ filename }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --text: #e0e0e0;
+      --primary: #00aaff;
+      --accent: #00ffaa;
+      --border: rgba(255, 255, 255, 0.1);
+      --container-bg: rgba(26, 26, 26, 0.6);
+      --header-bg: rgba(26, 26, 26, 0.8);
+      --success: #22c55e;
+      --error: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      padding: 1rem;
+      background-color: var(--bg);
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+      background-size: 30px 30px;
+      overflow-x: hidden;
+    }
+
+    .main-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 90vw;
+      min-height: 90vh;
+      background: var(--container-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    h2 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .save-button, .format-button {
+      background: linear-gradient(45deg, var(--primary), var(--accent));
+      color: #fff;
+      padding: 0.6rem 1.2rem;
+      border-radius: 10px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .save-button:hover, .format-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 20px rgba(0, 170, 255, 0.3);
+    }
+
+    textarea {
+      width: 100%;
+      flex-grow: 1;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      color: var(--text);
+      font-family: 'Fira Code', monospace;
+      font-size: 1rem;
+      line-height: 1.5;
+      resize: none;
+      min-height: 60vh;
+    }
+
+    .buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 1rem;
+    }
+
+    .notification {
+      padding: 0.75rem 1.25rem;
+      border-radius: 10px;
+      font-weight: 500;
+      text-align: center;
+    }
+    .success { background-color: var(--success); }
+    .error { background-color: var(--error); }
+  </style>
+</head>
+<body>
+  <div class="main-content">
+    <div class="container">
+      <div class="page-header">
+        <h2>
+          ✎ Editing file: {{ filename }}
+        </h2>
+        <div class="buttons">
+          <button class="format-button" onclick="formatContent()">Auto Format</button>
+          <button class="save-button" onclick="saveContent()">Save</button>
+        </div>
+      </div>
+      <textarea id="editor">{{ content | e }}</textarea>
+      <div id="message" class="notification" style="display: none;"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/js-beautify@1.14.7/js/lib/beautify.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/js-beautify@1.14.7/js/lib/beautify-html.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/js-beautify@1.14.7/js/lib/beautify-css.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/js-beautify@1.14.7/js/lib/beautify-js.js"></script>
+  <script>
+    function formatContent() {
+      const editor = document.getElementById('editor');
+      const filename = "{{ filename }}";
+      let content = editor.value;
+      if (filename.endsWith(".html")) content = html_beautify(content);
+      else if (filename.endsWith(".js")) content = js_beautify(content);
+      else if (filename.endsWith(".css")) content = css_beautify(content);
+      editor.value = content;
+    }
+
+    function showMessage(msg, type = "success") {
+      const messageBox = document.getElementById("message");
+      messageBox.textContent = msg;
+      messageBox.className = `notification ${type}`;
+      messageBox.style.display = "block";
+      setTimeout(() => messageBox.style.display = "none", 3000);
+    }
+
+    function saveContent() {
+      const editor = document.getElementById('editor');
+      const filename = "{{ filename }}";
+      let content = editor.value;
+      formatContent();
+      content = editor.value;
+
+      fetch("/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename, content })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          showMessage("Saved successfully ✅", "success");
+          setTimeout(() => window.location.href = "/view/" + encodeURIComponent(filename), 1000);
+        } else {
+          showMessage("Save failed: " + data.message, "error");
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        showMessage("Something went wrong 😢", "error");
+      });
+    }
+  </script>
+</body>
+</html>

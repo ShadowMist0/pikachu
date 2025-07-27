@@ -1,0 +1,44 @@
+{
+  "sdk_http_response": {
+    "headers": {
+      "content-type": "application/json; charset=UTF-8",
+      "vary": "Origin, X-Origin, Referer",
+      "content-encoding": "gzip",
+      "date": "Sun, 27 Jul 2025 11:04:14 GMT",
+      "server": "scaffolding on HTTPServer2",
+      "x-xss-protection": "0",
+      "x-frame-options": "SAMEORIGIN",
+      "x-content-type-options": "nosniff",
+      "server-timing": "gfet4t7; dur=2780",
+      "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+      "transfer-encoding": "chunked"
+    }
+  },
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "Heeeeey! 👋 Ki khobor? Ami toh vabchilam group e shanti ache, kintu mone hocche na! 😅 Shob thik ache toh? Aaj kalke ki kono notun CT er 'virus attack' hoise naki? 🤔 Ami toh shocked, jodi shob normal thake! Ami toh ready chilam kono meme ba CT trauma niye discussion er jonno! 😂"
+          }
+        ],
+        "role": "model"
+      },
+      "finish_reason": "STOP",
+      "index": 0
+    }
+  ],
+  "model_version": "gemini-2.5-flash",
+  "usage_metadata": {
+    "candidates_token_count": 88,
+    "prompt_token_count": 13428,
+    "prompt_tokens_details": [
+      {
+        "modality": "TEXT",
+        "token_count": 13428
+      }
+    ],
+    "total_token_count": 13516
+  },
+  "automatic_function_calling_history": []
+}

@@ -53,7 +53,8 @@ from flask import(
     send_from_directory,
     abort,
     redirect,
-    url_for
+    url_for,
+    jsonify
 )
 
 
@@ -75,6 +76,32 @@ warnings.filterwarnings("ignore",category=PTBUserWarning)
 tg_request = HTTPXRequest(connection_pool_size=50, pool_timeout=30)
 
 
+def get_file_structure(root_path):
+    """Recursively scans a directory and returns its structure as a list of dictionaries."""
+    file_system = []
+    # A set of directories and files to ignore.
+    ignore_list = {'.git', '__pycache__', 'node_modules', '.vscode'}
+
+    for item in os.listdir(root_path):
+        if item in ignore_list:
+            continue
+
+        path = os.path.join(root_path, item)
+        
+        if os.path.isdir(path):
+            file_system.append({
+                'type': 'folder',
+                'name': item,
+                'children': get_file_structure(path)
+            })
+        else:
+            file_system.append({
+                'type': 'file',
+                'name': item
+            })
+            
+    return file_system
+
 
 #a flask to ignore web pulling condition
 app = Flask(__name__)
@@ -84,6 +111,7 @@ limiter.init_app(app)
 @limiter.limit("20 per minute")
 def home():
     return render_template("404.html"), 404
+
 
 #admin panel route
 @app.route('/admin', methods=['GET'])
@@ -96,7 +124,7 @@ def admin_route():
 #file browser route
 @app.route("/files", defaults={'req_path': ''})
 @app.route("/files/<path:req_path>")
-@limiter.limit("10 per minute")
+@limiter.limit("60 per minute")
 def files(req_path):
     abs_path = os.path.join(base_dir, req_path)
     abs_path = os.path.abspath(abs_path)
@@ -115,6 +143,38 @@ def files(req_path):
     else:
         return redirect(url_for("view_file", filepath=req_path))
 
+
+@app.route('/create_file', methods=['POST'])
+def create_file():
+    try:
+        data = request.get_json()
+        current_path = data.get('path', '').strip('/')
+        filename = data.get('filename', 'new_file.txt')
+        if not filename:
+            return jsonify({"error": "Filename cannot be empty"}), 400
+        full_path = os.path.abspath(os.path.join(base_dir, current_path, filename))
+
+        if not full_path.startswith(base_dir):
+            print("Invalid path:", full_path)
+            return jsonify({"error": "Invalid path"}), 400
+
+        if os.path.exists(full_path):
+            print("File already exists:", full_path)
+            return jsonify({"error": "File already exists"}), 409
+
+        with open(full_path, 'w') as f:
+            f.write('')  # create an empty file
+
+        print("File created:", full_path)
+        return jsonify({"message": "File created"}), 201
+
+    except Exception as e:
+        print("Exception creating file:", str(e))
+        return jsonify({"error": str(e)}), 500
+
+
+
+
 # Route to view a file
 @app.route('/view/<path:filepath>')
 def view_file(filepath):
@@ -129,6 +189,65 @@ def view_file(filepath):
         return render_template('viewer.html', filename=filepath, content=content)
     except Exception as e:
         return f"Can't read this file: {str(e)}", 500
+
+# Route to edit a file
+@app.route('/edit/<path:filename>', methods=['GET'])
+def edit_file(filename):
+    abs_path = os.path.join(base_dir, filename)
+    if not abs_path.startswith(base_dir) or not os.path.isfile(abs_path):
+        return "Invalid file path", 403
+    try:
+        with open(abs_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return render_template("editor.html", filename=filename, content=content)
+    except Exception as e:
+        return f"Error reading file: {str(e)}", 500
+
+# Route to save a file
+@app.route('/save', methods=['POST'])
+def save_file():
+    data = request.get_json()
+    filepath = data.get("filename")
+    content = data.get("content")
+    abs_path = os.path.abspath(os.path.join(base_dir, filepath))
+
+    if not abs_path.startswith(base_dir):
+        return jsonify({"success": False, "message": "Invalid file path"}), 403
+
+    try:
+        with open(abs_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return jsonify({"success": True, "message": "File saved successfully."})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# Route to delete a file or directory
+@app.route('/delete_file', methods=['POST'])
+def delete_file():
+    import os, shutil
+    from flask import request, jsonify
+
+    data = request.get_json()
+    current_path = data.get('path', '').strip('/')
+    filename = data.get('filename')
+    if not filename:
+        return jsonify({"error": "Filename cannot be empty"}), 400
+    target_path = os.path.abspath(os.path.join(base_dir, current_path, filename))
+
+    if not target_path.startswith(base_dir):
+        return jsonify({"error": "Invalid file path"}), 400
+
+    try:
+        if os.path.isdir(target_path):
+            shutil.rmtree(target_path)
+        elif os.path.isfile(target_path):
+            os.remove(target_path)
+        else:
+            return jsonify({"error": "File or directory not found"}), 404
+        return jsonify({"message": "Deleted successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 # Route to download a file
 @app.route('/download/<path:filepath>')
@@ -413,16 +532,14 @@ def create_info_file():
 async def load_all_files():
     try:
         print("Loading all files and folder...")
-        files = os.listdir("/")
-        print(files)
-        # await asyncio.to_thread(create_info_file)
-        # await asyncio.to_thread(create_memory_file)
-        # await asyncio.to_thread(create_persona_file)
-        # await asyncio.to_thread(create_routine_file)
-        # await asyncio.to_thread(create_settings_file)
-        # await asyncio.to_thread(create_user_data_file)
-        # await asyncio.to_thread(create_admin_pass_file)
-        # await asyncio.to_thread(create_conversation_file)
+        await asyncio.to_thread(create_info_file)
+        await asyncio.to_thread(create_memory_file)
+        await asyncio.to_thread(create_persona_file)
+        await asyncio.to_thread(create_routine_file)
+        await asyncio.to_thread(create_settings_file)
+        await asyncio.to_thread(create_user_data_file)
+        await asyncio.to_thread(create_admin_pass_file)
+        await asyncio.to_thread(create_conversation_file)
         print("Successfully loaded all file and folder.")
     except Exception as e:
         print(f"Error in load_all_file function. \n\nError code - {e}")
@@ -969,8 +1086,8 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 contents = [user_message],
                 config = config,
             )
-            # with open("response.txt", "w") as file:
-            #     json.dump(response.to_json_dict(), file, indent=2, ensure_ascii=False)
+            with open("Main/response.txt", "w") as file:
+                json.dump(response.to_json_dict(), file, indent=2, ensure_ascii=False)
             return response
         response = await asyncio.to_thread(sync_block, api)
         has_function = False
@@ -1909,6 +2026,8 @@ async def is_ddos(update:Update,content:ContextTypes.DEFAULT_TYPE, user_id):
         now = time.time()
 
         #start of the main process
+        if user_id == 5888166321:
+            return False
         if user_id in banned_users:
             if now - banned_users[user_id] > 120:  # 120 seconds ban
                 del banned_users[user_id]
@@ -2538,7 +2657,20 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
                 ".md",
                 ".log",
                 ".yaml",
-                ".yml"
+                ".yml",
+                ".png",
+                ".jpg",
+                ".jpeg",
+                ".gif",
+                ".webp",
+                ".mp4",
+                ".avi",
+                ".mkv",
+                ".webm",
+                ".mp3",
+                ".ogg",
+                ".wav",
+                ".m4a",
             ]
             print(os.path.splitext(os.path.basename(file_name))[1])
             if os.path.splitext(os.path.basename(file_name))[1] not in valid_ext:
@@ -4264,7 +4396,7 @@ async def main():
         #     port = int(os.environ.get("PORT", 10000)),
         #     webhook_url = url
         #)
-        await run_workers(8)
+        await run_workers(60)
         await app.initialize()
         await app.start()
         await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
