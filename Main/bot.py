@@ -129,7 +129,7 @@ login_manager.init_app(app)
 login_manager.login_view = 'login' # Redirect to /login if user is not logged in
 
 
-# Dummy user database for login functionality
+# Define a simple user store for demonstration purposes
 users = {'admin': {'password': os.getenv("MDB_pass_shadow")}}
 
 class User(UserMixin):
@@ -166,6 +166,27 @@ def logout():
     return redirect(url_for('login'))
 
 
+@app.route('/create_folder', methods=['POST'])
+@login_required
+@limiter.limit("10 per minute")
+def create_folder():
+    data = request.get_json()
+    current_path = data.get('path', '')
+    foldername = data.get('foldername')
+
+    if not foldername:
+        return jsonify({"error": "Folder name is required"}), 400
+
+    full_path = os.path.join(base_dir, current_path, foldername)
+
+    try:
+        os.makedirs(full_path)
+        return jsonify({"message": "Folder created successfully"}), 200
+    except FileExistsError:
+        return jsonify({"error": "Folder already exists"}), 409
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 
 #admin panel route
@@ -179,7 +200,7 @@ def admin_route():
     return render_template("admin.html"), 200
 
 
-#file browser route
+# Route to list files and directories
 @app.route("/files", defaults={'req_path': ''})
 @app.route("/files/<path:req_path>")
 @login_required
@@ -193,7 +214,13 @@ def files(req_path):
         try:
             files = os.listdir(abs_path)
             files = sorted(files, key=lambda f: (not os.path.isdir(os.path.join(abs_path, f)), f.lower()))
-            file_infos = [{"name": f, "is_dir": os.path.isdir(os.path.join(abs_path, f))} for f in files]
+            file_infos = []
+            for f in files:
+                full_item_path = os.path.join(abs_path, f)
+                is_dir = os.path.isdir(full_item_path)
+                file_size = os.path.getsize(full_item_path) if not is_dir else None # Get size only for files
+                file_infos.append({"name": f, "is_dir": is_dir, "size": file_size}) # Add 'size'
+            
             parent_path = os.path.dirname(req_path)
             return render_template("files.html", files=file_infos, current_path=req_path, parent_path=parent_path)
         except Exception as e:
@@ -201,7 +228,7 @@ def files(req_path):
             return "Error loading files", 500
     else:
         return redirect(url_for("view_file", filepath=req_path))
-
+    
 
 @app.route('/create_file', methods=['POST'])
 @login_required
@@ -249,7 +276,6 @@ def view_file(filepath):
     content = ""
     file_extension = (os.path.splitext(filepath)[1] or "").lower()
     
-    # For .db files, read structure and data, then format as JSON
     if file_extension == '.db':
         try:
             con = sqlite3.connect(full_path)
@@ -263,38 +289,27 @@ def view_file(filepath):
             for table_name in tables:
                 cursor.execute(f"PRAGMA table_info({table_name});")
                 columns = [row['name'] for row in cursor.fetchall()]
-                
-                cursor.execute(f"SELECT * FROM {table_name} LIMIT 20;") # Preview first 20 rows
+                cursor.execute(f"SELECT * FROM {table_name}")
                 rows = [dict(row) for row in cursor.fetchall()]
-                
                 db_data.append({"name": table_name, "columns": columns, "rows": rows})
             
             content = json.dumps(db_data)
             con.close()
         except Exception as e:
             content = f"Error reading database: {e}"
-
-    # For images, we don't need to load content here.
-    # The frontend will request it from /raw_file/.
     elif file_extension in ['.png', '.jpg', '.jpeg', '.gif', '.svg']:
-        pass
-
-    # For other files, read as text.
+        pass  # Image files will be handled by the raw_file route
     else:
         try:
             with open(full_path, 'r', encoding='utf-8') as f:
                 content = f.read()
         except UnicodeDecodeError:
             content = "Cannot display file: Content is not valid UTF-8 text."
-
     return render_template('viewer.html', filename=filepath, content=content)
 
 
 @app.route('/raw_file/<path:filepath>')
 def serve_raw_file(filepath):
-    """
-    Serves the raw file for image display and downloads.
-    """
     return send_from_directory(base_dir, filepath, as_attachment=False)
 
 
@@ -362,6 +377,30 @@ def delete_file():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@app.route('/upload_file', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    file = request.files['file']
+    req_path = request.form.get('path', '') # Get the current path from the form data
+
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+
+    if file:
+        full_dir_path = os.path.abspath(os.path.join(base_dir, req_path.strip('/')))
+        if not full_dir_path.startswith(base_dir):
+            return jsonify({'error': 'Invalid upload path'}), 400
+        filename = os.path.basename(file.filename)
+        filepath = os.path.join(full_dir_path, filename)
+
+        try:
+            file.save(filepath)
+            return jsonify({'message': 'File uploaded successfully'}), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+        
 
 # API route to get file structure
 @app.route('/api/files')
@@ -475,9 +514,9 @@ FIREBASE_URL = 'https://last-197cd-default-rtdb.firebaseio.com/routines.json'
 def create_settings_file():
     try:
         print("settings, ", end="")
-        shutil.rmtree("settings", ignore_errors=True)
-        os.makedirs("settings", exist_ok=True)
-        conn = sqlite3.connect("settings/user_settings.db")
+        shutil.rmtree("ext/settings", ignore_errors=True)
+        os.makedirs("ext/settings", exist_ok=True)
+        conn = sqlite3.connect("ext/settings/user_settings.db")
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_settings(
@@ -508,22 +547,22 @@ def create_settings_file():
 def create_conversation_file():
     try:
         print("conversation file")
-        shutil.rmtree("Conversation", ignore_errors=True)
-        os.makedirs("Conversation", exist_ok=True)
+        shutil.rmtree("ext/Conversation", ignore_errors=True)
+        os.makedirs("ext/Conversation", exist_ok=True)
         for user in all_users:
             conv_data = db[f"{user}"].find()[0]["conversation"]
-            with open(f"Conversation/conversation-{user}.txt", "w") as file:
+            with open(f"ext/Conversation/conversation-{user}.txt", "w") as file:
                 if conv_data:
                     file.write(conv_data)
                 else:
                     pass
         try:
             conv_data = db["group"].find()[0]["conversation"]
-            with open(f"Conversation/conversation-group.txt", "w") as file:
+            with open(f"ext/Conversation/conversation-group.txt", "w") as file:
                 file.write(conv_data)
         except:
             print("Group conversation doesn't exist")
-            with open(f"Conversation/conversation-group.txt", "w") as file:
+            with open(f"ext/Conversation/conversation-group.txt", "w") as file:
                 pass
     except Exception as e:
         print(f"Error in create_conversation_file function. \n\n Error Code  {e}")
@@ -533,21 +572,21 @@ def create_conversation_file():
 def create_memory_file():
     try:
         print("memory, ", end="")
-        shutil.rmtree("memory", ignore_errors=True)
-        os.makedirs("memory", exist_ok=True)
+        shutil.rmtree("ext/memory", ignore_errors=True)
+        os.makedirs("ext/memory", exist_ok=True)
         for user in all_users:
             mem_data = db[f"{user}"].find()[0]["memory"]
-            with open(f"memory/memory-{user}.txt", "w") as file:
+            with open(f"ext/memory/memory-{user}.txt", "w") as file:
                 if mem_data:
                     file.write(mem_data)
                 else:
                     pass
         try:
             mem_data = db["group"].find()[0]["memory"]
-            with open(f"memory/memory-group.txt", "w") as file:
+            with open(f"ext/memory/memory-group.txt", "w") as file:
                 file.write(mem_data)
         except:
-            with open(f"memory/memory-group.txt", "w") as file:
+            with open(f"ext/memory/memory-group.txt", "w") as file:
                 pass
     except Exception as e:
         print(f"Error in create_memory_file function. \n\n Error Code  {e}")
@@ -557,11 +596,11 @@ def create_memory_file():
 def create_persona_file():
     try:
         print("persona, ", end="")
-        shutil.rmtree("persona", ignore_errors=True)
-        os.makedirs("persona", exist_ok=True)
+        shutil.rmtree("ext/persona", ignore_errors=True)
+        os.makedirs("ext/persona", exist_ok=True)
         personas = [persona for persona in db["persona"].find({"type":"persona"})]
         for persona in personas:
-            with open(f"persona/{persona["name"]}.txt", "w") as f:
+            with open(f"ext/persona/{persona["name"]}.txt", "w") as f:
                 f.write(persona["persona"])
     except Exception as e:
         print(f"Error in create_persona_file function. \n\n Error Code  {e}")
@@ -571,13 +610,13 @@ def create_persona_file():
 def create_user_data_file():
     try:
         print("user_data, ", end="")
-        if os.path.exists("info/user_data.db"):
+        if os.path.exists("ext/info/user_data.db"):
             try:
-                os.remove("info/user_data.db")
+                os.remove("ext/info/user_data.db")
             except:
                 pass
-        os.makedirs("info", exist_ok=True)
-        conn = sqlite3.connect("info/user_data.db")
+        os.makedirs("ext/info", exist_ok=True)
+        conn = sqlite3.connect("ext/info/user_data.db")
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users(
@@ -607,11 +646,11 @@ def create_user_data_file():
 def create_admin_pass_file():
     try:
         print("admin, ", end="")
-        shutil.rmtree("admin", ignore_errors=True)
-        os.makedirs("admin", exist_ok=True)
+        shutil.rmtree("ext/admin", ignore_errors=True)
+        os.makedirs("ext/admin", exist_ok=True)
         content = db["admin"].find_one({"type" : "admin"})["admin_password"]
         content = fernet.encrypt(content.encode())
-        with open("admin/admin_password.shadow", "wb") as f:
+        with open("ext/admin/admin_password.shadow", "wb") as f:
             f.write(content)
     except Exception as e:
         print(f"Error in create_admin_pass_file function.\n\nError Code - {e}")
@@ -621,15 +660,15 @@ def create_admin_pass_file():
 def create_routine_file():
     try:
         print("routine, ", end="")
-        shutil.rmtree("routine", ignore_errors=True)
-        os.makedirs("routine", exist_ok=True)
-        with open("routine/lab_routine.txt", "w") as f:
+        shutil.rmtree("ext/routine", ignore_errors=True)
+        os.makedirs("ext/routine", exist_ok=True)
+        with open("ext/routine/lab_routine.txt", "w") as f:
             data = db["routine"].find_one({"type" : "routine"})["lab_routine"]
             f.write(data)
-        with open("routine/rt1.png", "wb") as f:
+        with open("ext/routine/rt1.png", "wb") as f:
             data = db["routine"].find_one({"type" : "routine"})["rt1"]
             f.write(data)
-        with open("routine/rt2.png", "wb") as f:
+        with open("ext/routine/rt2.png", "wb") as f:
             data = db["routine"].find_one({"type" : "routine"})["rt2"]
             f.write(data)
     except Exception as e:
@@ -640,12 +679,12 @@ def create_routine_file():
 def create_info_file():
     try:
         print("Creating info, ", end="")
-        shutil.rmtree("info", ignore_errors=True)
-        os.makedirs("info",exist_ok=True)
+        shutil.rmtree("ext/info", ignore_errors=True)
+        os.makedirs("ext/info",exist_ok=True)
         colllection = db["info"]
         for file in colllection.find({"type" : "info"}):
             file_name = file["name"]
-            path = f"info/{file_name}.txt" if file_name == "group_training_data" else f"info/{file_name}.shadow"
+            path = f"ext/info/{file_name}.txt" if file_name == "group_training_data" else f"ext/info/{file_name}.shadow"
             if file_name == "group_training_data":
                 with open(path, "w") as f:
                     f.write(file["data"])
@@ -660,6 +699,7 @@ def create_info_file():
 async def load_all_files():
     try:
         print("Loading all files and folder...")
+        os.makedirs("ext", exist_ok=True)
         await asyncio.to_thread(create_info_file)
         await asyncio.to_thread(create_memory_file)
         await asyncio.to_thread(create_persona_file)
@@ -980,7 +1020,7 @@ async def get_group_data(update:Update, content:ContextTypes.DEFAULT_TYPE, user_
         tools.append(types.Tool(url_context=types.UrlContext))
         if func_name == "get_group_data":
             data = "****TRAINING DATA****\n\n"
-            with open("info/group_training_data.txt") as f:
+            with open("ext/info/group_training_data.txt") as f:
                 data += f.read()
             data += "\n\n****END OF TRAINIG DATA****\n\n"
             data += user_message
@@ -1065,8 +1105,8 @@ async def add_memory_content(update:Update, content:ContextTypes.DEFAULT_TYPE, d
     try:
         await update.message.reply_text("📝🧠 Memory Updated")
         user_id = update.effective_user.id
-        if os.path.exists(f"memory/memory-{user_id}.txt"):
-            with open(f"memory/memory-{user_id}.txt", "a+") as file:
+        if os.path.exists(f"ext/memory/memory-{user_id}.txt"):
+            with open(f"ext/memory/memory-{user_id}.txt", "a+") as file:
                 file.write("\n" + data + "\n")
     except Exception as e:
         print(f"Error in create_image function.\n\nError Code - {e}")
@@ -1081,7 +1121,7 @@ async def add_memory_content(update:Update, content:ContextTypes.DEFAULT_TYPE, d
 #loading persona
 def load_persona(settings):
     try:
-        files = sorted(glob("persona/*txt"))
+        files = sorted(glob("ext/persona/*txt"))
         with open(files[settings[6]], "r") as file:
             persona = file.read()
         return persona
@@ -1113,7 +1153,7 @@ def add_escape_character(text):
 #function to get settings
 async def get_settings(user_id):
     try:
-        conn = sqlite3.connect("settings/user_settings.db")
+        conn = sqlite3.connect("ext/settings/user_settings.db")
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM user_settings WHERE id = ?", (user_id,))
         row = cursor.fetchone()
@@ -1294,7 +1334,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
 def delete_n_convo(user_id, n):
     try:
         if user_id < 0:
-            with open(f"Conversation/conversation-group.txt", "r+", encoding="utf-8") as f:
+            with open(f"ext/Conversation/conversation-group.txt", "r+", encoding="utf-8") as f:
                 data = f.read()
                 data = data.split("You: ")
                 if len(data) >= n+1:
@@ -1318,7 +1358,7 @@ def delete_n_convo(user_id, n):
                         {"$set" : {"conversation" : data}}
                     )
             return
-        with open(f"Conversation/conversation-{user_id}.txt", "r+", encoding="utf-8") as f:
+        with open(f"ext/Conversation/conversation-{user_id}.txt", "r+", encoding="utf-8") as f:
             data = f.read()
             data = data.split("You: ")
             if len(data) >= n+1 and len(data)-n < n:
@@ -1350,28 +1390,28 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
     try:
         settings = await get_settings(update.effective_user.id)
         if user_id > 0:
-            with open("persona/memory_persona.txt", "r", encoding="utf-8") as f:
+            with open("ext/persona/memory_persona.txt", "r", encoding="utf-8") as f:
                 instruction = load_persona(settings) + f.read()
-            with open(f"memory/memory-{user_id}.txt", "a+", encoding = "utf-8") as f:
+            with open(f"ext/memory/memory-{user_id}.txt", "a+", encoding = "utf-8") as f:
                 f.seek(0)
                 data = "***PREVIOUS MEMORY***\n\n"
                 data += f.read()
                 data += "\n\n***END OF MEMORY***\n\n"
-            with open(f"Conversation/conversation-{user_id}.txt", "a+", encoding = "utf-8") as f:
+            with open(f"ext/Conversation/conversation-{user_id}.txt", "a+", encoding = "utf-8") as f:
                 f.seek(0)
                 data += "\n\n***CONVERSATION HISTORY***"
                 data += f.read()
                 data += "\n\n***END OF CONVERSATION***\n\n"
         elif user_id < 0:
             group_id = user_id
-            with open("persona/memory_persona.txt", "r") as f:
+            with open("ext/persona/memory_persona.txt", "r") as f:
                 instruction = f.read()
-            with open(f"memory/memory-group.txt", "a+", encoding = "utf-8") as f:
+            with open(f"ext/memory/memory-group.txt", "a+", encoding = "utf-8") as f:
                 f.seek(0)
                 data = "***PREVIOUS MEMORY***\n\n"
                 data += f.read()
                 data += "\n\n***END OF MEMORY***\n\n"
-            with open(f"Conversation/conversation-group.txt", "a+", encoding = "utf-8") as f:
+            with open(f"ext/Conversation/conversation-group.txt", "a+", encoding = "utf-8") as f:
                 f.seek(0)
                 data += "\n\n***CONVERSATION HISTORY***"
                 data += f.read()
@@ -1388,8 +1428,8 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
         )
         if response.prompt_feedback and response.prompt_feedback.block_reason:
             await update.message.reply_text(f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason} Conversation history is erased.")
-            if os.path.exists(f"Conversation/conversation-{user_id}.txt"):
-                with open(f"Conversation/conversation-{user_id}.txt", "w") as f:
+            if os.path.exists(f"ext/Conversation/conversation-{user_id}.txt"):
+                with open(f"ext/Conversation/conversation-{user_id}.txt", "w") as f:
                     pass
                 await asyncio.to_thread(db[f"{user_id}"].update_one,
                     {"id" : user_id},
@@ -1398,7 +1438,7 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
             return True
         if response.text is not None:
             if user_id > 0:
-                with open(f"memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
+                with open(f"ext/memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
                     f.write(response.text)
                     f.seek(0)
                     memory = f.read()
@@ -1409,7 +1449,7 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
                 await asyncio.to_thread(delete_n_convo, user_id, 10)
             elif user_id < 0:
                 group_id = user_id
-                with open(f"memory/memory-group.txt", "a+", encoding="utf-8") as f:
+                with open(f"ext/memory/memory-group.txt", "a+", encoding="utf-8") as f:
                     f.write(response.text)
                     f.seek(0)
                     memory = f.read()
@@ -1421,8 +1461,8 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
             return True
         else:
             if (gemini_api_keys.index(api) > len(gemini_api_keys)-3):
-                if os.path.exists(f"Conversation/conversation-{user_id}.txt"):
-                    with open(f"Conversation/conversation-{user_id}.txt", "w") as f:
+                if os.path.exists(f"ext/Conversation/conversation-{user_id}.txt"):
+                    with open(f"ext/Conversation/conversation-{user_id}.txt", "w") as f:
                         pass
                     await asyncio.to_thread(db[f"{user_id}"].update_one,
                         {"id" : user_id},
@@ -1447,20 +1487,20 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 "Timestamp is only for you to understand the user better and provide more realistic response"
                 "So, You must not use timestamp in your response."
             )
-            with open("info/rules.shadow", "rb" ) as f:
+            with open("ext/info/rules.shadow", "rb" ) as f:
                 data += fernet.decrypt(f.read()).decode("utf-8")
                 data += "\n***END OF RULES***\n\n\n"
             # if (settings[6] == 4 or settings[6] == 0) and media == 0:
             #     data += "****TRAINING DATA****"
-            #     with open("info/group_training_data.txt", "r") as file:
+            #     with open("ext/info/group_training_data.txt", "r") as file:
             #         data += file.read()
             #     data += "****END OF TRAINIG DATA****"
             data += "***MEMORY***\n"
-            with open(f"memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
+            with open(f"ext/memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
                 f.seek(0)
                 data += f.read()
                 data += "\n***END OF MEMORY***\n\n\n"
-            with open(f"Conversation/conversation-{user_id}.txt", "a+", encoding="utf-8") as f:
+            with open(f"ext/Conversation/conversation-{user_id}.txt", "a+", encoding="utf-8") as f:
                 f.seek(0)
                 data += "***CONVERSATION HISTORY***\n\n"
                 data += f.read()
@@ -1474,19 +1514,19 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 return "Hi"
         if update.message.chat.type != "private":
             data = "***RULES***\n"
-            with open("info/group_rules.shadow", "rb") as f:
+            with open("ext/info/group_rules.shadow", "rb") as f:
                 data += fernet.decrypt(f.read()).decode("utf-8")
                 data += "\n***END OF RULES***\n\n\n"
             data += "******TRAINING DATA******\n\n"
-            with open("info/group_training_data.txt", "r") as f:
+            with open("ext/info/group_training_data.txt", "r") as f:
                 data += f.read()
                 data += "******END OF TRAINING DATA******\n\n"
             data += "***MEMORY***\n"
-            with open(f"memory/memory-group.txt", "a+", encoding="utf-8") as f:
+            with open(f"ext/memory/memory-group.txt", "a+", encoding="utf-8") as f:
                 f.seek(0)
                 data += f.read()
                 data += "\n***END OF MEMORY***\n\n\n"
-            with open(f"Conversation/conversation-group.txt", "a+", encoding="utf-8") as f:
+            with open(f"ext/Conversation/conversation-group.txt", "a+", encoding="utf-8") as f:
                 f.seek(0)
                 data += "***CONVERSATION HISTORY***\n\n"
                 data += f.read()
@@ -1508,11 +1548,11 @@ def save_conversation(user_message : str , gemini_response:str , user_id:int) ->
     try:
         bd_tz = pytz.timezone("Asia/Dhaka")
         now = datetime.now(bd_tz).strftime("%d-%m-%Y, %H:%M:%S")
-        conn = sqlite3.connect("info/user_data.db")
+        conn = sqlite3.connect("ext/info/user_data.db")
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM users WHERE user_id = ?", (user_id,))
         name = cursor.fetchone()[0]
-        with open(f"Conversation/conversation-{user_id}.txt", "a+", encoding="utf-8") as f:
+        with open(f"ext/Conversation/conversation-{user_id}.txt", "a+", encoding="utf-8") as f:
             if user_message == None:
                 f.write(f"{gemini_response}\n")
             else:
@@ -1531,7 +1571,7 @@ def save_conversation(user_message : str , gemini_response:str , user_id:int) ->
 def save_group_conversation(update : Update,user_message, gemini_response):
     try:
         name = update.effective_user.first_name or "X" +" "+ update.effective_user.last_name or "X"
-        with open(f"Conversation/conversation-group.txt", "a+", encoding="utf-8") as f:
+        with open(f"ext/Conversation/conversation-group.txt", "a+", encoding="utf-8") as f:
             f.write(f"\n{name}: {user_message}\nYou: {gemini_response}\n")
             f.seek(0)
             data = f.read()
@@ -1569,7 +1609,7 @@ def separate_code_blocks(data):
 
 #function to identify it is lab for 1st 30 or 2nd 30
 def lab_participant():
-    with open("routine/lab_routine.txt", "r", encoding="utf-8") as f:
+    with open("ext/routine/lab_routine.txt", "r", encoding="utf-8") as f:
         data = f.read()
     lab = [0, '0']
     start_date = datetime.strptime("3-7-2025", "%d-%m-%Y")
@@ -1600,9 +1640,9 @@ async def routine_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) 
     try:
         lab = lab_participant()
         if lab[0]:
-            rt = "routine/rt1.png"
+            rt = "ext/routine/rt1.png"
         else:
-            rt = "routine/rt2.png"
+            rt = "ext/routine/rt2.png"
         keyboard = [
             [InlineKeyboardButton("Live Routine", url="https://routine-c.vercel.app")]
         ]
@@ -1861,9 +1901,9 @@ async def circulate_routine(query, content:ContextTypes.DEFAULT_TYPE) -> None:
         all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
         lab = lab_participant()
         if lab[0]:
-            rt = "routine/rt1.png"
+            rt = "ext/routine/rt1.png"
         else:
-            rt = "routine/rt2.png"
+            rt = "ext/routine/rt2.png"
         failed = 0
         tasks = []
         failed_list = "Failed to send routine to those user:\n"
@@ -1905,7 +1945,7 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
         if not response:
             await update.message.reply_text("Failed to precess your request. Try again later.")
             return
-        if is_ddos(update.effective_user.id):
+        if await is_ddos(update, content, update.effective_user.id):
             return
         if(settings[5]):
             message_object  = await update.message.reply_text("Typing...")
@@ -2027,8 +2067,8 @@ async def start(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
         user_id = update.effective_chat.id
         paths = [
-            f"Conversation/conversation-{user_id}.txt",
-            f"memory/memory-{user_id}.txt",
+            f"ext/Conversation/conversation-{user_id}.txt",
+            f"ext/memory/memory-{user_id}.txt",
         ]
 
         for path in paths:
@@ -2075,7 +2115,7 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
         global gemini_api_keys
         user_message = update.message.text.strip()
         user_id = update.effective_user.id
-        if is_ddos(user_id):
+        if await is_ddos(update, content, user_id):
             return
         if update.message.chat.type != "private" and f"{bot_name.lower()}" not in user_message.lower() and "bot" not in user_message.lower() and "@" not in user_message.lower() and "mama" not in user_message.lower() and "pika" not in user_message.lower():
             return
@@ -2115,9 +2155,9 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
             if response is not None:
                 await send_message(update, content, response, user_message, settings)
             elif response != False:
-                if os.path.exists(f"Conversation/conversation-{user_id}.txt"):
+                if os.path.exists(f"ext/Conversation/conversation-{user_id}.txt"):
                     await update.message.reply_text("Failed to process your request. Try again later.")
-                    with open(f"Conversation/conversation-{user_id}.txt", "w") as f:
+                    with open(f"ext/Conversation/conversation-{user_id}.txt", "w") as f:
                         pass
                 print("Failed to get a response from gemini.")
     except RetryAfter as e:
@@ -2236,8 +2276,8 @@ async def reset(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> 
                 return
         except:
             pass
-        if os.path.exists(f"Conversation/conversation-{user_id}.txt"):
-            with open(f"Conversation/conversation-{user_id}.txt", "w") as f:
+        if os.path.exists(f"ext/Conversation/conversation-{user_id}.txt"):
+            with open(f"ext/Conversation/conversation-{user_id}.txt", "w") as f:
                 pass
             await asyncio.to_thread(db[f"{user_id}"].update_one,
                 {"id" : user_id},
@@ -2259,7 +2299,7 @@ async def api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             return
         keyboard = [[InlineKeyboardButton("cancel", callback_data="cancel_conv")]]
         markup = InlineKeyboardMarkup(keyboard)
-        with open("info/getting_api.shadow", "rb") as f:
+        with open("ext/info/getting_api.shadow", "rb") as f:
             data = fernet.decrypt(f.read()).decode("utf-8")
             await update.message.reply_text(data, reply_markup=markup)
         return 1
@@ -2888,7 +2928,7 @@ async def see_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, query
                 return
         except:
             pass
-        with open(f"memory/memory-{update.callback_query.from_user.id}.txt", "a+") as f:
+        with open(f"ext/memory/memory-{update.callback_query.from_user.id}.txt", "a+") as f:
             f.seek(0)
             data = f.read()
             await query.edit_message_text("Here is my Diary about you:")
@@ -2905,7 +2945,7 @@ async def see_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, query
 async def delete_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> None:
     try:
         user_id = update.effective_chat.id
-        with open(f"memory/memory-{update.callback_query.from_user.id}.txt", "w") as f:
+        with open(f"ext/memory/memory-{update.callback_query.from_user.id}.txt", "w") as f:
             pass
         await asyncio.to_thread(db[f"{user_id}"].update_one,
             {"id" : user_id},
@@ -3010,7 +3050,7 @@ async def help(update: Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             [InlineKeyboardButton("Read Documentation", url = "https://github.com/sifat1996120/Phantom_bot")]
         ]
         help_markup = InlineKeyboardMarkup(keyboard)
-        with open("info/help.shadow", "rb") as file:
+        with open("ext/info/help.shadow", "rb") as file:
             await update.message.reply_text(fernet.decrypt(file.read()).decode("utf-8"), reply_markup=help_markup)
     except Exception as e:
         print(f"Error in help function. \n\n Error Code - {e}")
@@ -3067,7 +3107,7 @@ async def manage_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None
         except:
             pass
         given_password = update.message.text.strip()
-        with open("admin/admin_password.shadow", "rb") as file:
+        with open("ext/admin/admin_password.shadow", "rb") as file:
             password = fernet.decrypt(file.read().strip()).decode("utf-8")
         if password != given_password:
             await update.message.reply_text("Wrong Password.")
@@ -3242,7 +3282,7 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
         else:
             try:
-                conn = sqlite3.connect("info/user_data.db")
+                conn = sqlite3.connect("ext/info/user_data.db")
                 cursor = conn.cursor()
                 cursor.execute("SELECT roll FROM users")
                 roll = int(roll)
@@ -3268,7 +3308,7 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 content.user_data["roll"] = roll
                 keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
                 markup = InlineKeyboardMarkup(keyboard)
-                with open("info/getting_api.shadow", "rb") as file:
+                with open("ext/info/getting_api.shadow", "rb") as file:
                     help_data = add_escape_character(fernet.decrypt(file.read()).decode("utf-8"))
                 msg = await update.message.reply_text(help_data, reply_markup=markup, parse_mode="MarkdownV2")
                 content.user_data["ra_message_id"] = msg.message_id
@@ -3285,14 +3325,14 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
 async def take_user_password(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
         user_password = update.message.text.strip()
-        conn = sqlite3.connect("info/user_data.db")
+        conn = sqlite3.connect("ext/info/user_data.db")
         cursor = conn.cursor()
         cursor.execute("SELECT password FROM users WHERE roll = ?", (content.user_data.get("roll"),))
         password = cursor.fetchone()[0]
         if user_password == password:
             keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
             markup = InlineKeyboardMarkup(keyboard)
-            with open("info/getting_api.shadow", "rb") as file:
+            with open("ext/info/getting_api.shadow", "rb") as file:
                 help_data = add_escape_character(fernet.decrypt(file.read()).decode("utf-8"))
                 msg = await update.message.reply_text(help_data, reply_markup=markup, parse_mode="MarkdownV2")
             content.user_data["ra_message_id"] = msg.message_id
@@ -3402,7 +3442,7 @@ async def take_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
 #function to confirm user password
 async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
-        all_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in sorted(glob("persona/*txt"))]
+        all_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in sorted(glob("ext/persona/*txt"))]
         is_guest = content.user_data.get("guest")
         keyboard = [
             ["Routine", "CT"],
@@ -3413,7 +3453,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
         password = content.user_data.get("password")
         if password == c_password:
             try:
-                conn = sqlite3.connect("info/user_data.db")
+                conn = sqlite3.connect("ext/info/user_data.db")
                 cursor = conn.cursor()
                 if is_guest:
                     user_info = [
@@ -3454,7 +3494,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 )
                 conn.commit()
                 conn.close()
-                conn = sqlite3.connect("settings/user_settings.db")
+                conn = sqlite3.connect("ext/settings/user_settings.db")
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT OR IGNORE INTO user_settings
@@ -3481,7 +3521,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("Mark Attendance", callback_data="c_mark_attendance")]
                 ]
                 markup = InlineKeyboardMarkup(keyboard)
-                if os.path.exists("info/active_attendance.txt"):
+                if os.path.exists("ext/info/active_attendance.txt"):
                     message = await update.message.reply_text("Redirecting to attendance circular.\n please wait...", reply_markup=markup)
                     user_message_id[f"{update.effective_user.id}"] = message.message_id
                 else:
@@ -3534,7 +3574,7 @@ async def take_temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
             await update.message.delete()
             return ConversationHandler.END
         else:
-            conn = sqlite3.connect("settings/user_settings.db")
+            conn = sqlite3.connect("ext/settings/user_settings.db")
             cursor = conn.cursor()
             cursor.execute("UPDATE user_settings SET temperature = ? WHERE id = ?", (data, user_id))
             conn.commit()
@@ -3591,7 +3631,7 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
         else:
             settings = await get_settings(update.effective_user.id)
-            conn = sqlite3.connect("settings/user_settings.db")
+            conn = sqlite3.connect("ext/settings/user_settings.db")
             cursor = conn.cursor()
             if gemini_model_list[settings[2]] != "gemini-2.5-pro":
                 cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
@@ -3811,9 +3851,9 @@ async def take_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
             "absent" : [],
             "distance" : []
         }
-        with open(f"info/location-{date}-{subject}.txt", "w") as f:
+        with open(f"ext/info/location-{date}-{subject}.txt", "w") as f:
             f.write(f"{location.latitude}\n{location.longitude}")
-        with open("info/active_attendance.txt", "w") as f:
+        with open("ext/info/active_attendance.txt", "w") as f:
             f.write(f"{subject}-{teacher}")
         collection.insert_one(data)
         content.user_data["message_id"] = msg.message_id
@@ -3918,11 +3958,11 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
         os.makedirs("media", exist_ok=True)
         all_rolls = [roll for roll in range(2403121, 2403181)]
         date = datetime.today().strftime("%d-%m-%Y")
-        with open("info/active_attendance.txt", "r") as f:
+        with open("ext/info/active_attendance.txt", "r") as f:
             list = f.read().split("-")
         present_students = tuple(db[f"Attendance-{date}"].find_one({"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"})["present"])
         student_data = db["names"].find_one({"type" : "official_data"})["data"]
-        conn = sqlite3.connect("info/user_data.db")
+        conn = sqlite3.connect("ext/info/user_data.db")
         cursor = conn.cursor()
         pdf = FPDF()
         pdf.add_page()
@@ -3980,10 +4020,10 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
             except:
                 pass
         try:
-            if os.path.exists("info/active_attendance.txt"):
-                os.remove("info/active_attendance.txt")
-            if os.path.exists(f"info/location-{date}-{list[0]}.txt"):
-                os.remove(f"info/location-{date}-{list[0]}.txt")
+            if os.path.exists("ext/info/active_attendance.txt"):
+                os.remove("ext/info/active_attendance.txt")
+            if os.path.exists(f"ext/info/location-{date}-{list[0]}.txt"):
+                os.remove(f"ext/info/location-{date}-{list[0]}.txt")
             if os.path.exists(f"media/attendance-{date}-{list[0]}.pdf"):
                 os.remove(f"media/attendance-{date}-{list[0]}.pdf")
         except:
@@ -4040,10 +4080,10 @@ async def take_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
 async def verify_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
         date = datetime.today().strftime("%d-%m-%Y")
-        with open("info/active_attendance.txt", "r") as f:
+        with open("ext/info/active_attendance.txt", "r") as f:
             list = f.read().split("-")
         try:
-            with open(f"info/location-{date}-{list[0]}.txt") as file:
+            with open(f"ext/info/location-{date}-{list[0]}.txt") as file:
                 cr_location = (loc.strip() for loc in file.readlines())
         except Exception as e:
             print("The location file may not exists")
@@ -4051,14 +4091,14 @@ async def verify_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE)
         message = update.message or update.edited_message
         if not message.location:
             await message.reply_text("Enter your location not some random message.")
-            if os.path.exists(f"info/location-{date}-{list[0]}.txt"):
+            if os.path.exists(f"ext/info/location-{date}-{list[0]}.txt"):
                 return "VL"
             else:
                 await message.reply_text("Time limit exceded, Contact CR if you are facing problem.")
                 return ConversationHandler.END
         elif not message.location.live_period:
             await message.reply_text("Sorry static location will not work, give a live location.")
-            if os.path.exists(f"info/location-{date}-{list[0]}.txt"):
+            if os.path.exists(f"ext/info/location-{date}-{list[0]}.txt"):
                 return "VL"
             else:
                 await message.reply_text("Time limit exceded, Contact CR if you are facing problem.")
@@ -4074,7 +4114,7 @@ async def verify_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE)
             if message_age < 20:
                 user_location = (location.latitude, location.longitude)
                 user_id = update.effective_user.id
-                conn = sqlite3.connect("info/user_data.db")
+                conn = sqlite3.connect("ext/info/user_data.db")
                 cursor = conn.cursor()
                 cursor.execute("SELECT name, roll FROM users WHERE user_id = ?", (user_id,))
                 info = cursor.fetchone()
@@ -4129,7 +4169,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             user_id = query.from_user.id
         settings = await get_settings(user_id)
         c_model = tuple(model for model in gemini_model_list)
-        personas = sorted(glob("persona/*txt"))
+        personas = sorted(glob("ext/persona/*txt"))
         c_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in personas]
         c_persona.remove("memory_persona")
 
@@ -4155,7 +4195,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text(f"Streaming let you stream the bot response in real time.\nCurrent setting : {c_s}", reply_markup=markup)
 
         elif query.data == "c_streaming_on":
-            conn = sqlite3.connect("settings/user_settings.db")
+            conn = sqlite3.connect("ext/settings/user_settings.db")
             cursor = conn.cursor()
             cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (1, user_id))
             conn.commit()
@@ -4168,7 +4208,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("Streaming has turned on.")
 
         elif query.data == "c_streaming_off":
-            conn = sqlite3.connect("settings/user_settings.db")
+            conn = sqlite3.connect("ext/settings/user_settings.db")
             cursor = conn.cursor()
             cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (0, user_id))
             conn.commit()
@@ -4181,8 +4221,8 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("Streaming has turned off.")
 
         elif query.data == "c_persona":
-            personas = sorted(glob("persona/*txt"))
-            conn = sqlite3.connect("info/user_data.db")
+            personas = sorted(glob("ext/persona/*txt"))
+            conn = sqlite3.connect("ext/info/user_data.db")
             cursor = conn.cursor()
             cursor.execute("SELECT gender FROM users WHERE user_id = ?", (query.from_user.id, ))
             gender = cursor.fetchone()[0]
@@ -4223,7 +4263,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("Conversation history holds your conversation with the bot.", reply_markup=ch_markup, parse_mode="Markdown")
 
         elif query.data in c_model :
-            conn = sqlite3.connect("settings/user_settings.db")
+            conn = sqlite3.connect("ext/settings/user_settings.db")
             cursor = conn.cursor()
             model_num = c_model.index(query.data)
             if gemini_model_list[model_num] != "gemini-2.5-pro":
@@ -4248,9 +4288,9 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                 await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
 
         elif query.data in c_persona:
-            conn = sqlite3.connect("settings/user_settings.db")
+            conn = sqlite3.connect("ext/settings/user_settings.db")
             cursor = conn.cursor()
-            persona_num = personas.index(f"persona/{query.data}.txt")
+            persona_num = personas.index(f"ext/persona/{query.data}.txt")
             cursor.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona_num, user_id))
             conn.commit()
             conn.close()
@@ -4260,7 +4300,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                     {"id" : user_id},
                     {"$set" : {"settings.6":persona_num}}
             )
-            personas = sorted(glob("persona/*txt"))
+            personas = sorted(glob("ext/persona/*txt"))
             await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(personas[persona_num]))[0]}.")
 
         elif query.data == "g_classroom":
@@ -4287,7 +4327,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("Are you sure you want to toggle the routine?", reply_markup=tr_markup)
 
         elif query.data == "c_tr_sure":
-            with open("routine/lab_routine.txt", "r+", encoding="utf-8") as f:
+            with open("ext/routine/lab_routine.txt", "r+", encoding="utf-8") as f:
                 active = f.read()
                 f.seek(0)
                 f.truncate(0)
@@ -4310,8 +4350,8 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await delete_memory(update, content, query)
 
         elif query.data == "c_ch_show":
-            with open(f"Conversation/conversation-{user_id}.txt", "rb") as file:
-                if os.path.getsize(f"Conversation/conversation-{user_id}.txt") == 0:
+            with open(f"ext/Conversation/conversation-{user_id}.txt", "rb") as file:
+                if os.path.getsize(f"ext/Conversation/conversation-{user_id}.txt") == 0:
                     await query.edit_message_text("You don't have any conversation history.")
                 else:
                     await query.edit_message_text("Your conversation history:")
@@ -4327,7 +4367,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                         [InlineKeyboardButton("Cancel", callback_data="cancel")]
                 ]
                 markup = InlineKeyboardMarkup(keyboard)
-                with open("info/admin_help.shadow", "rb") as file:
+                with open("ext/info/admin_help.shadow", "rb") as file:
                     help_data = fernet.decrypt(file.read()).decode("utf-8")
                     help_data = help_data if help_data else "Sorry no document. Try again later."
                 await query.edit_message_text(help_data, reply_markup=markup)
@@ -4343,7 +4383,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("From here you can manage the AI model this bot use to provide response.\n\nChoose an option:", reply_markup=markup, parse_mode="Markdown")
 
         elif query.data == "c_show_all_user":
-            conn = sqlite3.connect("info/user_data.db")
+            conn = sqlite3.connect("ext/info/user_data.db")
             cursor = conn.cursor()
             cursor.execute("SELECT user_id from users")
             rows = cursor.fetchall()
@@ -4521,7 +4561,7 @@ async def main():
         app.add_handler(MessageHandler(filters.VOICE & ~filters.ChatType.CHANNEL, handle_voice))
         app.add_handler(MessageHandler(filters.VIDEO & ~filters.ChatType.CHANNEL, handle_video))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.ChatType.CHANNEL, echo))
-        # with open("info/webhook_url.shadow", "rb") as file:
+        # with open("ext/info/webhook_url.shadow", "rb") as file:
         #     url = fernet.decrypt(file.read().strip()).decode("utf-8")
         # app.run_webhook(
         #     listen = "0.0.0.0",

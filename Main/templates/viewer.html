@@ -220,7 +220,6 @@
         // We assume this link is the same as the viewing URL for raw files.
         const a = document.createElement('a');
         a.href = `/raw_file/${filename}`; // Backend needs to handle this route
-        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -252,14 +251,15 @@
         html += `<h3>Table: ${table.name}</h3>`;
         if (table.rows.length === 0) {
           html += '<p>This table is empty.</p>';
-          return;
+          return; // Changed back to return for forEach callback
         }
         html += '<table class="db-table"><thead><tr>';
         table.columns.forEach(col => html += `<th>${col}</th>`);
         html += '</tr></thead><tbody>';
         table.rows.forEach(row => {
           html += '<tr>';
-          table.columns.forEach(col => html += `<td>${row[col] || ''}</td>`);
+          // MODIFICATION: Changed || '' to ?? '' to display 0 values
+          table.columns.forEach(col => html += `<td>${row[col] ?? ''}</td>`); 
           html += '</tr>';
         });
         html += '</tbody></table>';
@@ -288,7 +288,7 @@
             // It's a code or text file
             contentArea.classList.add('line-numbers');
             const language = getFileType(filename) === 'code' ? 'clike' : getFileType(filename);
-            contentArea.innerHTML = `<pre><code id="code-content" class="language-${language}">${content.replace(/</g, "<").replace(/>/g, ">")}</code></pre>`;
+            contentArea.innerHTML = `<pre><code id="code-content" class="language-${language}">${content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre>`;
             Prism.highlightAllUnder(contentArea);
         }
     }

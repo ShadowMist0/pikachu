@@ -33,7 +33,9 @@ dependencies = [
     "geopy",
     "pytz",
     "flask-limiter",
-    "flask-login"
+    "flask-login",
+    "werkzeug",
+    "httpx",
 ]
 
 [project.urls]
