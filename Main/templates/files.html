@@ -252,22 +252,33 @@
     </h1>
     <div class="path">Current path: /{{ current_path }}</div>
 
+          
     <div class="top-bar">
-        {% if current_path %}
-        <a class="back-link" href="{{ url_for('files', req_path=parent_path) }}">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="19" y1="12" x2="5" y2="12"></line>
-                <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-            Back
-        </a>
-        {% endif %}
-        <button class="btn" onclick="promptNewFile()">➕ New File</button>
-        <div class="search-bar" style="margin-left: auto;">
-            <input type="text" id="fileSearch" onkeyup="filterFiles()" placeholder="🔍 Search files or folders...">
+        <div>
+            {% if current_path %}
+            <a class="back-link" href="{{ url_for('files', req_path=parent_path) }}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                Back
+            </a>
+            {% endif %}
+            <button class="btn" onclick="promptNewFile()">➕ New File</button>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 1rem; margin-left: auto;">
+            <div class="search-bar">
+                <input type="text" id="fileSearch" onkeyup="filterFiles()" placeholder="🔍 Search files or folders...">
+            </div>
+            <a href="{{ url_for('logout') }}" class="btn" style="background: #e74c3c;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                Logout
+            </a>
         </div>
     </div>
 
+    
     <div class="container">
         <ul>
             {% for file in files %}

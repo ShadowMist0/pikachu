@@ -95,13 +95,13 @@
       outline: none; transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
     }
 
-    .code-container {
+    .content-container {
       flex-grow: 1; display: flex; flex-direction: column; margin: 1rem;
       border-radius: 12px; overflow: hidden; border: 1px solid var(--border);
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     }
 
-    .code-header {
+    .content-header {
       background: var(--header-bg); padding: 0.75rem 1.25rem;
       display: flex; justify-content: space-between; align-items: center;
       border-bottom: 1px solid var(--border); user-select: none; flex-shrink: 0;
@@ -116,10 +116,20 @@
     }
     .copy-btn:hover, .download-btn:hover { background: rgba(255, 255, 255, 0.2); color: var(--accent); }
 
+    .content-area {
+      overflow: auto; flex-grow: 1; background: var(--code-bg);
+      font-family: 'Fira Code', monospace;
+    }
+
+    .content-area img { max-width: 100%; height: auto; display: block; margin: auto; padding: 1rem; }
+
+    .db-table { width: 100%; border-collapse: collapse; margin-bottom: 2rem; }
+    .db-table th, .db-table td { padding: 0.75rem; text-align: left; border: 1px solid var(--border); }
+    .db-table thead { background-color: rgba(255, 255, 255, 0.05); }
+
     pre {
-      margin: 0; padding-left: 1rem !important; background: var(--code-bg);
-      font-family: 'Fira Code', monospace; font-size: 1rem; line-height: 1.5;
-      overflow: auto; flex-grow: 1;
+      margin: 0; padding-left: 1rem !important;
+      font-size: 1rem; line-height: 1.5;
     }
     .line-numbers .line-numbers-rows { border-right: 1px solid var(--border) !important; opacity: 0.5; }
 
@@ -180,21 +190,50 @@
 
   <script>
     // --- Core Functions ---
+    function getFileType(filename) {
+        const extension = (filename.split('.').pop() || '').toLowerCase();
+        if (['png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'webp'].includes(extension)) {
+            return 'image';
+        }
+        if (extension === 'db') {
+            return 'database';
+        }
+        // MODIFICATION: Add more language mappings as needed
+        const langMap = {'py': 'python', 'js': 'javascript', 'css': 'css', 'html': 'markup'};
+        return langMap[extension] || 'code';
+    }
+
     function copyToClipboard() {
-      const content = document.getElementById('code-content').innerText;
-      navigator.clipboard.writeText(content).then(() => alert('Copied to clipboard!'));
+      const contentArea = document.getElementById('content-area');
+      const fileType = getFileType(document.querySelector('.filename').textContent);
+      if (fileType !== 'image') {
+        navigator.clipboard.writeText(contentArea.innerText).then(() => alert('Copied to clipboard!'));
+      }
     }
 
     function downloadFile() {
-      const content = document.getElementById('code-content').innerText;
       const filename = document.querySelector('.filename').textContent;
-      const blob = new Blob([content], { type: 'text/plain' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const fileType = getFileType(filename);
+
+      if (fileType === 'image') {
+        // For images, the backend should provide a direct download link.
+        // We assume this link is the same as the viewing URL for raw files.
+        const a = document.createElement('a');
+        a.href = `/raw_file/${filename}`; // Backend needs to handle this route
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        const content = document.getElementById('content-area').innerText;
+        const blob = new Blob([content], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
     }
 
     function toggleTheme() {
@@ -205,13 +244,59 @@
         : 'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css';
       themeLink.setAttribute('href', prismTheme);
     }
+    
+    // --- Dynamic Content Rendering ---
+    function renderDbContent(data, container) {
+      let html = '';
+      data.forEach(table => {
+        html += `<h3>Table: ${table.name}</h3>`;
+        if (table.rows.length === 0) {
+          html += '<p>This table is empty.</p>';
+          return;
+        }
+        html += '<table class="db-table"><thead><tr>';
+        table.columns.forEach(col => html += `<th>${col}</th>`);
+        html += '</tr></thead><tbody>';
+        table.rows.forEach(row => {
+          html += '<tr>';
+          table.columns.forEach(col => html += `<td>${row[col] || ''}</td>`);
+          html += '</tr>';
+        });
+        html += '</tbody></table>';
+      });
+      container.innerHTML = html;
+    }
+
+    function renderContent(filename, content) {
+        const contentArea = document.getElementById('content-area');
+        const fileType = getFileType(filename);
+
+        // Clear previous content and classes
+        contentArea.innerHTML = '';
+        contentArea.className = 'content-area';
+
+        if (fileType === 'image') {
+            contentArea.innerHTML = `<img src="/raw_file/${filename}" alt="${filename}">`;
+        } else if (fileType === 'database') {
+            try {
+                const dbData = JSON.parse(content);
+                renderDbContent(dbData, contentArea);
+            } catch (e) {
+                contentArea.innerHTML = `<pre>Error parsing database content: ${e.message}</pre>`;
+            }
+        } else {
+            // It's a code or text file
+            contentArea.classList.add('line-numbers');
+            const language = getFileType(filename) === 'code' ? 'clike' : getFileType(filename);
+            contentArea.innerHTML = `<pre><code id="code-content" class="language-${language}">${content.replace(/</g, "<").replace(/>/g, ">")}</code></pre>`;
+            Prism.highlightAllUnder(contentArea);
+        }
+    }
 
     // --- Dynamic File Tree Generation ---
-    // MODIFICATION 1: Function now tracks the base path to build the full relative path.
     function createFileTree(parentElement, files, basePath = '') {
       files.forEach(file => {
         const item = document.createElement('li');
-        // Create the full path for the current item
         const currentPath = basePath ? `${basePath}/${file.name}` : file.name;
 
         if (file.type === 'folder') {
@@ -221,7 +306,6 @@
           const nestedList = document.createElement('ul');
           nestedList.classList.add('nested');
           if (file.children) {
-            // Pass the new path down to the recursive call
             createFileTree(nestedList, file.children, currentPath);
           }
           item.appendChild(nestedList);
@@ -229,7 +313,6 @@
         } else {
           item.classList.add('file-tree-item', 'file');
           item.textContent = file.name;
-          // MODIFICATION 2: Store the full relative path in the dataset.
           item.dataset.filepath = currentPath;
         }
         parentElement.appendChild(item);
@@ -250,7 +333,6 @@
       closeModalBtn.addEventListener('click', hideModal);
       fileModal.addEventListener('click', e => { if (e.target === fileModal) hideModal(); });
       
-      // This fetch call is now correctly paired with the Python backend.
       fetch('/api/files')
         .then(response => response.json())
         .then(fileSystem => {
@@ -264,18 +346,19 @@
               target.classList.toggle('open');
             }
 
-            // MODIFICATION 3: This is the most important change.
             if (target.classList.contains('file')) {
               const filepath = target.dataset.filepath;
-              // Instead of simulating, we navigate to the correct view page.
               window.location.href = `/view/${filepath}`;
             }
           });
         })
         .catch(error => console.error('Error fetching file tree:', error));
         
-      // This will highlight the syntax of the file initially loaded by Flask.
-      Prism.highlightAll();
+      // MODIFICATION: Render initial content based on file type
+      const initialFilename = document.querySelector('.filename').textContent;
+      const initialContent = {{ content|tojson }};
+ // Safely get content from template
+      renderContent(initialFilename, initialContent);
 
       const fileFilter = document.getElementById('file-filter');
       fileFilter.addEventListener('keyup', () => {
@@ -283,7 +366,6 @@
         const fileItems = fileTreeRoot.querySelectorAll('li.file-tree-item');
         fileItems.forEach(item => {
             const text = item.textContent.toLowerCase();
-            // This simple filter works for showing/hiding items.
             item.style.display = text.includes(filter) ? 'flex' : 'none';
         });
       });
@@ -320,7 +402,6 @@
         </h2>
         <div class="header-buttons">
           <button class="action-button browse" id="browse-btn">Browse</button>
-          <!-- This href is filled in by the Flask render_template function -->
           <a class="action-link edit" href="/edit/{{ filename }}" role="button">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
             Edit
@@ -329,17 +410,17 @@
         </div>
       </header>
 
-      <article class="code-container" aria-label="Code content">
-        <header class="code-header">
-          <!-- This filename is filled in by Flask -->
+      <article class="content-container" aria-label="File content">
+        <header class="content-header">
           <span class="filename">{{ filename }}</span>
           <div class="btn-group">
             <button class="copy-btn" onclick="copyToClipboard()">Copy</button>
             <button class="download-btn" onclick="downloadFile()">Download</button>
           </div>
         </header>
-        <!-- The content is filled in by Flask -->
-        <pre class="line-numbers"><code id="code-content" class="language-python">{{ content }}</code></pre>
+        <div id="content-area">
+          <!-- Content will be dynamically rendered here -->
+        </div>
       </article>
     </section>
   </main>
