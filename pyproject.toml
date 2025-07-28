@@ -32,7 +32,8 @@ dependencies = [
     "fpdf",
     "geopy",
     "pytz",
-    "flask-limiter"
+    "flask-limiter",
+    "flask-login"
 ]
 
 [project.urls]

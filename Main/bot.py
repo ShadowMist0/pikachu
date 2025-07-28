@@ -398,7 +398,7 @@ threading.Thread(target=run_web).start()
 #connecting to MongoDB database
 try:
     mongo_pass = os.getenv("MDB_pass_shadow")
-    url = f"mongodb+srv://shadow_mist0:{mongo_pass}@cluster0.zozzwwv.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+    url = f"mongodb+srv://Shadow:{mongo_pass}@cluster0.zozzwwv.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
     client = MongoClient(url, server_api=ServerApi("1"))
     db = client["phantom_bot"]
 except Exception as e:
@@ -1905,6 +1905,8 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
         if not response:
             await update.message.reply_text("Failed to precess your request. Try again later.")
             return
+        if is_ddos(update.effective_user.id):
+            return
         if(settings[5]):
             message_object  = await update.message.reply_text("Typing...")
             buffer = ""
@@ -2073,6 +2075,8 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
         global gemini_api_keys
         user_message = update.message.text.strip()
         user_id = update.effective_user.id
+        if is_ddos(user_id):
+            return
         if update.message.chat.type != "private" and f"{bot_name.lower()}" not in user_message.lower() and "bot" not in user_message.lower() and "@" not in user_message.lower() and "mama" not in user_message.lower() and "pika" not in user_message.lower():
             return
         else:
