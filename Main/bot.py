@@ -120,7 +120,7 @@ limiter.init_app(app)
 @app.route('/')
 @limiter.limit("20 per minute")
 def home():
-    return render_template("404.html"), 404
+    return render_template("404.html"), 200
 
 
 
@@ -873,7 +873,7 @@ get_group_data_function ={
 
 get_ct_data_function = {
     "name" : "get_ct_data",
-    "description" : """Fetch data of upcoming class test or CT use this format to represent""",
+    "description" : """Fetch data of upcoming class test or CT""",
     "parameters" : {
         "type" :"object",
         "properties" : {
@@ -884,7 +884,7 @@ get_ct_data_function = {
 
 get_routine_function = {
     "name" : "get_routine",
-    "description" : "Provide class routine",
+    "description" : "Provide class routine if asked about routine run this function.",
     "parameters" : {
         "type" :"object",
         "properties" : {
@@ -2183,46 +2183,66 @@ async def resources_handler(update:Update, content:ContextTypes.DEFAULT_TYPE):
 
 
 #config info
-time_limit = 5
-max_request = 5
+
+# config info
+time_limit = 3
+max_request = 3
 global_time_limit = 5
 global_max_request = 100
 user_requests = defaultdict(list)
 global_requests = []
 banned_users = {}
-banned_time = 120
+banned_time = 300  # 5 minutes
+long_term_limit = 60  # in seconds
+long_term_max_request = 20  # more than 20 reqs in 60s => banned
 
-#A function and code block to protect the bot from DDOS
-async def is_ddos(update:Update,content:ContextTypes.DEFAULT_TYPE, user_id):
+# A function and code block to protect the bot from DDOS
+async def is_ddos(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id):
     try:
         now = time.time()
 
-        #start of the main process
+        # Allow master user (you, Sifat 😘)
         if user_id == 5888166321:
             return False
+
+        # Check if user is currently banned
         if user_id in banned_users:
-            if now - banned_users[user_id] > 120:  # 120 seconds ban
+            if now - banned_users[user_id] > banned_time:
                 del banned_users[user_id]
             else:
-                await update.message.reply_text(f"You are banned for next {banned_time-(now - banned_users[user_id])} seconds due to spamming.")
                 return True
+
+        # Global rate limit logic
         global_requests[:] = [req for req in global_requests if now - req < global_time_limit]
         global_requests.append(now)
         if len(global_requests) > global_max_request:
             await update.message.reply_text("Global rate exceeded, try again later.")
             return True
-        user_requests[user_id][:] = [req for req in user_requests[user_id] if now - req < time_limit]
+
+        # Per-user short-term (1s) rate check
+        user_requests[user_id][:] = [req for req in user_requests[user_id] if now - req < long_term_limit]
         user_requests[user_id].append(now)
-        if len(user_requests[user_id]) > max_request:
+
+        # Long-term ban if over 20 req in 60s
+        if len(user_requests[user_id]) > long_term_max_request:
             banned_users[user_id] = now
-            await update.message.reply_text(f"Spamming Detected!!!\n\nYou are banned for the next {banned_time} seconds due to spamming.")
+            await update.message.reply_text(
+                f"🚨 Spamming Detected!\n\nYou made {len(user_requests[user_id])} requests in {long_term_limit} seconds.\nYou are banned for the next {banned_time} seconds."
+            )
             return True
+
+        # Short-term rate (1s burst prevention)
+        recent = [req for req in user_requests[user_id] if now - req < time_limit]
+        if len(recent) > max_request:
+            banned_users[user_id] = now
+            await update.message.reply_text(
+                f"Spamming Detected!\n\nYou are banned for the next {banned_time} seconds due to excessive requests."
+            )
+            return True
+
         return False
     except Exception as e:
         print(f"Error in is_ddos function. Error Code - {e}")
-
-
-
 
 
 #function for all other messager that are directly send to bot without any command
@@ -2353,7 +2373,7 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
         if update.message.chat.type != "private":
             await update.message.reply_text("This function is only available in private chat.")
             return
-        os.makedirs("media",exist_ok=True)
+        os.makedirs("ext/media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
         settings = await get_settings(update.effective_user.id)
         if update.message and update.message.photo:
@@ -2371,9 +2391,12 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                 await message.edit_text("Invalid file format. Only jpg, jpeg, png, webp and gif are supported.")
                 return
             file_id = photo_file.file_unique_id
-            path = f"media/{file_id}.{ext}"
+            path = f"ext/media/{file_id}.{ext}"
             await photo_file.download_to_drive(path)
-            photo = Image.open(path)
+            try:
+                photo = Image.open(path)
+            except:
+                await update.message.reply_text("Failed to process. Try again later.")
             prompt = await create_prompt(update, content, caption, chat_id, 1)
 
             if not os.path.exists(path):
@@ -2411,7 +2434,8 @@ async def handle_image(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                 return None
             
             response = await asyncio.to_thread(gemini_photo_worker, photo, prompt)
-            os.remove(path)
+            if os.path.exists(path):
+                os.remove(path)
             if type(response) == str:
                 await update.message.reply_text(response)
                 await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
@@ -2433,7 +2457,7 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
         if update.message.chat.type != "private":
             await update.message.reply_text("This function is only available in private chat.")
             return
-        os.makedirs("media",exist_ok=True)
+        os.makedirs("ext/media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
         if update.message and update.message.video:
             file_size = update.message.video.file_size/(1024*1024)
@@ -2453,7 +2477,7 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             if len(file_name) > 100:
                 file_name = file_name[:100]
             file_name = file_name.replace(" ", "_").replace("/", "_").replace("\\", "_").replace(":", "_").replace("*", "_").replace("?", "_").replace('"', "_").replace("<", "_").replace(">", "_").replace("|", "_")
-            path = f"media/{file_name}"
+            path = f"ext/media/{file_name}"
             await video_file.download_to_drive(path)
             await message.edit_text("🤖 Analyzing video...\nThis may take a while ⏳")
 
@@ -2465,7 +2489,10 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                     try:
                         if os.path.getsize(path)/(1024*1024) > 20:
                             client = genai.Client(api_key=api_key)
-                            up_video = client.files.upload(file=path) 
+                            try:
+                                up_video = client.files.upload(file=path)
+                            except:
+                                return "Failed to process.Try again later"
                             response = client.models.generate_content(
                                 model = "gemini-2.5-flash",
                                 contents = [up_video, caption],
@@ -2504,7 +2531,8 @@ async def handle_video(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                     if not temp_api:
                         return "Failed to process your request."
             response = await asyncio.to_thread(gemini_analysis_worker, prompt, path, video_file)
-            os.remove(path)
+            if os.path.exists(path):
+                os.remove(path)
             if type(response) == str:
                 await update.message.reply_text(response)
                 await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
@@ -2528,7 +2556,7 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
         if update.message.chat.type != "private":
             await update.message.reply_text("This function is only available in private chat.")
             return
-        os.makedirs("media",exist_ok=True)
+        os.makedirs("ext/media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
         if update.message and update.message.audio:
             file_size = update.message.audio.file_size/(1024*1024)
@@ -2540,7 +2568,7 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             f_name = update.message.audio.file_name
             ext = os.path.splitext(os.path.basename(f_name))[1] or "mp3"
             file_id = update.message.audio.file_unique_id
-            path =  f"media/{file_id}{ext}"
+            path =  f"ext/media/{file_id}{ext}"
             valid_ext = [".mp3", ".ogg", ".wav", ".m4a"]
             if ext not in valid_ext:
                 await message.edit_text("Invalid file format. Only mp3, ogg, wav and m4a are supported.")
@@ -2563,7 +2591,10 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                 for api_key in temp_api:
                     try:
                         client = genai.Client(api_key=api_key)
-                        file = client.files.upload(file=path)
+                        try:
+                            file = client.files.upload(file=path)
+                        except:
+                            return "Failed to process. Try again later."
                         response = client.models.generate_content(
                             model = "gemini-2.5-flash",
                             contents = [caption, file],
@@ -2587,7 +2618,8 @@ async def handle_audio(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
 
             
             response = await asyncio.to_thread(gemini_audio_worker, prompt, path)
-            os.remove(path)
+            if os.path.exists(path):
+                os.remove(path)
             if type(response) == str:
                 await update.message.reply_text(response)
                 await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
@@ -2616,7 +2648,7 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             if update.message.voice.duration > 60:
                 await update.message.reply_text("Failed to process your request. Telegram bot only supports voice up to 60 seconds.")
                 return
-        os.makedirs("media",exist_ok=True)
+        os.makedirs("ext/media",exist_ok=True)
         await update.message.chat.send_action(action=ChatAction.TYPING)
         if update.message and update.message.voice:
             file_size = update.message.voice.file_size/(1024*1024)
@@ -2629,7 +2661,7 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
             message = await update.message.reply_text("Downloading voice...")
             voice_file = await update.message.voice.get_file()
             file_id = update.message.voice.file_unique_id
-            path = f"media/voice-{file_id}.ogg"
+            path = f"ext/media/voice-{file_id}.ogg"
             await voice_file.download_to_drive(path)
             if not os.path.exists(path):
                 await update.message.reply_text("Invalid file.")
@@ -2643,7 +2675,10 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                 for api_key in temp_api:
                     try:
                         client = genai.Client(api_key=api_key)
-                        file = client.files.upload(file=path)
+                        try:
+                            file = client.files.upload(file=path)
+                        except:
+                            return "Failed to process. Try again later."
                         response = client.models.generate_content(
                             model = "gemini-2.5-flash",
                             contents = [caption, file],
@@ -2666,7 +2701,8 @@ async def handle_voice(update : Update, content : ContextTypes.DEFAULT_TYPE) -> 
                 return None
 
             response = await asyncio.to_thread(gemini_voice_worker, caption, file_id)
-            os.remove(f"media/voice-{file_id}.ogg")
+            if os.path.exists(f"ext/media/voice-{file_id}.ogg"):
+                os.remove(f"ext/media/voice-{file_id}.ogg")
             if type(response) == str:
                 await update.message.reply_text(response)
                 await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
@@ -2711,9 +2747,9 @@ async def handle_sticker(update : Update, content : ContextTypes.DEFAULT_TYPE) -
             else:
                 ext = "webp"
                 mime = "image/webp"
-            path = f"media/{file_id}.{ext}"
+            path = f"ext/media/{file_id}.{ext}"
             file = await sticker.get_file()
-            os.makedirs("media", exist_ok=True)
+            os.makedirs("ext/media", exist_ok=True)
             await file.download_to_drive(path)
             if not os.path.exists(path):
                 await update.message.reply_text("Invalid file.")
@@ -2757,7 +2793,8 @@ async def handle_sticker(update : Update, content : ContextTypes.DEFAULT_TYPE) -
                     return None
    
             response = await asyncio.to_thread(gemini_sticker_worker, path)
-            os.remove(path)
+            if os.path.exists(path):
+                os.remove(path)
             if type(response) == str:
                 await update.message.reply_text(response)
                 await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
@@ -2782,7 +2819,7 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
             await update.message.reply_text("This function is only available in private chat.")
             return
         await update.message.chat.send_action(action=ChatAction.TYPING)
-        os.makedirs("media", exist_ok=True)
+        os.makedirs("ext/media", exist_ok=True)
         chat_type = update.message.chat.type
         settings = await get_settings(chat_id)
         if update.message and update.message.document:
@@ -2844,22 +2881,21 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
                 ".wav",
                 ".m4a",
             ]
-            print(os.path.splitext(os.path.basename(file_name))[1])
-            if os.path.splitext(os.path.basename(file_name))[1] not in valid_ext:
+            ext = os.path.splitext(os.path.basename(file_name))[1]
+            print(ext)
+            if ext not in valid_ext:
                 await message.edit_text("Unsupported Format...")
                 return
             file_id = update.message.document.file_unique_id
-            mime = update.message.document.mime_type
-            if mime == "application/pdf":
-                path = f"media/{file_name}" if file_name else f"media/{file_id}.pdf"
-            elif mime=="application/json":
-                path = f"media/{file_name}" if file_name else f"media/{file_id}.json"
-            else:
-                path = f"media/{file_name}" if file_name else f"media/{file_id}.txt"
+            path = f"ext/media/{file_id}{ext}"
             doc_file = await update.message.document.get_file()
-            await doc_file.download_to_drive(path)
-            if not os.path.exists(path):
-                await update.message.reply_text("Invalid file.")
+            try:
+                await doc_file.download_to_drive(path)
+                if not os.path.exists(path):
+                    await update.message.reply_text("Invalid file.")
+                    return
+            except:
+                await update.message.reply_text("Invalid File.")
                 return
 
             await message.edit_text("🤖 Analyzing document...\nThis may take a while ⏳")
@@ -2870,7 +2906,10 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
                 for api_key in temp_api:
                     try:
                         client = genai.Client(api_key=api_key)
-                        u_doc = client.files.upload(file=path)
+                        try:
+                            u_doc = client.files.upload(file=path)
+                        except:
+                            return "Failed to process. Try agian later."
                         response = client.models.generate_content(
                             model="gemini-2.5-flash",
                             contents = [u_doc, caption],
@@ -2893,7 +2932,8 @@ async def handle_document(update:Update, content:ContextTypes.DEFAULT_TYPE) -> N
                 return None
             
             response = await asyncio.to_thread(gemini_doc_worker, prompt, path)
-            os.remove(path)
+            if os.path.exists(path):
+                os.remove(path)
             if type(response) == str:
                 await update.message.reply_text(response)
                 await content.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
@@ -3955,7 +3995,7 @@ async def delete_attendace_circular(update:Update, content:ContextTypes.DEFAULT_
 async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
         message = await update.message.reply_text("Processing data...\nPlease wait...")
-        os.makedirs("media", exist_ok=True)
+        os.makedirs("ext/media", exist_ok=True)
         all_rolls = [roll for roll in range(2403121, 2403181)]
         date = datetime.today().strftime("%d-%m-%Y")
         with open("ext/info/active_attendance.txt", "r") as f:
@@ -4005,8 +4045,8 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
         pdf.cell(70, 6, f"{len(present_students)}      ({round((len(present_students)/60)*100, 2)}%)",border=1,align="C")
         pdf.cell(25, 6, "Absent", border=1 , align="C")
         pdf.cell(70, 6, f"{60 - len(present_students)}      ({round(((60 - len(present_students))/60)*100, 2)}%)", border=1, align="C")
-        pdf.output(f"media/attendance-{date}-{list[0]}.pdf")
-        with open(f"media/attendance-{date}-{list[0]}.pdf", "rb") as f:
+        pdf.output(f"ext/media/attendance-{date}-{list[0]}.pdf")
+        with open(f"ext/media/attendance-{date}-{list[0]}.pdf", "rb") as f:
             pdf_file = BytesIO(f.read())
             pdf_file.name = f"attendance-{date}-{list[0]}.pdf"
         for admin in all_admins:
@@ -4024,8 +4064,8 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
                 os.remove("ext/info/active_attendance.txt")
             if os.path.exists(f"ext/info/location-{date}-{list[0]}.txt"):
                 os.remove(f"ext/info/location-{date}-{list[0]}.txt")
-            if os.path.exists(f"media/attendance-{date}-{list[0]}.pdf"):
-                os.remove(f"media/attendance-{date}-{list[0]}.pdf")
+            if os.path.exists(f"ext/media/attendance-{date}-{list[0]}.pdf"):
+                os.remove(f"ext/media/attendance-{date}-{list[0]}.pdf")
         except:
             pass
     except Exception as e:
@@ -4308,7 +4348,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
 
         elif query.data == "c_all_websites":
             keyboard = [
-                [InlineKeyboardButton("CSE 24 Website", url="https://ruetcse24.vercel.app/")],
+                [InlineKeyboardButton("CSE 24 Website", url="https://csearchive.vercel.app/")],
                 [InlineKeyboardButton("Facebook", url="https://www.facebook.com/profile.php?id=61574730479807"), InlineKeyboardButton("Profiles", url="https://ruetcse24.vercel.app/profiles")],
                 [InlineKeyboardButton("Cancel", callback_data="cancel")]
             ]
