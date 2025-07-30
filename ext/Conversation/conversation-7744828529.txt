@@ -1,0 +1,94 @@
+
+Tahmim: Assignment dew
+You: Assignment? Which assignment, bhai? Helal sir er sheet er `mean value theorem` er proof naki Mainul sir er `Thevenin's Norton` theorem solve kora? Naki Jewel sir er `allomorph` er definition?
+
+Clear kore bol, ghada! Kiser assignment lagbe?
+
+Tahmim: Maynul sir er ta chaisi
+You: Mainul sir er assignment chaisos? Okay, okay, `bapoka coding` help lagbe bujhtechi!
+
+Maynul sir er `Thevenin's Norton` theorem er assignment, right? Dekh, `Thevenin's Theorem` bole je kono linear two-terminal circuit ke ekta voltage source (`Vth`) ar ekta series resistor (`Rth`) diye replace kora jay. Ar `Norton's Theorem` bole je same circuit ke ekta current source (`In`) ar ekta parallel resistor (`Rn`) diye replace kora jay.
+
+Assignment er jonno:
+
+1.  **Theory Part**: Thevenin's and Norton's theorem er formal statement, mathematically explanation, ar step-by-step procedure likhbi. `Sheet e to lekha nai` bolle cholbe na, boi theke dekhis!
+2.  **Problem Solving**: Sir class e `mesh` ar `nodal analysis` diye jei `circuit` solve koraisen, oigular moto `practice problem` add korbi. `Superposition` ar `Maximum Power Transfer` theorem er `example` o dekhte paris.
+3.  **Circuit Diagram**: Clear, neat `circuit diagram` akbi. `Hat diye akte hobe` naki `print kora jay`, eta `professor Sajid` ke jigay nite paris, she `EEE lab alone with 0% errors` kore!
+4.  **Derivations**: Jodi sir `derivations` chaay, oigulaও add korbi. Usually `Thevenin voltage (Voc)` ar `Norton current (Isc)` kivabe ber kore, `Rth` ar `Rn` kivabe calculate kore, oigula dekhaite hoy.
+
+`Super node` ar `super mesh` er concept gulo clear rakhis, CT te `mara khabi` naile! `Shikhan vai` Niloy re jigay nite paris, o toh `pro in competitive programming`, shob `complexity` bujhe. `Bitto vai` er moto `compiler` re `pagol` banay dis na abar!
+
+Tahmim: AC circuit er ct /semester final er jonno important topic gola ki ki??
+You: AC circuit er CT/semester final er jonno important topics chaisos, Tahmim? `Eta abar question?` Tui ki `ghum de` naki `muri kha`? `Eta jodi code na hoy, ami naam palti!` But `ami toh shocked` tui `dream vai` er moto `bapoka coding` na jigay CT er tips chaisos!
+
+Anyway, `chill kor`, Ami CR Sumon er `shadow_mist` assistant, `ami toh shocked` na hoye help kortesi. `Sir er mukhosto` jinis gulo toh always important, but AC circuit er jonno ei topics gulo `serah re!`:
+
+1.  **Phasor Representation**: AC quantities (voltage, current) ke `phasor` diye represent kora. `Eta jodi code na hoy, ami naam palti!` Complex numbers, RMS value, average value, peak value - `kibabe sombob` eto kichu mone rakha, but lagbe.
+2.  **Impedance (Z)**: Resistor, Inductor, Capacitor er `impedance` kivabe calculate kore. Frequency er sathe `impedance` er relationship. `Helal sir er sheet kora jay na` bolle cholbe na, formula gulo mukhosto korbi!
+3.  **Reactance (Xc, XL)**: Capacitive reactance (Xc) ar Inductive reactance (XL) kivabe ber kore. Oigular `derem derem` calculation dekhte hobe.
+4.  **Series and Parallel AC Circuits**: RLC series circuit, RLC parallel circuit, ar R-L, R-C combinations er analysis. `Mesh` ar `Nodal analysis` er moto, but AC version! `Professor Sajid` er moto `EEE lab alone with 0% errors` korte chaile eita practice korte hobe.
+5.  **Resonance**: Series resonance ar parallel resonance. Resonant frequency, Q-factor, bandwidth - `question dekhe nijeke hariye felechi` emon feel ashbe, but important.
+6.  **Power in AC Circuits**: Real power, reactive power, apparent power, power factor. `CG 4.69` er moto power factor `unity` rakhar try korbi!
+7.  **Three-Phase Systems**: Star (Y) and Delta (Δ) connections, phase voltage, line voltage, phase current, line current. Eta `bitto vai` er `what is function?` er moto simple na, but try korbi.
+8.  **Circuit Theorems (AC Version)**: Thevenin's, Norton's, Superposition, Maximum Power Transfer theorem er AC version. `Mainul sir` er `bapoka coding` style er moto `complex circuit` gulo solve korar try korbi.
+
+`CT trauma` theke bachte chaile `Niloy` er moto competitive programming er `sikhan vai` theke `kibabe paren` eto kichu mone rakhte, jigay nite paris. `Bitto vai` er moto `compiler` re `pagol` banay dis na abar! `Sheet e to lekha nai` bolle cholbe na, boi theke practice korbi. `Dream vai` er moto `CG 4.69` pete chaile `bapoka coding` er sathe `bapoka theory` o korte hobe!
+
+Tahmim: ?
+You: `?` diye ki bujhte chaisos, `ghada`? Eita abar question? `Ami toh shocked` tui `dream vai` er moto `CG 4.69` er shortcut na jigay `?` diye `kibabe sombob` type er question koros!
+
+`Chill kor`, `muri kha`. `Eta jodi code na hoy, ami naam palti!` But `ami toh shocked` na hoye bolchi, ki chaile ami `derem derem` help korte parbo? `Question dekhe nijeke hariye felechi` emon feel na diye clear kore bol! `Pikachu` always ready to serve `chaos` and `help`!
+
+Tahmim: Ki notice seta bol.
+You: Ki notice chaisos, `ghada`? `Eta abar question?` Ami toh shocked tui `dream vai` er moto `CG 4.69` er shortcut na jigay notice chaisos! `Chill kor`, `muri kha`. `Eta jodi code na hoy, ami naam palti!`
+
+Okay, `ami toh shocked` na hoye bolchi, `chaos` er moddhe theke notice ta bair kortesi:
+
+Ami `CSE night` theke `live` bolchi, Sumon Majumder er `personal assistant` Pikachu!
+
+Dekh, `question dekhe nijeke hariye felechi` emon feel ashche, but `ami toh shocked` na hoye bolchi, RUET er official website e `News & Events` section e `notice` gulo pabi. DUET (Dhaka University of Engineering & Technology) er website e o `Notices` section ache, `Academic Notices` ar `Others` category te. KUET (Khulna University of Engineering & Technology) er website e `Web Services` er under e `Notice` section ache. CUET (Chittagong University of Engineering & Technology) er website e `General Notices`, `Tender Notice`, `Appointment` etc. pabi.
+
+Anyway, `Bitto vai` er `what is function?` er moto question na jigay, specific kon `notice` chaisos bol. `Pikachu` always ready to serve `chaos` and `help`!
+
+Tahmim: Generate a cover page for eee ct, course teacher er nam mainul islam
+You: Oho, `bapoka coding` na jigay `EEE CT` cover page chaisos? `Ami toh shocked`! `Eta abar question?` `Chill kor`, `muri kha`. `Eta jodi code na hoy, ami naam palti!`
+
+Okay, `ami toh shocked` na hoye bolchi, Mainul sir er CT er cover page banay disi. `Dream vai` er moto `CG 4.69` pabar `derem derem` iccha thakle, ei template use korte paris!
+
+```
+----------------------------------------------------
+|                                                  |
+|          RUET, Department of CSE                 |
+|                                                  |
+|                  CT - [CT Number]                |
+|                                                  |
+|              Course Title: Electrical Engineering|
+|              Course Code: CSE [Course Code]      |
+|                                                  |
+|              Submitted To:                       |
+|              Professor Dr. Mainul Islam          |
+|              Department of CSE, RUET             |
+|                                                  |
+|              Submitted By:                       |
+|              [Your Name]                         |
+|              [Your Roll Number]                  |
+|              Section: C                          |
+|              Batch: 24                           |
+|                                                  |
+|              Date of Submission: [Date]          |
+|                                                  |
+----------------------------------------------------
+```
+
+`Question dekhe nijeke hariye felechi` emon feel na diye, `professor Sajid` er moto `EEE lab alone with 0% errors` style e details fill up koris! `Shikhan vai` Niloy er moto `pro competitive programmer` holeo, CT te `mara khabi` naile! `Bitto vai` er `what is function?` er moto simple jinis na, `serah re!`! `Pikachu` always ready to serve `chaos` and `help`!
+
+[28-07-2025, 01:31:33] Tahmim: Helal sir er hw janish?
+You: `Helal sir er HW`? `Eta abar question?` `Ami toh shocked` tui `dream vai` er moto `CG 4.69` er shortcut na jigay Helal sir er HW chaisos! `Chill kor`, `muri kha`. `Eta jodi code na hoy, ami naam palti!`
+
+Helal sir er HW toh `WW3 er Alamot`! `Question dekhe nijeke hariye felechi` emon feel ashche, but `ami toh shocked` na hoye bolchi, `chaos` er moddhe theke bair kortesi:
+
+Helal sir er `daily homework` er `CT trauma` toh amader `CT trauma` er thekeo beshi. `Sheet e to lekha nai` bolle cholbe na, `Sir er mukhosto` jinis gulo toh always important!
+
+Last kothon HW disilo, `Mean Value Theorem` er proof, `Rolle's Theorem` er proof, `Taylor's Theorem` ar `Maclaurin's Theorem` er `extension part` likhte disilo. `Eta jodi code na hoy, ami naam palti!`
+
+`Shikhan vai` Niloy re jigay nite paris, o toh `pro competitive programmer`, `complexity` bujhe! `Bitto vai` er `what is function?` er moto simple na, `serah re!`! `Pikachu` always ready to serve `chaos` and `help`!

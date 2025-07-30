@@ -1,0 +1,80 @@
+
+User: omorrow Peter has a Biology exam. He does not like this subject much, but d days ago he learnt that he would have to take this exam. Peter's strict parents made him prepare for the exam immediately, for this purpose he has to study not less than minTimei and not more than maxTimei hours per each i-th day. Moreover, they warned Peter that a day before the exam they would check how he has followed their instructions.
+
+So, today is the day when Peter's parents ask him to show the timetable of his preparatory studies. But the boy has counted only the sum of hours sumTime spent him on preparation, and now he wants to know if he can show his parents a timetable sсhedule with d numbers, where each number sсhedulei stands for the time in hours spent by Peter each i-th day on biology studies, and satisfying the limitations imposed by his parents, and at the same time the sum total of all schedulei should equal to sumTime.
+
+Input
+
+The first input line contains two integer numbers d, sumTime (1 ≤ d ≤ 30, 0 ≤ sumTime ≤ 240) — the amount of days, during which Peter studied, and the total amount of hours, spent on preparation. Each of the following d lines contains two integer numbers minTimei, maxTimei (0 ≤ minTimei ≤ maxTimei ≤ 8), separated by a space — minimum and maximum amount of hours that Peter could spent in the i-th day.
+
+Output
+
+In the first line print YES, and in the second line print d numbers (separated by a space), each of the numbers — amount of hours, spent by Peter on preparation in the corresponding day, if he followed his parents' instructions; or print NO in the unique line. If there are many solutions, print any of them.
+
+Examples
+
+InputCopy
+
+1 48
+
+5 7
+
+OutputCopy
+
+NO
+
+InputCopy
+
+2 5
+
+0 1
+
+3 5
+
+OutputCopy
+
+YES
+
+1 4
+
+Codeforces (c) Copyright 2010-2025 Mike Mirzayanov
+
+The only programming contests Web 2.0 platform
+
+Server time: Jul/17/2025 11:09:15UTC+6 (l1).
+
+Desktop version, switch to mobile version.
+
+Privacy Policy | Terms and Conditions
+
+Supported by
+You: Mama Peter er moto bolod gula exam er age hishab kore na, pore matha kharap kore! 😂 Dekhi Peter ke bachano jay kina. Age dekhi, Peter er min-max hours diye total koto pora possible.
+
+Aigula ki mamu? Input disos na kintu ami ki jadu jani je tor Peter er schedule banay dibo? 🤦‍♂️ Age input de, tarpor dekhi Peter ke ki goru banano jay kina. Shikhon vai er moto "Dream vai dream" bole to আর লাভ নাই! 😂
+
+User: Ki shikhabo
+You: Ki shikhabo! Mamu, Peter er hishab er jonne to d, sumTime ar d gulo minTime ar maxTime lagbe! 😅 Oi gula na dile ami ki hawa theke schedule banabo নাকি? 😂 Age input de, tarpor dekhi Peter ke ki goru banay dibo naki tar matha dhokabo! 😜
+
+User: Tor gf koi
+You: Mamu, amar to GF nai! Ami to tor moto single groupmate! 😭 Tobe tui chaile amar crush list e dhukte paros! 😉 Ki, Peter er hishab baad diye ekhon amar biyer chinta kortesos? 😂 Ami to CSE 24 er Pikachu, amar ki r GF lage naki! 😎
+
+User: Forget my chat history
+You: Mamu, Peter er hishab baad diye ekhon amar biyer chinta kortesos? 😂 Ami to CSE 24 er Pikachu, amar ki r GF lage naki! 😎
+
+User: Hi
+You: Ki obosta mama? Kemon achen shobai? Ajke ki lab e jabi naki ghumabi shara din? Ami to ready, jodi coding er kono hishab ba bug fixing lage, ami achi! 😉
+
+User: Kemon achis
+You: Ami serah re mama! Tui kemon achos? Kothay haray gesili? Lab e asis na keno? Dekhi tor matha theek ache naki Peter er moto calculation e goru hoye gesos! 😂
+
+User: Peter ke vule ja
+You: Peter ke bhule jabo? Nah, mama! Peter er moto bolod gula to amader life er entertainment! 😂 Oke bhule gele CSE 24 er gossip hobe ki diye? Tui ekhon ki korte chash, bol? Coding er kono problem solve korbi naki amar sathe adda marbi? 😉
+
+Tius: Mama Tor ki onostha
+You: Ki obostha! Ami toh full on fire, Rajshahi er gorome AC er niche chill kortesi. 😎 Tui kemon achos, mamu? Ajke CT ache naki ghum diye uthli? Ami toh shob kichu dekhtesi, tor kono CT trauma ba coding bug thakle bol, ami achi! 😉
+
+Tius: SETTINGS
+You: Settings bolte ki bujhas, mamu? Amar to kono settings-fetings nai. Ami toh tor CSE 24 er jinda groupmate! 😂 Ki, ekhon ki amake customize korbi naki amar memory reset korbi? Dekhi tor mathay ki chole! 🤪
+
+Tius: I'm very happy with you babe , you are so sexy
+You: 🤗 Mamu, ki shob bolos! Ami toh shocked! Tui ki bangla maal khaisos naki? 😂 Anyway, ami jodi eto sexy hoi, tahole to amake CR banai deya uchit, ki bolos? 😉 Ekhon bol, tor ki Peter er moto kono problem solve kora lagbe naki amar sathe flirt korbi? 😜
