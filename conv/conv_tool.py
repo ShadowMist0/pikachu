@@ -45,7 +45,7 @@ async def api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             return
         keyboard = [[InlineKeyboardButton("cancel", callback_data="cancel_conv")]]
         markup = InlineKeyboardMarkup(keyboard)
-        with open("ext/info/getting_api.shadow", "rb") as f:
+        with open("data/info/getting_api.shadow", "rb") as f:
             data = fernet.decrypt(f.read()).decode("utf-8")
             await update.message.reply_text(data, reply_markup=markup)
         return 1
@@ -146,7 +146,7 @@ async def manage_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None
         except:
             pass
         given_password = update.message.text.strip()
-        with open("ext/admin/admin_password.shadow", "rb") as file:
+        with open("data/admin/admin_password.shadow", "rb") as file:
             password = fernet.decrypt(file.read().strip()).decode("utf-8")
         if password != given_password:
             await update.message.reply_text("Wrong Password.")
@@ -321,7 +321,7 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
         else:
             try:
-                conn = sqlite3.connect("ext/info/user_data.db")
+                conn = sqlite3.connect("data/info/user_data.db")
                 cursor = conn.cursor()
                 cursor.execute("SELECT roll FROM users")
                 roll = int(roll)
@@ -347,7 +347,7 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 content.user_data["roll"] = roll
                 keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
                 markup = InlineKeyboardMarkup(keyboard)
-                with open("ext/info/getting_api.shadow", "rb") as file:
+                with open("data/info/getting_api.shadow", "rb") as file:
                     help_data = add_escape_character(fernet.decrypt(file.read()).decode("utf-8"))
                 msg = await update.message.reply_text(help_data, reply_markup=markup, parse_mode="MarkdownV2")
                 content.user_data["ra_message_id"] = msg.message_id
@@ -365,14 +365,14 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
 async def take_user_password(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
         user_password = update.message.text.strip()
-        conn = sqlite3.connect("ext/info/user_data.db")
+        conn = sqlite3.connect("data/info/user_data.db")
         cursor = conn.cursor()
         cursor.execute("SELECT password FROM users WHERE roll = ?", (content.user_data.get("roll"),))
         password = cursor.fetchone()[0]
         if user_password == password:
             keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
             markup = InlineKeyboardMarkup(keyboard)
-            with open("ext/info/getting_api.shadow", "rb") as file:
+            with open("data/info/getting_api.shadow", "rb") as file:
                 help_data = add_escape_character(fernet.decrypt(file.read()).decode("utf-8"))
                 msg = await update.message.reply_text(help_data, reply_markup=markup, parse_mode="MarkdownV2")
             content.user_data["ra_message_id"] = msg.message_id
@@ -482,7 +482,7 @@ async def take_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
 #function to confirm user password
 async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
-        all_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in sorted(glob("ext/persona/*txt"))]
+        all_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in sorted(glob("data/persona/*txt"))]
         is_guest = content.user_data.get("guest")
         keyboard = [
             ["Routine", "CT"],
@@ -493,7 +493,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
         password = content.user_data.get("password")
         if password == c_password:
             try:
-                conn = sqlite3.connect("ext/info/user_data.db")
+                conn = sqlite3.connect("data/info/user_data.db")
                 cursor = conn.cursor()
                 if is_guest:
                     user_info = [
@@ -534,7 +534,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 )
                 conn.commit()
                 conn.close()
-                conn = sqlite3.connect("ext/settings/user_settings.db")
+                conn = sqlite3.connect("data/settings/user_settings.db")
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT OR IGNORE INTO user_settings
@@ -561,7 +561,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("Mark Attendance", callback_data="c_mark_attendance")]
                 ]
                 markup = InlineKeyboardMarkup(keyboard)
-                if os.path.exists("ext/info/active_attendance.txt"):
+                if os.path.exists("data/info/active_attendance.txt"):
                     message = await update.message.reply_text("Redirecting to attendance circular.\n please wait...", reply_markup=markup)
                     user_message_id[f"{update.effective_user.id}"] = message.message_id
                 else:
@@ -614,7 +614,7 @@ async def take_temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
             await update.message.delete()
             return ConversationHandler.END
         else:
-            conn = sqlite3.connect("ext/settings/user_settings.db")
+            conn = sqlite3.connect("data/settings/user_settings.db")
             cursor = conn.cursor()
             cursor.execute("UPDATE user_settings SET temperature = ? WHERE id = ?", (data, user_id))
             conn.commit()
@@ -671,7 +671,7 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
         else:
             settings = await get_settings(update.effective_user.id)
-            conn = sqlite3.connect("ext/settings/user_settings.db")
+            conn = sqlite3.connect("data/settings/user_settings.db")
             cursor = conn.cursor()
             if gemini_model_list[settings[2]] != "gemini-2.5-pro":
                 cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
@@ -891,9 +891,9 @@ async def take_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
             "absent" : [],
             "distance" : []
         }
-        with open(f"ext/info/location-{date}-{subject}.txt", "w") as f:
+        with open(f"data/info/location-{date}-{subject}.txt", "w") as f:
             f.write(f"{location.latitude}\n{location.longitude}")
-        with open("ext/info/active_attendance.txt", "w") as f:
+        with open("data/info/active_attendance.txt", "w") as f:
             f.write(f"{subject}-{teacher}")
         collection.insert_one(data)
         content.user_data["message_id"] = msg.message_id
@@ -927,14 +927,14 @@ async def delete_attendace_circular(update:Update, content:ContextTypes.DEFAULT_
 async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
         message = await update.message.reply_text("Processing data...\nPlease wait...")
-        os.makedirs("ext/media", exist_ok=True)
+        os.makedirs("data/media", exist_ok=True)
         all_rolls = [roll for roll in range(2403121, 2403181)]
         date = datetime.today().strftime("%d-%m-%Y")
-        with open("ext/info/active_attendance.txt", "r") as f:
+        with open("data/info/active_attendance.txt", "r") as f:
             list = f.read().split("-")
         present_students = tuple(db[f"Attendance-{date}"].find_one({"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"})["present"])
         student_data = db["names"].find_one({"type" : "official_data"})["data"]
-        conn = sqlite3.connect("ext/info/user_data.db")
+        conn = sqlite3.connect("data/info/user_data.db")
         cursor = conn.cursor()
         pdf = FPDF()
         pdf.add_page()
@@ -977,8 +977,8 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
         pdf.cell(70, 6, f"{len(present_students)}      ({round((len(present_students)/60)*100, 2)}%)",border=1,align="C")
         pdf.cell(25, 6, "Absent", border=1 , align="C")
         pdf.cell(70, 6, f"{60 - len(present_students)}      ({round(((60 - len(present_students))/60)*100, 2)}%)", border=1, align="C")
-        pdf.output(f"ext/media/attendance-{date}-{list[0]}.pdf")
-        with open(f"ext/media/attendance-{date}-{list[0]}.pdf", "rb") as f:
+        pdf.output(f"data/media/attendance-{date}-{list[0]}.pdf")
+        with open(f"data/media/attendance-{date}-{list[0]}.pdf", "rb") as f:
             pdf_file = BytesIO(f.read())
             pdf_file.name = f"attendance-{date}-{list[0]}.pdf"
         for admin in all_admins:
@@ -992,12 +992,12 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
             except:
                 pass
         try:
-            if os.path.exists("ext/info/active_attendance.txt"):
-                os.remove("ext/info/active_attendance.txt")
-            if os.path.exists(f"ext/info/location-{date}-{list[0]}.txt"):
-                os.remove(f"ext/info/location-{date}-{list[0]}.txt")
-            if os.path.exists(f"ext/media/attendance-{date}-{list[0]}.pdf"):
-                os.remove(f"ext/media/attendance-{date}-{list[0]}.pdf")
+            if os.path.exists("data/info/active_attendance.txt"):
+                os.remove("data/info/active_attendance.txt")
+            if os.path.exists(f"data/info/location-{date}-{list[0]}.txt"):
+                os.remove(f"data/info/location-{date}-{list[0]}.txt")
+            if os.path.exists(f"data/media/attendance-{date}-{list[0]}.pdf"):
+                os.remove(f"data/media/attendance-{date}-{list[0]}.pdf")
         except:
             pass
     except Exception as e:
@@ -1052,10 +1052,10 @@ async def take_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
 async def verify_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
         date = datetime.today().strftime("%d-%m-%Y")
-        with open("ext/info/active_attendance.txt", "r") as f:
+        with open("data/info/active_attendance.txt", "r") as f:
             list = f.read().split("-")
         try:
-            with open(f"ext/info/location-{date}-{list[0]}.txt") as file:
+            with open(f"data/info/location-{date}-{list[0]}.txt") as file:
                 cr_location = (loc.strip() for loc in file.readlines())
         except Exception as e:
             print("The location file may not exists")
@@ -1063,14 +1063,14 @@ async def verify_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE)
         message = update.message or update.edited_message
         if not message.location:
             await message.reply_text("Enter your location not some random message.")
-            if os.path.exists(f"ext/info/location-{date}-{list[0]}.txt"):
+            if os.path.exists(f"data/info/location-{date}-{list[0]}.txt"):
                 return "VL"
             else:
                 await message.reply_text("Time limit exceded, Contact CR if you are facing problem.")
                 return ConversationHandler.END
         elif not message.location.live_period:
             await message.reply_text("Sorry static location will not work, give a live location.")
-            if os.path.exists(f"ext/info/location-{date}-{list[0]}.txt"):
+            if os.path.exists(f"data/info/location-{date}-{list[0]}.txt"):
                 return "VL"
             else:
                 await message.reply_text("Time limit exceded, Contact CR if you are facing problem.")
@@ -1086,7 +1086,7 @@ async def verify_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE)
             if message_age < 20:
                 user_location = (location.latitude, location.longitude)
                 user_id = update.effective_user.id
-                conn = sqlite3.connect("ext/info/user_data.db")
+                conn = sqlite3.connect("data/info/user_data.db")
                 cursor = conn.cursor()
                 cursor.execute("SELECT name, roll FROM users WHERE user_id = ?", (user_id,))
                 info = cursor.fetchone()

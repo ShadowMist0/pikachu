@@ -46,8 +46,8 @@ async def start(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
         user_id = update.effective_chat.id
         paths = [
-            f"ext/Conversation/conversation-{user_id}.txt",
-            f"ext/memory/memory-{user_id}.txt",
+            f"data/Conversation/conversation-{user_id}.txt",
+            f"data/memory/memory-{user_id}.txt",
         ]
 
         for path in paths:
@@ -79,7 +79,7 @@ async def help(update: Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             [InlineKeyboardButton("Read Documentation", url = "https://github.com/sifat1996120/Phantom_bot")]
         ]
         help_markup = InlineKeyboardMarkup(keyboard)
-        with open("ext/info/help.shadow", "rb") as file:
+        with open("data/info/help.shadow", "rb") as file:
             await update.message.reply_text(fernet.decrypt(file.read()).decode("utf-8"), reply_markup=help_markup)
     except Exception as e:
         print(f"Error in help function. \n\n Error Code - {e}")

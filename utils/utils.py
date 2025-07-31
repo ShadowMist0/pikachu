@@ -95,7 +95,7 @@ async def safe_send(bot_func, *args, retries =3, **kwargs):
 #function to get settings
 async def get_settings(user_id):
     try:
-        conn = sqlite3.connect("ext/settings/user_settings.db")
+        conn = sqlite3.connect("data/settings/user_settings.db")
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM user_settings WHERE id = ?", (user_id,))
         row = cursor.fetchone()
@@ -129,7 +129,7 @@ async def get_settings(user_id):
 #loading persona
 def load_persona(settings):
     try:
-        files = sorted(glob("ext/persona/*txt"))
+        files = sorted(glob("data/persona/*txt"))
         with open(files[settings[6]], "r") as file:
             persona = file.read()
         return persona

@@ -11,7 +11,7 @@ import os
 from bot.info_handler import get_ct_data, routine_handler, information_handler
 from utils.func_description import func_list
 import json
-from data.user_content_tools import save_conversation, save_group_conversation
+from ext.user_content_tools import save_conversation, save_group_conversation
 from utils.utils import is_ddos, send_to_channel, safe_send, add_escape_character, has_codeblocks, is_code_block_open
 from utils.config import channel_id
 
@@ -184,7 +184,7 @@ async def get_group_data(update:Update, content:ContextTypes.DEFAULT_TYPE, user_
         tools.append(types.Tool(url_context=types.UrlContext))
         if func_name == "get_group_data":
             data = "****TRAINING DATA****\n\n"
-            with open("ext/info/group_training_data.txt") as f:
+            with open("data/info/group_training_data.txt") as f:
                 data += f.read()
             data += "\n\n****END OF TRAINIG DATA****\n\n"
             data += user_message
@@ -269,8 +269,8 @@ async def add_memory_content(update:Update, content:ContextTypes.DEFAULT_TYPE, d
     try:
         await update.message.reply_text("📝🧠 Memory Updated")
         user_id = update.effective_user.id
-        if os.path.exists(f"ext/memory/memory-{user_id}.txt"):
-            with open(f"ext/memory/memory-{user_id}.txt", "a+") as file:
+        if os.path.exists(f"data/memory/memory-{user_id}.txt"):
+            with open(f"data/memory/memory-{user_id}.txt", "a+") as file:
                 file.write("\n" + data + "\n")
     except Exception as e:
         print(f"Error in create_image function.\n\nError Code - {e}")

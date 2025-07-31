@@ -23,7 +23,7 @@ from utils.config import db,fernet
 import sqlite3
 import asyncio
 from circulation.circulate import circulate_message, circulate_routine, inform_all
-from data.user_content_tools import see_memory, delete_memory, reset
+from ext.user_content_tools import see_memory, delete_memory, reset
 
 
 
@@ -41,7 +41,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             user_id = query.from_user.id
         settings = await get_settings(user_id)
         c_model = tuple(model for model in gemini_model_list)
-        personas = sorted(glob("ext/persona/*txt"))
+        personas = sorted(glob("data/persona/*txt"))
         c_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in personas]
         c_persona.remove("memory_persona")
 
@@ -67,7 +67,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text(f"Streaming let you stream the bot response in real time.\nCurrent setting : {c_s}", reply_markup=markup)
 
         elif query.data == "c_streaming_on":
-            conn = sqlite3.connect("ext/settings/user_settings.db")
+            conn = sqlite3.connect("data/settings/user_settings.db")
             cursor = conn.cursor()
             cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (1, user_id))
             conn.commit()
@@ -80,7 +80,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("Streaming has turned on.")
 
         elif query.data == "c_streaming_off":
-            conn = sqlite3.connect("ext/settings/user_settings.db")
+            conn = sqlite3.connect("data/settings/user_settings.db")
             cursor = conn.cursor()
             cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (0, user_id))
             conn.commit()
@@ -93,8 +93,8 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("Streaming has turned off.")
 
         elif query.data == "c_persona":
-            personas = sorted(glob("ext/persona/*txt"))
-            conn = sqlite3.connect("ext/info/user_data.db")
+            personas = sorted(glob("data/persona/*txt"))
+            conn = sqlite3.connect("data/info/user_data.db")
             cursor = conn.cursor()
             cursor.execute("SELECT gender FROM users WHERE user_id = ?", (query.from_user.id, ))
             gender = cursor.fetchone()[0]
@@ -135,7 +135,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("Conversation history holds your conversation with the bot.", reply_markup=ch_markup, parse_mode="Markdown")
 
         elif query.data in c_model :
-            conn = sqlite3.connect("ext/settings/user_settings.db")
+            conn = sqlite3.connect("data/settings/user_settings.db")
             cursor = conn.cursor()
             model_num = c_model.index(query.data)
             if gemini_model_list[model_num] != "gemini-2.5-pro":
@@ -160,9 +160,9 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                 await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
 
         elif query.data in c_persona:
-            conn = sqlite3.connect("ext/settings/user_settings.db")
+            conn = sqlite3.connect("data/settings/user_settings.db")
             cursor = conn.cursor()
-            persona_num = personas.index(f"ext/persona/{query.data}.txt")
+            persona_num = personas.index(f"data/persona/{query.data}.txt")
             cursor.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona_num, user_id))
             conn.commit()
             conn.close()
@@ -172,7 +172,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                     {"id" : user_id},
                     {"$set" : {"settings.6":persona_num}}
             )
-            personas = sorted(glob("ext/persona/*txt"))
+            personas = sorted(glob("data/persona/*txt"))
             await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(personas[persona_num]))[0]}.")
 
         elif query.data == "g_classroom":
@@ -199,7 +199,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("Are you sure you want to toggle the routine?", reply_markup=tr_markup)
 
         elif query.data == "c_tr_sure":
-            with open("ext/routine/lab_routine.txt", "r+", encoding="utf-8") as f:
+            with open("data/routine/lab_routine.txt", "r+", encoding="utf-8") as f:
                 active = f.read()
                 f.seek(0)
                 f.truncate(0)
@@ -222,8 +222,8 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await delete_memory(update, content, query)
 
         elif query.data == "c_ch_show":
-            with open(f"ext/Conversation/conversation-{user_id}.txt", "rb") as file:
-                if os.path.getsize(f"ext/Conversation/conversation-{user_id}.txt") == 0:
+            with open(f"data/Conversation/conversation-{user_id}.txt", "rb") as file:
+                if os.path.getsize(f"data/Conversation/conversation-{user_id}.txt") == 0:
                     await query.edit_message_text("You don't have any conversation history.")
                 else:
                     await query.edit_message_text("Your conversation history:")
@@ -239,7 +239,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                         [InlineKeyboardButton("Cancel", callback_data="cancel")]
                 ]
                 markup = InlineKeyboardMarkup(keyboard)
-                with open("ext/info/admin_help.shadow", "rb") as file:
+                with open("data/info/admin_help.shadow", "rb") as file:
                     help_data = fernet.decrypt(file.read()).decode("utf-8")
                     help_data = help_data if help_data else "Sorry no document. Try again later."
                 await query.edit_message_text(help_data, reply_markup=markup)
@@ -255,7 +255,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("From here you can manage the AI model this bot use to provide response.\n\nChoose an option:", reply_markup=markup, parse_mode="Markdown")
 
         elif query.data == "c_show_all_user":
-            conn = sqlite3.connect("ext/info/user_data.db")
+            conn = sqlite3.connect("data/info/user_data.db")
             cursor = conn.cursor()
             cursor.execute("SELECT user_id from users")
             rows = cursor.fetchall()

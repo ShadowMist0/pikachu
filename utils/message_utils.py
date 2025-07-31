@@ -16,10 +16,10 @@ from utils.utils import(
     has_codeblocks,
     is_code_block_open
 )
-from data.user_content_tools import save_conversation, save_group_conversation
+from ext.user_content_tools import save_conversation, save_group_conversation
 import random, os
 from telegram.error import RetryAfter
-from data.user_content_tools import create_prompt
+from ext.user_content_tools import create_prompt
 from ai.gemini_schema import gemini_non_stream, gemini_stream
 from utils.db import gemini_api_keys
 
@@ -31,13 +31,14 @@ from utils.db import gemini_api_keys
 #function for editing and sending message
 async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, response, user_message, settings) -> None:
     try:
+        message = update.message or update.edited_message
         if not response:
-            await update.message.reply_text("Failed to precess your request. Try again later.")
+            await message.reply_text("Failed to precess your request. Try again later.")
             return
         if await is_ddos(update, content, update.effective_user.id):
             return
         if(settings[5]):
-            message_object  = await update.message.reply_text("Typing...")
+            message_object  = await message.reply_text("Typing...")
             buffer = ""
             sent_message = ""
             chunks = ''
@@ -69,11 +70,11 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
                             except:
                                 await message_object.edit_text(buffer)
                         buffer = "```\n" + chunk.text
-                        message_object = await safe_send(update.message.reply_text,buffer)
+                        message_object = await safe_send(message.reply_text,buffer)
                     else:
                         buffer = chunk.text
                         sent_message += chunk.text
-                        message_object = await safe_send(update.message.reply_text, buffer)
+                        message_object = await safe_send(message.reply_text, buffer)
             if not(has_codeblocks(buffer)):
                 try:
                     await message_object.edit_text(buffer+"\n.", parse_mode="Markdown")
@@ -90,9 +91,9 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
                         await message_object.edit_text(add_escape_character(buffer+"\n."), parse_mode="MarkdownV2")
                     except:
                         await message_object.edit_text(buffer+"\n")
-            if update.message.chat.type == "private":
+            if message.chat.type == "private":
                 await asyncio.to_thread(save_conversation, user_message, sent_message , update.effective_user.id)
-            elif update.message.chat.type != "private":
+            elif message.chat.type != "private":
                 await asyncio.to_thread(save_group_conversation, update, user_message, sent_message)
         #if streaming is off
         else:
@@ -105,40 +106,40 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
                         messages[i+1] = "```\n" + messages[i+1]
                     if not (has_codeblocks(message)):
                         try:
-                            await safe_send(update.message.reply_text, messages[i], parse_mode="Markdown")
+                            await safe_send(message.reply_text, messages[i], parse_mode="Markdown")
                         except:
                             try:
-                                await update.message.reply_text(add_escape_character(messages[i]), parse_mode="MarkdownV2")
+                                await message.reply_text(add_escape_character(messages[i]), parse_mode="MarkdownV2")
                             except:
-                                await update.message.reply_text(messages[i])
+                                await message.reply_text(messages[i])
                     else:
                         try:
-                            await update.message.reply_text(messages[i], parse_mode="Markdown")
+                            await message.reply_text(messages[i], parse_mode="Markdown")
                         except:
                             try:
-                                await update.message.reply_text(add_escape_character(messages[i]), parse_mode="MarkdownV2")
+                                await message.reply_text(add_escape_character(messages[i]), parse_mode="MarkdownV2")
                             except:
-                                await update.message.reply_text(messages[i])
+                                await message.reply_text(messages[i])
             else:
                 if not(has_codeblocks(sent_message)):
                     try:
-                        await update.message.reply_text(sent_message, parse_mode ="Markdown")
+                        await message.reply_text(sent_message, parse_mode ="Markdown")
                     except:
                         try:
-                            await update.message.reply_text(add_escape_character(sent_message), parse_mode="MarkdownV2")
+                            await message.reply_text(add_escape_character(sent_message), parse_mode="MarkdownV2")
                         except:
-                            await update.message.reply_text(sent_message)
+                            await message.reply_text(sent_message)
                 else:
                     try:
-                        await safe_send(update.message.reply_text, sent_message, parse_mode ="Markdown")
+                        await safe_send(message.reply_text, sent_message, parse_mode ="Markdown")
                     except:
                         try:
-                            await update.message.reply_text(add_escape_character(sent_message), parse_mode="MarkdownV2")
+                            await message.reply_text(add_escape_character(sent_message), parse_mode="MarkdownV2")
                         except:
-                            await update.message.reply_text(sent_message)
-            if update.message.chat.type == "private":
+                            await message.reply_text(sent_message)
+            if message.chat.type == "private":
                 await asyncio.to_thread(save_conversation, user_message, sent_message, update.effective_user.id)
-            elif update.message.chat.type != "private":
+            elif message.chat.type != "private":
                 await asyncio.to_thread(save_group_conversation, update, user_message, sent_message)
     except Exception as e:
         print(f"Error in send_message function Error Code - {e}")
@@ -173,21 +174,29 @@ async def run_workers(n):
 #function to get response from gemini
 async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE, bot_name) -> None:
     try:
-        global gemini_api_keys
-        user_message = update.message.text.strip()
-        user_id = update.effective_user.id
+        try:
+            message = update.message or update.edited_message
+            global gemini_api_keys
+            user_message = message.text.strip()
+            user_id = update.effective_user.id
+            chat_type = message.chat.type
+        except:
+            return
         if await is_ddos(update, content, user_id):
             return
-        if update.message.chat.type != "private" and f"{bot_name.lower()}" not in user_message.lower() and "bot" not in user_message.lower() and "@" not in user_message.lower() and "mama" not in user_message.lower() and "pika" not in user_message.lower():
+        if chat_type != "private" and f"{bot_name.lower()}" not in user_message.lower() and "bot" not in user_message.lower() and "@" not in user_message.lower() and "mama" not in user_message.lower() and "pika" not in user_message.lower():
             return
         else:
             settings = await get_settings(user_id)
             if not settings:
-                await update.message.reply_text("You are not registered.")
+                await message.reply_text("You are not registered.")
                 return
-            if update.message.chat.type != "private":
-                group_id = update.effective_chat.id
-                settings = (group_id,"group",1,0,0.7,0,4)
+            try:
+                if message.chat.type != "private":
+                    group_id = update.effective_chat.id
+                    settings = (group_id,"group",1,0,0.7,0,4)
+            except:
+                pass
             prompt = await create_prompt(update, content, user_message, user_id, 0)
             temp_api = list(gemini_api_keys)
             for i in range(len(gemini_api_keys)):
@@ -197,7 +206,7 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                     if(settings[5]):
                         response = await gemini_stream(update, content, prompt, api,settings)
                         if response.prompt_feedback and response.prompt_feedback.block_reason:
-                            await update.message.reply_text(f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason} Conversation history is erased.")
+                            await message.reply_text(f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason} Conversation history is erased.")
                             break
                         next(response).text
                         break
@@ -206,7 +215,7 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                         if response == False:
                             return
                         if response.prompt_feedback and response.prompt_feedback.block_reason:
-                            await update.message.reply_text(f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason} Conversation history is erased.")
+                            await message.reply_text(f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason} Conversation history is erased.")
                             break
                         response.text
                         break
@@ -216,11 +225,11 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
             if response is not None:
                 await send_message(update, content, response, user_message, settings)
             elif response != False:
-                if os.path.exists(f"ext/Conversation/conversation-{user_id}.txt"):
-                    await update.message.reply_text("Failed to process your request. Try again later.")
-                    with open(f"ext/Conversation/conversation-{user_id}.txt", "w") as f:
+                if os.path.exists(f"data/Conversation/conversation-{user_id}.txt"):
+                    await message.reply_text("Failed to process your request. Try again later.")
+                    with open(f"data/Conversation/conversation-{user_id}.txt", "w") as f:
                         pass
                 print("Failed to get a response from gemini.")
-    except RetryAfter as e:
+    except Exception as e:
         await update.message.reply_text(f"Telegram Limit hit, need to wait {e.retry_after} seconds.")
         await send_to_channel(update, content, channel_id, f"Telegram Limit hit for user {user_id}, He need to wait {e.retry_after} seconds.")

@@ -21,32 +21,37 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
         bot_name_obj = await content.bot.get_my_name()
         bot_name = bot_name_obj.name.lower()
         user_id = update.effective_user.id
+        message = update.message or update.edited_message
         if await is_ddos(update, content, user_id):
             return
-        if user_id not in all_users and update.message.chat.type == "private":
+        if user_id not in all_users and message.chat.type == "private":
             keyboard = [
                 [InlineKeyboardButton("Register", callback_data="c_register"), InlineKeyboardButton("Cancel", callback_data="cancel")]
             ]
             markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text("You are not registered.", reply_markup=markup)
+            await message.reply_text("You are not registered.", reply_markup=markup)
             return
         user_name = f"{update.effective_user.first_name or update.effective_user.last_name or "Unknown"}".strip()
-        user_message = (update.message.text or "...").strip()
-        if (update.message and update.message.chat.type == "private") or (update.message.chat.type != "private" and (f"@{bot_name}" in user_message.lower() or f"{bot_name}" in user_message.lower() or "mama" in user_message.lower() or "@" in user_message.lower() or "bot" in user_message.lower() or "pika" in user_message.lower())):
-            await update.message.chat.send_action(action = ChatAction.TYPING)
-        if user_message == "Routine" and update.message.chat.type == "private":
+        user_message = (message.text or "...").strip()
+        try:
+            if (update.message and message.chat.type == "private") or (message.chat.type != "private" and (f"@{bot_name}" in user_message.lower() or f"{bot_name}" in user_message.lower() or "mama" in user_message.lower() or "@" in user_message.lower() or "bot" in user_message.lower() or "pika" in user_message.lower())):
+                if not update.edited_message:
+                    await message.chat.send_action(action = ChatAction.TYPING)
+        except:
+            pass
+        if user_message == "Routine" and message.chat.type == "private":
             await routine_handler(update, content)
             return
-        elif user_message == "Settings" and update.message.chat.type == "private":
+        elif user_message == "Settings" and message.chat.type == "private":
             await handle_settings(update, content)
-            await update.message.delete()
+            await message.delete()
             return
-        elif user_message == "CT" and update.message.chat.type == "private":
+        elif user_message == "CT" and message.chat.type == "private":
             await handle_ct(update, content)
             return
-        elif user_message == "Resources" and update.message.chat.type == "private":
+        elif user_message == "Resources" and message.chat.type == "private":
             await resources_handler(update, content)
-            await update.message.delete()
+            await message.delete()
             return
         else:
             #await user_message_handler(update, content, bot_name)

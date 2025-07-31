@@ -90,7 +90,7 @@ async def main():
         app.add_handler(MessageHandler(filters.VOICE & ~filters.ChatType.CHANNEL, handle_voice))
         app.add_handler(MessageHandler(filters.VIDEO & ~filters.ChatType.CHANNEL, handle_video))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.ChatType.CHANNEL, echo))
-        # with open("ext/info/webhook_url.shadow", "rb") as file:
+        # with open("data/info/webhook_url.shadow", "rb") as file:
         #     url = fernet.decrypt(file.read().strip()).decode("utf-8")
         # app.run_webhook(
         #     listen = "0.0.0.0",

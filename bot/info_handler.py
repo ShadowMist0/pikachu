@@ -14,7 +14,7 @@ from telegram.constants import ChatAction
 
 #function to identify it is lab for 1st 30 or 2nd 30
 def lab_participant():
-    with open("ext/routine/lab_routine.txt", "r", encoding="utf-8") as f:
+    with open("data/routine/lab_routine.txt", "r", encoding="utf-8") as f:
         data = f.read()
     lab = [0, '0']
     start_date = datetime.strptime("3-7-2025", "%d-%m-%Y")
@@ -45,9 +45,9 @@ async def routine_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) 
     try:
         lab = lab_participant()
         if lab[0]:
-            rt = "ext/routine/rt1.png"
+            rt = "data/routine/rt1.png"
         else:
-            rt = "ext/routine/rt2.png"
+            rt = "data/routine/rt2.png"
         keyboard = [
             [InlineKeyboardButton("Live Routine", url="https://routine-c.vercel.app")]
         ]

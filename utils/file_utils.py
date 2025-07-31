@@ -13,9 +13,9 @@ from utils.config import fernet
 def create_settings_file():
     try:
         print("settings, ", end="")
-        shutil.rmtree("ext/settings", ignore_errors=True)
-        os.makedirs("ext/settings", exist_ok=True)
-        conn = sqlite3.connect("ext/settings/user_settings.db")
+        shutil.rmtree("data/settings", ignore_errors=True)
+        os.makedirs("data/settings", exist_ok=True)
+        conn = sqlite3.connect("data/settings/user_settings.db")
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_settings(
@@ -46,22 +46,22 @@ def create_settings_file():
 def create_conversation_file():
     try:
         print("conversation file")
-        shutil.rmtree("ext/Conversation", ignore_errors=True)
-        os.makedirs("ext/Conversation", exist_ok=True)
+        shutil.rmtree("data/Conversation", ignore_errors=True)
+        os.makedirs("data/Conversation", exist_ok=True)
         for user in all_users:
             conv_data = db[f"{user}"].find()[0]["conversation"]
-            with open(f"ext/Conversation/conversation-{user}.txt", "w") as file:
+            with open(f"data/Conversation/conversation-{user}.txt", "w") as file:
                 if conv_data:
                     file.write(conv_data)
                 else:
                     pass
         try:
             conv_data = db["group"].find()[0]["conversation"]
-            with open(f"ext/Conversation/conversation-group.txt", "w") as file:
+            with open(f"data/Conversation/conversation-group.txt", "w") as file:
                 file.write(conv_data)
         except:
             print("Group conversation doesn't exist")
-            with open(f"ext/Conversation/conversation-group.txt", "w") as file:
+            with open(f"data/Conversation/conversation-group.txt", "w") as file:
                 pass
     except Exception as e:
         print(f"Error in create_conversation_file function. \n\n Error Code  {e}")
@@ -71,21 +71,21 @@ def create_conversation_file():
 def create_memory_file():
     try:
         print("memory, ", end="")
-        shutil.rmtree("ext/memory", ignore_errors=True)
-        os.makedirs("ext/memory", exist_ok=True)
+        shutil.rmtree("data/memory", ignore_errors=True)
+        os.makedirs("data/memory", exist_ok=True)
         for user in all_users:
             mem_data = db[f"{user}"].find()[0]["memory"]
-            with open(f"ext/memory/memory-{user}.txt", "w") as file:
+            with open(f"data/memory/memory-{user}.txt", "w") as file:
                 if mem_data:
                     file.write(mem_data)
                 else:
                     pass
         try:
             mem_data = db["group"].find()[0]["memory"]
-            with open(f"ext/memory/memory-group.txt", "w") as file:
+            with open(f"data/memory/memory-group.txt", "w") as file:
                 file.write(mem_data)
         except:
-            with open(f"ext/memory/memory-group.txt", "w") as file:
+            with open(f"data/memory/memory-group.txt", "w") as file:
                 pass
     except Exception as e:
         print(f"Error in create_memory_file function. \n\n Error Code  {e}")
@@ -95,11 +95,11 @@ def create_memory_file():
 def create_persona_file():
     try:
         print("persona, ", end="")
-        shutil.rmtree("ext/persona", ignore_errors=True)
-        os.makedirs("ext/persona", exist_ok=True)
+        shutil.rmtree("data/persona", ignore_errors=True)
+        os.makedirs("data/persona", exist_ok=True)
         personas = [persona for persona in db["persona"].find({"type":"persona"})]
         for persona in personas:
-            with open(f"ext/persona/{persona["name"]}.txt", "w") as f:
+            with open(f"data/persona/{persona["name"]}.txt", "w") as f:
                 f.write(persona["persona"])
     except Exception as e:
         print(f"Error in create_persona_file function. \n\n Error Code  {e}")
@@ -109,13 +109,13 @@ def create_persona_file():
 def create_user_data_file():
     try:
         print("user_data, ", end="")
-        if os.path.exists("ext/info/user_data.db"):
+        if os.path.exists("data/info/user_data.db"):
             try:
-                os.remove("ext/info/user_data.db")
+                os.remove("data/info/user_data.db")
             except:
                 pass
-        os.makedirs("ext/info", exist_ok=True)
-        conn = sqlite3.connect("ext/info/user_data.db")
+        os.makedirs("data/info", exist_ok=True)
+        conn = sqlite3.connect("data/info/user_data.db")
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users(
@@ -145,11 +145,11 @@ def create_user_data_file():
 def create_admin_pass_file():
     try:
         print("admin, ", end="")
-        shutil.rmtree("ext/admin", ignore_errors=True)
-        os.makedirs("ext/admin", exist_ok=True)
+        shutil.rmtree("data/admin", ignore_errors=True)
+        os.makedirs("data/admin", exist_ok=True)
         content = db["admin"].find_one({"type" : "admin"})["admin_password"]
         content = fernet.encrypt(content.encode())
-        with open("ext/admin/admin_password.shadow", "wb") as f:
+        with open("data/admin/admin_password.shadow", "wb") as f:
             f.write(content)
     except Exception as e:
         print(f"Error in create_admin_pass_file function.\n\nError Code - {e}")
@@ -159,15 +159,15 @@ def create_admin_pass_file():
 def create_routine_file():
     try:
         print("routine, ", end="")
-        shutil.rmtree("ext/routine", ignore_errors=True)
-        os.makedirs("ext/routine", exist_ok=True)
-        with open("ext/routine/lab_routine.txt", "w") as f:
+        shutil.rmtree("data/routine", ignore_errors=True)
+        os.makedirs("data/routine", exist_ok=True)
+        with open("data/routine/lab_routine.txt", "w") as f:
             data = db["routine"].find_one({"type" : "routine"})["lab_routine"]
             f.write(data)
-        with open("ext/routine/rt1.png", "wb") as f:
+        with open("data/routine/rt1.png", "wb") as f:
             data = db["routine"].find_one({"type" : "routine"})["rt1"]
             f.write(data)
-        with open("ext/routine/rt2.png", "wb") as f:
+        with open("data/routine/rt2.png", "wb") as f:
             data = db["routine"].find_one({"type" : "routine"})["rt2"]
             f.write(data)
     except Exception as e:
@@ -178,12 +178,12 @@ def create_routine_file():
 def create_info_file():
     try:
         print("Creating info, ", end="")
-        shutil.rmtree("ext/info", ignore_errors=True)
-        os.makedirs("ext/info",exist_ok=True)
+        shutil.rmtree("data/info", ignore_errors=True)
+        os.makedirs("data/info",exist_ok=True)
         colllection = db["info"]
         for file in colllection.find({"type" : "info"}):
             file_name = file["name"]
-            path = f"ext/info/{file_name}.txt" if file_name == "group_training_data" else f"ext/info/{file_name}.shadow"
+            path = f"data/info/{file_name}.txt" if file_name == "group_training_data" else f"data/info/{file_name}.shadow"
             if file_name == "group_training_data":
                 with open(path, "w") as f:
                     f.write(file["data"])
