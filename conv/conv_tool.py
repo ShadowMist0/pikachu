@@ -1195,7 +1195,8 @@ register_conv = ConversationHandler(
         
     },
     fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv$")],
-    per_message=False,
+    per_chat=True,
+    per_user=True
 )
 
 #conversation handler for managing admin commad
@@ -1210,7 +1211,8 @@ manage_admin_conv = ConversationHandler(
         "ENTER_USER_ID" : [MessageHandler(filters.TEXT & ~filters.COMMAND, add_or_delete_admin)]
     },
     fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv$")],
-    per_message=False
+    per_chat=True,
+    per_user=True
 )
 
 #conversation handler for circulate message
@@ -1222,8 +1224,9 @@ circulate_message_conv = ConversationHandler(
             handle_circulate_message,
         )],
     },
-    fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv")],
-    per_message=False
+    fallbacks=[CallbackQueryHandler(cancel_conversation, pattern="^cancel_conv$")],
+    per_chat=True,
+    per_user=True
 )
 
 #conversation handler for adding a new api
