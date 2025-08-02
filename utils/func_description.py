@@ -199,4 +199,71 @@ information_handler_function = {
     }
 }
 
-func_list = [search_online_function, create_image_function, get_group_data_function, get_ct_data_function, get_routine_function, create_memory_function, information_handler_function]
+
+
+media_description_generator_function = {
+    "name": "media_description_generator",
+    "description": (
+        "Generates a detailed and engaging description for media files based on the content of the provised media for future accessibility and understanding.\n"
+        "Discribes the media's content, context, and any relevant details that would help to understand its significance, purpose and use case.\n"
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "media_type": {
+                "type": "string",
+                "description": "The type of media being described (e.g., 'image', 'video', 'audio', 'pdf', 'txt' ...)."
+            },
+            "media_description": {
+                "type": "string",
+                "description": "A detailed but sumamrized description of the media content, including its context, purpose, and any relevant details that would help understand its use case and significance."
+            }
+        },
+        "required": ["media_type", "media_description"]
+    }
+}
+
+
+
+
+fetch_media_content = {
+    "name": "fetch_media_content",
+    "description": (
+        "Retrieves and analyzes media files (Images, Videos, Audio, Voice Notes, Documents, Stickers, etc.) from all the media recorded in conversation history when there is not enough context in the conversation history.\n"
+        "to provide contextually accurate responses when user queries reference or involve previous media. \n\n"
+        "This function provide detailed media content , so always call this function when user requests directly or indirectly involves previous media context.\n"
+        "This function gets media files relevant to the current user request and fetches their content and analyzes them to provide contextually accurate responses."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "media_paths": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                },
+                "description": (
+                    "An array of file paths (absolute or relative) pointing to the media files required for analysis.\n"
+                    "These paths enable real-time content inspection to ensure responses are grounded in actual media content."
+                )
+            }
+        },
+        "required": ["media_paths"]
+    }
+}
+
+
+
+
+
+
+func_list = [
+    search_online_function,
+    create_image_function,
+    get_group_data_function,
+    get_ct_data_function,
+    get_routine_function,
+    create_memory_function,
+    information_handler_function,
+    fetch_media_content
+]

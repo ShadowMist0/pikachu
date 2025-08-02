@@ -31,7 +31,6 @@ from bot.media_handler import(
     handle_sticker,
     handle_video,
     handle_voice,
-    handle_location
 )
 from conv.conv_tool import(
     api_conv_handler,
@@ -50,7 +49,7 @@ from bot.echo import echo
 
 
 
-#code to ignore warnig about per_message in conv handler and increase poll size
+#code to ignore warning about per_message in conv handler and increase poll size
 warnings.filterwarnings("ignore",category=PTBUserWarning)
 tg_request = HTTPXRequest(connection_pool_size=50, pool_timeout=30)
 

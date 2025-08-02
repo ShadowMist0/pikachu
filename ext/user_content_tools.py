@@ -17,6 +17,22 @@ import html
 
 
 
+def get_all_media(user_id):
+    conn = sqlite3.connect('user_media/user_media.db')
+    c = conn.cursor()
+    c.execute('SELECT * FROM user_media WHERE user_id=?', (user_id,))
+    media_records = c.fetchall()
+    conn.close()
+    media_data = {}
+    for record in media_records:
+        media_id = record[7]
+        media_data[media_id] = {
+            'timestamp': record[2],
+            'media_type': record[3],
+            'media_description': record[5],
+            'media_size': record[6]
+        }
+    return str(media_data)
 
 
 #A function to delete n times convo from conversation history
@@ -107,9 +123,16 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
                 data += f.read()
                 data += "\n\n***END OF CONVERSATION***\n\n"
         client = genai.Client(api_key=api)
+        prompt = (
+                "\n\n Make memory based on the above data."
+                "Make it as short and summarized as possible but without missing important information."
+                "Again make it short like instead of using user talked about a image about AI that contains blah blah blah use you talked about AI. "
+                "And cut out unnecessary information like timestamp, media description etc."
+                "And cut out unnecessary info in previous memory and conversation history."
+            )
         response = client.models.generate_content(
             model = "gemini-2.5-flash",
-            contents = data,
+            contents = data + prompt,
             config = types.GenerateContentConfig(
                 thinking_config = types.ThinkingConfig(thinking_budget=1024),
                 temperature = 0.7,
@@ -136,7 +159,7 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
                     {"id" : user_id},
                     {"$set" : {"memory" : memory}}
                 )
-                await asyncio.to_thread(delete_n_convo, user_id, 10)
+                await asyncio.to_thread(delete_n_convo, user_id, 15)
             elif user_id < 0:
                 group_id = user_id
                 with open(f"data/memory/memory-group.txt", "a+", encoding="utf-8") as f:
@@ -190,14 +213,14 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
             with open(f"data/memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
                 f.seek(0)
                 data += f.read()
-                data += "\n***END OF MEMORY***\n\n\n"
+           
             with open(f"data/Conversation/conversation-{user_id}.txt", "a+", encoding="utf-8") as f:
                 f.seek(0)
                 data += "***CONVERSATION HISTORY***\n\n"
                 data += f.read()
                 data += "\nUser: " + user_message
                 f.seek(0)
-                if(f.read().count("You: ")>20):
+                if(f.read().count("You: ")>30):
                     asyncio.create_task(background_memory_creation(update, content, user_id))
             if data:
                 return data
@@ -225,7 +248,9 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 f.seek(0)
                 if(f.read().count("You: ")>200):
                     asyncio.create_task(background_memory_creation(update, content, user_id))
+            print("hi")
             if data:
+    
                 return data
             else:
                 return "Hi"

@@ -100,13 +100,13 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
             sent_message = response.text
             if len(sent_message) > 4080:
                 messages = [sent_message[i:i+4080] for i in range(0, len(sent_message), 4080)]
-                for i,message in enumerate(messages):
-                    if is_code_block_open(message):
+                for i,msg in enumerate(messages):
+                    if is_code_block_open(msg):
                         messages[i] += "```"
                         messages[i+1] = "```\n" + messages[i+1]
-                    if not (has_codeblocks(message)):
+                    if not (has_codeblocks(msg)):
                         try:
-                            await safe_send(message.reply_text, messages[i], parse_mode="Markdown")
+                            await message.reply_text(messages[i], parse_mode="Markdown")
                         except:
                             try:
                                 await message.reply_text(add_escape_character(messages[i]), parse_mode="MarkdownV2")
@@ -174,6 +174,7 @@ async def run_workers(n):
 #function to get response from gemini
 async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE, bot_name) -> None:
     try:
+        print("from user_message_handler")
         try:
             message = update.message or update.edited_message
             global gemini_api_keys
@@ -211,7 +212,7 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                         next(response).text
                         break
                     else:
-                        response = await gemini_non_stream(update, content, prompt, api,settings)
+                        response = await gemini_non_stream(update, content, prompt, api,settings, user_message)
                         if response == False:
                             return
                         if response.prompt_feedback and response.prompt_feedback.block_reason:
@@ -223,6 +224,7 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                     print(f"Error getting gemini response for API-{gemini_api_keys.index(api)}. \n Error Code -{e}")
                     continue
             if response is not None:
+                print("from send message")
                 await send_message(update, content, response, user_message, settings)
             elif response != False:
                 if os.path.exists(f"data/Conversation/conversation-{user_id}.txt"):

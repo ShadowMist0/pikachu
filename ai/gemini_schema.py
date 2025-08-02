@@ -8,12 +8,18 @@ import asyncio
 from PIL import Image
 from io import BytesIO
 import os
+import sqlite3
+import random
 from bot.info_handler import get_ct_data, routine_handler, information_handler
-from utils.func_description import func_list
+from utils.func_description import(
+    func_list
+)
 import json
 from ext.user_content_tools import save_conversation, save_group_conversation
 from utils.utils import is_ddos, send_to_channel, safe_send, add_escape_character, has_codeblocks, is_code_block_open
 from utils.config import channel_id
+from utils.db import gemini_api_keys
+
 
 
 
@@ -93,11 +99,11 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
             sent_message = response.text
             if len(sent_message) > 4080:
                 messages = [sent_message[i:i+4080] for i in range(0, len(sent_message), 4080)]
-                for i,message in enumerate(messages):
-                    if is_code_block_open(message):
+                for i,msg in enumerate(messages):
+                    if is_code_block_open(msg):
                         messages[i] += "```"
                         messages[i+1] = "```\n" + messages[i+1]
-                    if not (has_codeblocks(message)):
+                    if not (has_codeblocks(msg)):
                         try:
                             await safe_send(update.message.reply_text, messages[i], parse_mode="Markdown")
                         except:
@@ -279,9 +285,56 @@ async def add_memory_content(update:Update, content:ContextTypes.DEFAULT_TYPE, d
 
 
 
-
 #All the global function 
+async def analyze_media(update: Update, content: ContextTypes.DEFAULT_TYPE, media_list, prompt, settings, usr_msg):
+    try:
+        user_id = update.effective_user.id
+        message = await update.message.reply_text("Analyzing all available file and media, please wait...")
+        if not media_list:
+            await content.bot.delete_message(chat_id=user_id, message_id=message.message_id)
+            await update.message.reply_text("No media found to analyze.")
+            return None
+        temp_api = list(gemini_api_keys)
+        def sync_block(media_list):
+            for _ in range(len(gemini_api_keys)):
+                try:
+                    api = random.choice(temp_api)
+                    client = genai.Client(api_key=api)
+                    contents = []
+                    for media in media_list:
+                        if os.path.exists(media):
+                            contents.append(client.files.upload(file=media))
+                        else:
+                            print(f"File {media} does not exist.")
+                            return None
+                    contents.append(prompt)
+                    response = client.models.generate_content(
+                        model = gemini_model_list[settings[2]],
+                        contents = contents,
+                        config = types.GenerateContentConfig(
+                            thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
+                            temperature=settings[4],
+                            system_instruction=load_persona(settings),
+                            response_modalities=["TEXT"],
+                        )
+                    )
+                    response.text
+                    return response
+                except Exception as e:
+                    temp_api.remove(api)
+                    if not temp_api:
+                        return None
+                    print(f"Error in analyzing media with API key {gemini_api_keys.index(api)}. Retrying with next key.\n\nError Code - {e}")
 
+        response = await asyncio.to_thread(sync_block, media_list)
+        await content.bot.delete_message(chat_id=user_id, message_id=message.message_id)
+        if response:
+            await send_message(update, content, response, usr_msg, settings)
+        else:
+            await update.message.reply_text("Failed to analyze the media")
+    except Exception as e:
+        print(f"Error in analyze_media function. \n\nError Code - {e}")
+        return None 
 
 
 
@@ -312,7 +365,7 @@ async def gemini_stream(update, content, user_message, api, settings):
                 response_modalities=["TEXT"],
             )
         def sync_block(api):
-            client = genai.Client(api_key=api)
+            client = genai.Client(api_key=gemini_api_keys[1])
             response = client.models.generate_content_stream(
                 model = gemini_model_list[settings[2]],
                 contents = [user_message],
@@ -330,7 +383,7 @@ async def gemini_stream(update, content, user_message, api, settings):
 
 
 #gemini response for stream off
-async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, user_message, api, settings):
+async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, user_message, api, settings, usr_msg):
     try:
         user_id = update.effective_user.id
         tools=[]
@@ -363,6 +416,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 json.dump(response.to_json_dict(), file, indent=2, ensure_ascii=False)
             return response
         response = await asyncio.to_thread(sync_block, api)
+        print(json.dumps(response.to_json_dict(), indent=2, ensure_ascii=False))
         has_function = False
         for part in response.candidates[0].content.parts:
             if hasattr(part, "function_call") and part.function_call is not None:
@@ -396,14 +450,14 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 for part in response.candidates[0].content.parts:
                     if hasattr(part, "text") and part.text is not None:
                         await update.message.reply_text(part.text)
-                        await asyncio.to_thread(save_conversation,user_message, part.text, user_id)
+                        await asyncio.to_thread(save_conversation,usr_msg, part.text, user_id)
                 await routine_handler(update, content)
             elif function_call.name == "add_memory_content":
                 data = function_call.args["memory_content"]
                 for part in response.candidates[0].content.parts:
                     if hasattr(part, "text") and part.text is not None:
                         await update.message.reply_text(part.text)
-                        await asyncio.to_thread(save_conversation,user_message, part.text, user_id)
+                        await asyncio.to_thread(save_conversation,usr_msg, part.text, user_id)
                 await add_memory_content(update, content, data)
                 return False
             elif function_call.name == "information_handler":
@@ -412,22 +466,33 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                     if hasattr(part, "text") and part.text is not None:
                         if type(markup) == str or markup is None:
                             await update.message.reply_text(part.text)
-                            await asyncio.to_thread(save_conversation, user_message, part.text, user_id)
+                            await asyncio.to_thread(save_conversation, usr_msg, part.text, user_id)
                         else:
                             text = part.text
                             await update.message.reply_text(text, reply_markup=markup)
-                            await asyncio.to_thread(save_conversation, user_message, text, user_id)
+                            await asyncio.to_thread(save_conversation, usr_msg, text, user_id)
                             return False
-                if type(markup) == str:
-                    await update.message.reply_text(markup, parse_mode="Markdown")
-                    await asyncio.to_thread(save_conversation, user_message, markup, user_id)
+                    else:
+                        await update.message.reply_text("Click the button to see your requested data", reply_markup=markup)
+                        await asyncio.to_thread(save_conversation, usr_msg, "Click the button to see your requested data", user_id)
+                        return False
+            elif function_call.name == "fetch_media_content":
+                media_paths = function_call.args["media_paths"]
+                print(f"Media Paths: {media_paths}")
+                await analyze_media(update, content, media_paths, user_message, settings, usr_msg)
+                return False
+            elif function_call.name == "run_code":
+                data = ""
+                for part in response.candidates[0].content.parts:
+                    if hasattr(part, "text") and part.text is not None:
+                        data += part.text
+                    if hasattr(part, "function_call") and part.function_call is not None:
+                        code = part.function_call.args["code"]
+                        if code:
+                            data += "\n" + code
+                if data:
+                    await send_message(update, content, data, user_message, settings)
                     return False
-                else:
-                    await update.message.reply_text("Click the button to see your requested data", reply_markup=markup)
-                    await asyncio.to_thread(save_conversation, user_message, "Click the button to see your requested data", user_id)
-                    return False
-            if not response:
-                return response
             return False
         return response
     except Exception as e:

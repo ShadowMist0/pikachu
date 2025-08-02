@@ -16,7 +16,7 @@ from telegram.ext import(
 )
 import asyncio
 from utils.config import fernet, db, channel_id
-from utils.db import load_admin, load_gemini_api, load_all_user, load_gemini_model
+from utils.db import load_admin, load_gemini_api, load_all_user, load_gemini_model, gemini_api_keys
 import sqlite3
 from utils.utils import get_settings
 from utils.message_utils import add_escape_character, send_to_channel
@@ -65,15 +65,15 @@ async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> No
             client = genai.Client(api_key=user_api)
             response = client.models.generate_content(
                 model = "gemini-2.5-flash",
-                content = ["Checking if the gemini api working or not respond with one word."]
+                contents = ["Checking if the gemini api working or not respond with one word."]
             )
-            chunk = next(response)
+            chunk = response.text
             if(
                 user_api.startswith("AIza")
                 and user_api not in gemini_api_keys
                 and " " not in user_api
                 and len(user_api) >= 39
-                and chunk.text
+                and chunk
             ):
                 await asyncio.to_thread(db["API"].update_one,
                     {"type" : "api"},

@@ -34,6 +34,12 @@ user_requests = defaultdict(list)
 global_requests = []
 banned_users = {}
 
+media_count_limit = 5
+media_size_limit = 20
+premium_media_count_limit = 10
+premium_media_size_limit = 60
+
+
 try:
     db = MongoClient(mongo_url, server_api=ServerApi("1"))["phantom_bot"]
 except:
