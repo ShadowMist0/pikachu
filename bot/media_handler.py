@@ -234,16 +234,6 @@ async def media_manager(update: Update, content: ContextTypes.DEFAULT_TYPE, path
         conn = sqlite3.connect('user_media/user_media.db')
         c = conn.cursor()
 
-        # Delete ALL media older than 1 hour (Global cleanup)
-        c.execute('''SELECT media_path FROM user_media WHERE timestamp < ?''', (timestamp - 60*60,))
-        old_media = c.fetchall()
-        for media in old_media:
-            media_path = media[0]
-            if os.path.exists(media_path):
-                os.remove(media_path)
-        c.execute('''DELETE FROM user_media WHERE timestamp < ?''', (timestamp - 60*60,))
-        conn.commit()
-
         # Limits based on user type
         size_limit = media_size_limit if str(user_id) not in premium_users else premium_media_size_limit
         count_limit = media_count_limit if str(user_id) not in premium_users else premium_media_count_limit
