@@ -21,11 +21,11 @@ def create_settings_file():
             CREATE TABLE IF NOT EXISTS user_settings(
                 id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
-                model INTEGER,
+                model TEXT,
                 thinking_budget INTEGER,
                 temperature REAL,
                 streaming INTEGER,
-                persona INTEGER
+                persona TEXT
             )
         """)
         for user in all_users:

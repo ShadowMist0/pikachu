@@ -38,6 +38,10 @@ def get_all_media(user_id):
 #A function to delete n times convo from conversation history
 def delete_n_convo(user_id, n):
     try:
+        conn = sqlite3.connect("user_media/user_media.db")
+        c = conn.cursor()
+        c.execute("select media_path from user_media")
+        paths = c.fetchall()
         if user_id < 0:
             with open(f"data/Conversation/conversation-group.txt", "r+", encoding="utf-8") as f:
                 data = f.read()
@@ -86,6 +90,12 @@ def delete_n_convo(user_id, n):
                     {"id" : user_id},
                     {"$set" : {"conversation" : data}}
                 )
+        with open(f"data/Conversation/conversation-{user_id}.txt", "r") as file:
+            conv_data = f.read()
+            for path in paths:
+                if path not in conv_data:
+                    if os.path.exists(path):
+                        os.remove(path)
     except Exception as e:
         print(f"Failed to delete conversation history \n Error Code - {e}")
 

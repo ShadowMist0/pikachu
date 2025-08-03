@@ -482,7 +482,6 @@ async def take_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
 #function to confirm user password
 async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
-        all_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in sorted(glob("data/persona/*txt"))]
         is_guest = content.user_data.get("guest")
         keyboard = [
             ["Routine", "CT"],
@@ -519,13 +518,13 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 """,
                 tuple(info for info in user_info)
                 )
-                persona = all_persona.index("Pikachu") if user_info[2] == "male" else all_persona.index("Aarohi")
+                persona = "data/persona/pikachu.txt"
                 data = {
                     "id" : user_info[0],
                     "name" : user_info[1],
                     "memory" : None,
                     "conversation" : None,
-                    "settings" : (user_info[0], user_info[1], 1, 0, 0.7, 0, persona),
+                    "settings" : (user_info[0], user_info[1], "gemini-2.5-flash", 0, 0.7, 0, persona),
                     "user_data" : user_info
                 }
                 await asyncio.to_thread(
@@ -541,7 +540,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                         (id, name, model, thinking_budget, temperature, streaming, persona)
                         VALUES(?,?,?,?,?,?,?)
                 """,
-                (user_info[0], user_info[1], 1, 0, 0.7, 0, persona)
+                (user_info[0], user_info[1], "gemini-2.5-flash", 0, 0.7, 0, persona)
                 )
                 conn.commit()
                 conn.close()

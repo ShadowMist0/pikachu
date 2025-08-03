@@ -25,12 +25,7 @@ from bot.command_handler import(
     admin_handler
 )
 from bot.media_handler import(
-    handle_document,
-    handle_audio,
-    handle_image,
-    handle_sticker,
-    handle_video,
-    handle_voice,
+    handle_media
 )
 from conv.conv_tool import(
     api_conv_handler,
@@ -63,7 +58,7 @@ async def main():
     try:
         threading.Thread(target=run_web).start()
         app = ApplicationBuilder().token(TOKEN).request(tg_request).concurrent_updates(True).build()
-        await load_all_files()
+        #await load_all_files()
 
         #conversation handler to verify user attendance
         
@@ -82,12 +77,15 @@ async def main():
         app.add_handler(CallbackQueryHandler(button_handler))
         app.add_handler(CommandHandler("admin", admin_handler))
         #app.add_handler(MessageHandler(filters.LOCATION, handle_location))
-        app.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
-        app.add_handler(MessageHandler(filters.Document.ALL & ~filters.ChatType.CHANNEL, handle_document))
-        app.add_handler(MessageHandler(filters.PHOTO & ~filters.ChatType.CHANNEL, handle_image))
-        app.add_handler(MessageHandler(filters.AUDIO & ~filters.ChatType.CHANNEL, handle_audio))
-        app.add_handler(MessageHandler(filters.VOICE & ~filters.ChatType.CHANNEL, handle_voice))
-        app.add_handler(MessageHandler(filters.VIDEO & ~filters.ChatType.CHANNEL, handle_video))
+        app.add_handler(MessageHandler(
+            (filters.PHOTO |
+            filters.Document.ALL | 
+            filters.AUDIO |
+            filters.VOICE |
+            filters.VIDEO |
+            filters.Sticker.ALL) &
+            ~filters.ChatType.CHANNEL, handle_media
+        ))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.ChatType.CHANNEL, echo))
         # with open("data/info/webhook_url.shadow", "rb") as file:
         #     url = fernet.decrypt(file.read().strip()).decode("utf-8")

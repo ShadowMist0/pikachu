@@ -1,18 +1,11 @@
 from telegram import (
     Update,
-    ReplyKeyboardMarkup,
     InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    KeyboardButton
+    InlineKeyboardMarkup
 )
 from telegram.ext import(
-    ApplicationBuilder,
-    CommandHandler,
     ContextTypes,
-    MessageHandler,
-    filters,
     ConversationHandler,
-    CallbackQueryHandler,
 )
 from utils.utils import get_settings
 from utils.message_utils import add_escape_character
@@ -42,8 +35,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
         settings = await get_settings(user_id)
         c_model = tuple(model for model in gemini_model_list)
         personas = sorted(glob("data/persona/*txt"))
-        c_persona = [os.path.splitext(os.path.basename(persona))[0] for persona in personas]
-        c_persona.remove("memory_persona")
+        personas.remove("data/persona/memory_persona.txt")
 
         if query.data == "c_model":
             keyboard = []
@@ -55,7 +47,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                 keyboard.append(row)
             keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
             model_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(f"Current Model: {gemini_model_list[settings[2]]}\nChoose a model:", reply_markup=model_markup, parse_mode="Markdown")
+            await query.edit_message_text(f"Current Model: {settings[2]}\nChoose a model:", reply_markup=model_markup, parse_mode="Markdown")
 
         elif query.data == "c_streaming":
             keyboard = [
@@ -93,30 +85,28 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("Streaming has turned off.")
 
         elif query.data == "c_persona":
-            personas = sorted(glob("data/persona/*txt"))
             conn = sqlite3.connect("data/info/user_data.db")
             cursor = conn.cursor()
-            cursor.execute("SELECT gender FROM users WHERE user_id = ?", (query.from_user.id, ))
-            gender = cursor.fetchone()[0]
-            if gender == "female":
+            cursor.execute("SELECT * FROM users WHERE user_id = ?", (query.from_user.id, ))
+            user = cursor.fetchone()
+            if user[2] == "female" or user[3] == 0:
                 try:
-                    c_persona.remove("Maria")
-                except Exception as r:
+                    personas.remove("data/persona/Maria.txt")
+                except Exception as e:
                     print(f"Error in c_data part. Error Code - {e}")
             settings = await get_settings(user_id)
             keyboard = []
-            for i in range(0, len(c_persona), 2):
+            for i in range(0, len(personas), 2):
                 row = []
-                name = c_persona[i]
-                if name != "memory_persona":
-                    row.append(InlineKeyboardButton(text=name, callback_data=name))
-                if i+1 < len(c_persona):
-                    name = c_persona[i+1]
-                    row.append(InlineKeyboardButton(text = name, callback_data=name))
+                name = os.path.splitext(os.path.basename(personas[i]))[0]
+                row.append(InlineKeyboardButton(text=name, callback_data=personas[i]))
+                if i+1 < len(personas):
+                    name = os.path.splitext(os.path.basename(personas[i+1]))[0]
+                    row.append(InlineKeyboardButton(text = name, callback_data=personas[i+1]))
                 keyboard.append(row)
             keyboard.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
             markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(f"Persona will shape your bot response as personality.\n\nCurrent Persona: {os.path.splitext(os.path.basename(personas[settings[6]]))[0]}\n\nIt is recommended not to change the persona. Choose an option:", reply_markup=markup, parse_mode="Markdown")
+            await query.edit_message_text(f"Persona will shape your bot response as personality.\n\nCurrent Persona: {os.path.splitext(os.path.basename(settings[6]))[0]}\n\nIt is recommended not to change the persona. Choose an option:", reply_markup=markup, parse_mode="Markdown")
 
         elif query.data == "c_memory":
             keyboard = [
@@ -137,43 +127,43 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
         elif query.data in c_model :
             conn = sqlite3.connect("data/settings/user_settings.db")
             cursor = conn.cursor()
-            model_num = c_model.index(query.data)
-            if gemini_model_list[model_num] != "gemini-2.5-pro":
-                cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model_num, user_id))
+            model = query.data
+            if model != "gemini-2.5-pro":
+                cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model, user_id))
                 conn.commit()
                 conn.close()
                 await asyncio.to_thread(
                 db[f"{user_id}"].update_one,
                         {"id" : user_id},
-                        {"$set" : {"settings.2":model_num}}
+                        {"$set" : {"settings.2":model}}
                 )
-                await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
-            elif gemini_model_list[model_num] == "gemini-2.5-pro":
-                cursor.execute("UPDATE user_settings SET model = ?, thinking_budget = ? WHERE id = ? AND thinking_budget = 0", (model_num, 1024, user_id))
+                await query.edit_message_text(f"AI model is successfully changed to {model}.")
+            elif model == "gemini-2.5-pro":
+                cursor.execute("UPDATE user_settings SET model = ?, thinking_budget = ? WHERE id = ? AND thinking_budget < 128", (model, 1024, user_id))
                 conn.commit()
                 conn.close()
                 await asyncio.to_thread(
                 db[f"{user_id}"].update_one,
                         {"id" : user_id},
-                        {"$set" : {"settings.2":model_num, "settings.3" : 1024}}
+                        {"$set" : {"settings.2":model, "settings.3" : 1024}}
                 )
-                await query.edit_message_text(f"AI model is successfully changed to {gemini_model_list[model_num]}.")
+                await query.edit_message_text(f"AI model is successfully changed to {model}.")
 
-        elif query.data in c_persona:
+        elif query.data in personas:
             conn = sqlite3.connect("data/settings/user_settings.db")
             cursor = conn.cursor()
-            persona_num = personas.index(f"data/persona/{query.data}.txt")
-            cursor.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona_num, user_id))
+            persona = query.data
+            cursor.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona, user_id))
             conn.commit()
             conn.close()
             await reset(update, content, query)
             await asyncio.to_thread(
                 db[f"{user_id}"].update_one,
                     {"id" : user_id},
-                    {"$set" : {"settings.6":persona_num}}
+                    {"$set" : {"settings.6":persona}}
             )
             personas = sorted(glob("data/persona/*txt"))
-            await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(personas[persona_num]))[0]}.")
+            await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(persona))[0]}.")
 
         elif query.data == "g_classroom":
             await query.edit_message_text("CSE Google classroom code: ```2o2ea2k3```\n\nMath G. Classroom code: ```aq4vazqi```\n\nChemistry G. Classroom code: ```wnlwjtbg```", parse_mode="Markdown")

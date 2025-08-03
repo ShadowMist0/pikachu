@@ -154,7 +154,7 @@ def search_online(user_message, api, settings):
         tools.append(types.Tool(google_search=types.GoogleSearch))
         tools.append(types.Tool(url_context=types.UrlContext))
         
-        if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
+        if settings[2] == "gemini-2.5-pro" or settings[2] == "gemini-2.5-flash":
             config = types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
                 temperature = settings[4],
@@ -172,7 +172,7 @@ def search_online(user_message, api, settings):
         
         client = genai.Client(api_key=api)
         response = client.models.generate_content(
-            model = gemini_model_list[settings[2]],
+            model = settings[2],
             contents = [user_message],
             config = config,
         )
@@ -210,7 +210,7 @@ async def get_group_data(update:Update, content:ContextTypes.DEFAULT_TYPE, user_
             """
             data += "Rules: Recheck the time and date"
             data += "\n\n" + user_message
-        if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
+        if settings[2] == "gemini-2.5-pro" or settings[2] == "gemini-2.5-flash":
             config = types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
                 temperature = settings[4],
@@ -228,7 +228,7 @@ async def get_group_data(update:Update, content:ContextTypes.DEFAULT_TYPE, user_
         
         client = genai.Client(api_key=api)
         response = client.models.generate_content(
-            model = gemini_model_list[settings[2]],
+            model = settings[2],
             contents = [data],
             config = config,
         )
@@ -309,7 +309,7 @@ async def analyze_media(update: Update, content: ContextTypes.DEFAULT_TYPE, medi
                             return None
                     contents.append(prompt)
                     response = client.models.generate_content(
-                        model = gemini_model_list[settings[2]],
+                        model = settings[2],
                         contents = contents,
                         config = types.GenerateContentConfig(
                             thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
@@ -349,7 +349,7 @@ async def gemini_stream(update, content, user_message, api, settings):
         # tools.append(types.Tool(url_context=types.UrlContext))
         tools.append(types.Tool(function_declarations=func_list))
 
-        if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
+        if settings[2] == "gemini-2.5-pro" or settings[2] == "gemini-2.5-flash":
             config = types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
                 temperature = settings[4],
@@ -367,7 +367,7 @@ async def gemini_stream(update, content, user_message, api, settings):
         def sync_block(api):
             client = genai.Client(api_key=gemini_api_keys[1])
             response = client.models.generate_content_stream(
-                model = gemini_model_list[settings[2]],
+                model = settings[2],
                 contents = [user_message],
                 config = config,
             )
@@ -390,7 +390,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
         # tools.append(types.Tool(google_search=types.GoogleSearch))
         # tools.append(types.Tool(url_context=types.UrlContext))
         tools.append(types.Tool(function_declarations=func_list))
-        if gemini_model_list[settings[2]] == "gemini-2.5-pro" or gemini_model_list[settings[2]] == "gemini-2.5-flash":
+        if settings[2] == "gemini-2.5-pro" or settings[2] == "gemini-2.5-flash":
             config = types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
                 temperature = settings[4],
@@ -408,7 +408,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
         def sync_block(api):
             client = genai.Client(api_key=api)
             response = client.models.generate_content(
-                model = gemini_model_list[settings[2]],
+                model = settings[2],
                 contents = [user_message],
                 config = config,
             )

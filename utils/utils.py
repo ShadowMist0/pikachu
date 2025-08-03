@@ -20,7 +20,6 @@ from utils.config import(
     fernet
 )
 import sqlite3, re
-from glob import glob
 from utils.db import gemini_model_list
 
 async def is_ddos(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id):
@@ -100,10 +99,10 @@ async def get_settings(user_id):
         cursor.execute("SELECT * FROM user_settings WHERE id = ?", (user_id,))
         row = cursor.fetchone()
         if not row:
-            return (999999, "XX", 1, 0, 0.7, 0, 4)
-        if row[2] > len(gemini_model_list)-1:
+            return (999999, "XX", "gemini-2.5-pro", 0, 0.7, 0, "data/persona/pikachu.txt")
+        if row[2] not in gemini_model_list:
             row = list(row)
-            row[2] = len(gemini_model_list)-1
+            row[2] = gemini_model_list[-1]
             await asyncio.to_thread(db[f"{user_id}"].update_one,
                 {"id" : user_id},
                 {"$set" : {"settings" : row}}
@@ -129,8 +128,7 @@ async def get_settings(user_id):
 #loading persona
 def load_persona(settings):
     try:
-        files = sorted(glob("data/persona/*txt"))
-        with open(files[settings[6]], "r") as file:
+        with open(settings[6], "r") as file:
             persona = file.read()
         return persona
     except Exception as e:
