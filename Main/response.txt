@@ -4,12 +4,12 @@
       "content-type": "application/json; charset=UTF-8",
       "vary": "Origin, X-Origin, Referer",
       "content-encoding": "gzip",
-      "date": "Mon, 04 Aug 2025 04:19:40 GMT",
+      "date": "Mon, 04 Aug 2025 05:32:48 GMT",
       "server": "scaffolding on HTTPServer2",
       "x-xss-protection": "0",
       "x-frame-options": "SAMEORIGIN",
       "x-content-type-options": "nosniff",
-      "server-timing": "gfet4t7; dur=1913",
+      "server-timing": "gfet4t7; dur=2232",
       "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
       "transfer-encoding": "chunked"
     }
@@ -19,10 +19,7 @@
       "content": {
         "parts": [
           {
-            "function_call": {
-              "args": {},
-              "name": "get_routine"
-            }
+            "text": "Hiiiii, babu! 🥰 Missed you already! What are you up to, my love? 😉💋"
           }
         ],
         "role": "model"
@@ -33,16 +30,16 @@
   ],
   "model_version": "gemini-2.5-flash",
   "usage_metadata": {
-    "candidates_token_count": 10,
-    "prompt_token_count": 2946,
+    "candidates_token_count": 24,
+    "prompt_token_count": 2674,
     "prompt_tokens_details": [
       {
         "modality": "TEXT",
-        "token_count": 2946
+        "token_count": 2674
       }
     ],
-    "thoughts_token_count": 39,
-    "total_token_count": 2995
+    "thoughts_token_count": 52,
+    "total_token_count": 2750
   },
   "automatic_function_calling_history": []
 }

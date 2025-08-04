@@ -115,7 +115,6 @@ async def media_description_generator(update:Update, content:ContextTypes.DEFAUL
         response = await asyncio.to_thread(get_description)
         response = json.loads(response.text)
         media_type = response.get("media_type", "unknown")
-        print(media_type)
         if not response:
             return
         return [file_id, media_type, path, os.path.getsize(path)/(1024*1024)]
@@ -227,7 +226,6 @@ async def handle_media(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None
         if file_size > 20:
             await message.reply_text("Failed to process your request. Telegram bot only  supports file up to 20 MB.")
             return
-        print("2")
         if ext not in valid_ext:
             await update.message.reply_text("Unsupported Format...")
             return
@@ -272,7 +270,6 @@ async def handle_media(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None
                 return None
         
         response = await asyncio.to_thread(gemini_analysis_worker)
-        print(response)
         if type(response) == str:
             await message.reply_text(response)
             await content.bot.delete_message(chat_id=chat_id, message_id=msg.message_id)

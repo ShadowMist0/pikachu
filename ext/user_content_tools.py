@@ -75,10 +75,16 @@ def delete_n_convo(user_id, n):
                 )
         with open(f"data/Conversation/conversation-{user_id}.txt", "r") as file:
             conv_data = f.read()
+            if not paths:
+                return
             for path in paths:
+                path = path[0]
                 if path not in conv_data:
+                    c.execute("delete from user_media where media_path = ?", (path,))
                     if os.path.exists(path):
                         os.remove(path)
+        conn.commit()
+        conn.close()
     except Exception as e:
         print(f"Failed to delete conversation history \n Error Code - {e}")
 
@@ -207,7 +213,6 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 f.seek(0)
                 if(f.read().count("You: ")>200):
                     asyncio.create_task(background_memory_creation(update, content, user_id))
-            print("hi")
             if data:
     
                 return data
@@ -316,6 +321,19 @@ async def reset(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> 
             await query.edit_message_text("All clear, Now we are starting fresh.")
         else:
             await query.edit_message_text("It seems you don't have a conversation at all.")
+        conn = sqlite3.connect("user_media/user_media.db")
+        c = conn.cursor()
+        c.execute("select media_path from user_media")
+        paths = c.fetchall()
+        if not paths:
+            return
+        for path in paths:
+            path = path[0]
+            c.execute("delete from user_media where media_path = ?", (path,))
+            if os.path.exists(path):
+                os.remove(path)
+        conn.commit()
+        conn.close()
     except Exception as e:
         await update.callback_query.message.reply_text(f"Sorry, The operation failed. Here's the error message:\n<pre>{html.escape(str(e))}</pre>", parse_mode="HTML")
         await send_to_channel(update, content, channel_id, f"Error in reset function \n\nError Code -{e}")

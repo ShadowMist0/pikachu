@@ -3,8 +3,10 @@ import glob, os
 import sqlite3
 
 
-user_id = 5924191438
-db[f"{user_id}"].update_one(
-    {"id" : user_id},
-    {"$set" : {"memory" : None}}
-)
+conn = sqlite3.connect("user_media/user_media.db")
+c = conn.cursor()
+c.execute("select media_path from user_media")
+paths = c.fetchall()
+for path in paths:
+    print(path[0])
+c.execute("delete from user_media where media_path = ?", (path[0],))

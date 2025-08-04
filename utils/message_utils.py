@@ -74,7 +74,6 @@ async def run_workers(n):
 #function to get response from gemini
 async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE, bot_name) -> None:
     try:
-        print("from user_message_handler")
         message = update.message or update.edited_message
         global gemini_api_keys
         user_message = message.text.strip()
@@ -106,7 +105,6 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                 print(f"Error getting gemini response for API-{gemini_api_keys.index(api)}. \n Error Code -{e}")
                 continue
         if response is not None:
-            print("from send message")
             await send_message(update, content, response, user_message, settings)
         elif response != False:
             if os.path.exists(f"data/Conversation/conversation-{user_id}.txt"):

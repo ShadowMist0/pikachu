@@ -13,7 +13,7 @@ from telegram.ext import(
     ConversationHandler,
     CallbackQueryHandler,
 )
-import asyncio
+import asyncio, html
 from utils.config import fernet, db, channel_id
 from utils.db import load_admin, load_gemini_api, load_all_user, load_gemini_model, gemini_api_keys
 import sqlite3
@@ -84,7 +84,7 @@ async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> No
                 await update.message.reply_text("Sorry, This is an invalid or Duplicate API, try again with a valid API.")
                 return ConversationHandler.END
         except Exception as e:
-            await update.message.reply_text(f"Sorry, The API didn't work properly.\n Error Code - {e}")
+            await update.message.reply_text(f"Sorry, It doesn't seems like a valid API. Here's the error message:\n<pre>{html.escape(str(e))}</pre>", parse_mode="HTML")
             return ConversationHandler.END
     except Exception as e:
         print(f"Error in handling api. \n Error Code - {e}")
@@ -449,7 +449,7 @@ async def handle_api_conv(update : Update, content : ContextTypes.DEFAULT_TYPE) 
                 await update.message.delete()
                 return ConversationHandler.END
         except Exception as e:
-            await update.message.reply_text(f"Sorry, The API didn't work properly.\n Error Code - {e}")
+            await update.message.reply_text(f"Sorry, This doesn't seems like a valid API. Here's the error message:\n<pre>{html.escape(str(e))}</pre>", parse_mode="HTML")
             await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ra_message_id"))
             await update.message.delete()
             return ConversationHandler.END

@@ -283,7 +283,6 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 json.dump(response.to_json_dict(), file, indent=2, ensure_ascii=False)
             return response
         response = await asyncio.to_thread(sync_block, api)
-        print(json.dumps(response.to_json_dict(), indent=2, ensure_ascii=False))
         has_function = False
         for part in response.candidates[0].content.parts:
             if hasattr(part, "function_call") and part.function_call is not None:
