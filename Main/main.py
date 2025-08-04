@@ -59,10 +59,7 @@ async def main():
     try:
         threading.Thread(target=run_web).start()
         app = ApplicationBuilder().token(TOKEN).request(tg_request).concurrent_updates(True).build()
-        await load_all_files()
-
-        #conversation handler to verify user attendance
-        
+        await load_all_files()    
         app.add_handler(register_conv)
         app.add_handler(api_conv_handler)
         app.add_handler(thinking_conv)

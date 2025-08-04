@@ -31,12 +31,13 @@ from utils.db import gemini_api_keys
 #function for editing and sending message
 async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, response, user_message, settings) -> None:
     try:
+        message = update.message or update.edited_message
         if not response:
-            await update.message.reply_text("Failed to precess your request. Try again later.")
+            await message.reply_text("Failed to precess your request. Try again later.")
             return
         if await is_ddos(update, content, update.effective_user.id):
             return
-        message_to_send = response.text
+        message_to_send = response.text if hasattr(response, "text") else str(response)
         if len(message_to_send) > 4080:
             message_chunks = [message_to_send[i:i+4080] for i in range(0, len(message_to_send), 4080)]
             for i,msg in enumerate(message_chunks):
@@ -46,9 +47,9 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
                 await safe_send(update, content, message_chunks[i])
         else:
             await safe_send(update,content, message_to_send)
-        if update.message.chat.type == "private":
+        if message.chat.type == "private":
             await asyncio.to_thread(save_conversation, user_message, message_to_send, update.effective_user.id)
-        elif update.message.chat.type != "private":
+        elif message.chat.type != "private":
             await asyncio.to_thread(save_group_conversation, update, user_message, message_to_send)
     except Exception as e:
         print(f"Error in send_message function Error Code - {e}")
