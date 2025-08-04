@@ -88,7 +88,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM users WHERE user_id = ?", (query.from_user.id, ))
             user = cursor.fetchone()
-            if user[2] == "female" or user[3] == 0:
+            if user[3] == 0:
                 try:
                     personas.remove("data/persona/Maria.txt")
                 except Exception as e:

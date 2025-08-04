@@ -8,7 +8,9 @@ col = db["persona"]
 for persona in personas:
     with open(persona, "r") as file:
         data = file.read()
+    name = os.path.splitext(os.path.basename(persona))[0]
+    print(name)
     col.update_one(
-        {"name" : os.path.splitext(os.path.basename(persona))},
+        {"name" : name},
         {"$set" : {"persona" : data}}
     )

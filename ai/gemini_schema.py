@@ -297,7 +297,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                         msg = await update.message.reply_text("Searching...")
                         response = await asyncio.to_thread(search_online,function_call.args["query"], api, settings)
                         if response.text is not None:
-                            await send_message(update, content, response, user_message, settings)
+                            await send_message(update, content, response, usr_msg, settings)
                         await content.bot.delete_message(chat_id = update.effective_user.id, message_id=msg.message_id)
             elif function_call.name == "get_group_data":
                 response = await get_group_data(update, content, user_message, settings, api, function_call.name)
@@ -306,7 +306,6 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 response = await get_group_data(update, content, user_message, settings, api, function_call.name)
                 return response
             elif function_call.name == "create_image":
-                image_text = ""
                 for part in response.candidates[0].content.parts:
                     if hasattr(part, "text") and part.text is not None:
                         await update.message.reply_text(part.text)
