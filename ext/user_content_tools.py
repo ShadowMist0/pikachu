@@ -17,23 +17,6 @@ import html
 
 
 
-def get_all_media(user_id):
-    conn = sqlite3.connect('user_media/user_media.db')
-    c = conn.cursor()
-    c.execute('SELECT * FROM user_media WHERE user_id=?', (user_id,))
-    media_records = c.fetchall()
-    conn.close()
-    media_data = {}
-    for record in media_records:
-        media_id = record[7]
-        media_data[media_id] = {
-            'timestamp': record[2],
-            'media_type': record[3],
-            'media_description': record[5],
-            'media_size': record[6]
-        }
-    return str(media_data)
-
 
 #A function to delete n times convo from conversation history
 def delete_n_convo(user_id, n):
@@ -108,30 +91,18 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
         if user_id > 0:
             with open("data/persona/memory_persona.txt", "r", encoding="utf-8") as f:
                 instruction = load_persona(settings) + f.read()
-            with open(f"data/memory/memory-{user_id}.txt", "a+", encoding = "utf-8") as f:
-                f.seek(0)
-                data = "***PREVIOUS MEMORY***\n\n"
-                data += f.read()
-                data += "\n\n***END OF MEMORY***\n\n"
-            with open(f"data/Conversation/conversation-{user_id}.txt", "a+", encoding = "utf-8") as f:
-                f.seek(0)
-                data += "\n\n***CONVERSATION HISTORY***"
-                data += f.read()
-                data += "\n\n***END OF CONVERSATION***\n\n"
+            with open(f"data/memory/memory-{user_id}.txt", "r", encoding = "utf-8") as f:
+                data = "***PREVIOUS MEMORY***\n\n" + f.read() + "\n\n***END OF MEMORY***\n\n"
+            with open(f"data/Conversation/conversation-{user_id}.txt", "r", encoding = "utf-8") as f:
+                data += "\n\n***CONVERSATION HISTORY***\n\n" + f.read() +  "\n\n***END OF CONVERSATION***\n\n"
         elif user_id < 0:
             group_id = user_id
             with open("data/persona/memory_persona.txt", "r") as f:
                 instruction = f.read()
-            with open(f"data/memory/memory-group.txt", "a+", encoding = "utf-8") as f:
-                f.seek(0)
-                data = "***PREVIOUS MEMORY***\n\n"
-                data += f.read()
-                data += "\n\n***END OF MEMORY***\n\n"
-            with open(f"data/Conversation/conversation-group.txt", "a+", encoding = "utf-8") as f:
-                f.seek(0)
-                data += "\n\n***CONVERSATION HISTORY***"
-                data += f.read()
-                data += "\n\n***END OF CONVERSATION***\n\n"
+            with open(f"data/memory/memory-group.txt", "r", encoding = "utf-8") as f:
+                data = "***PREVIOUS MEMORY***\n\n" + f.read() + "\n\n***END OF MEMORY***\n\n"
+            with open(f"data/Conversation/conversation-group.txt", "r", encoding = "utf-8") as f:
+                data += "\n\n***CONVERSATION HISTORY***\n\n" + f.read() + "\n\n***END OF CONVERSATION***\n\n" 
         client = genai.Client(api_key=api)
         prompt = (
                 "\n\n Make memory based on the above data."
@@ -202,7 +173,6 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
 #create the conversation history as prompt
 async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_message, user_id, media):
     try:
-        settings = await get_settings(user_id)
         message = update.message or update.edited_message
         if message.chat.type == "private":
             data = "***RULES***\n"
@@ -212,23 +182,11 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 "So, You must not use timestamp in your response."
             )
             with open("data/info/rules.shadow", "rb" ) as f:
-                data += fernet.decrypt(f.read()).decode("utf-8")
-                data += "\n***END OF RULES***\n\n\n"
-            # if (settings[6] == 4 or settings[6] == 0) and media == 0:
-            #     data += "****TRAINING DATA****"
-            #     with open("data/info/group_training_data.txt", "r") as file:
-            #         data += file.read()
-            #     data += "****END OF TRAINIG DATA****"
-            data += "***MEMORY***\n"
-            with open(f"data/memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
-                f.seek(0)
-                data += f.read()
-           
-            with open(f"data/Conversation/conversation-{user_id}.txt", "a+", encoding="utf-8") as f:
-                f.seek(0)
-                data += "***CONVERSATION HISTORY***\n\n"
-                data += f.read()
-                data += "\nUser: " + user_message
+                data += fernet.decrypt(f.read()).decode("utf-8") + "\n***END OF RULES***\n\n\n"
+            with open(f"data/memory/memory-{user_id}.txt", "r", encoding="utf-8") as f:
+                data += "***MEMORY***\n" + f.read()
+            with open(f"data/Conversation/conversation-{user_id}.txt", "r", encoding="utf-8") as f:
+                data += "***CONVERSATION HISTORY***\n\n" + f.read() + "\nUser: " + user_message 
                 f.seek(0)
                 if(f.read().count("You: ")>30):
                     asyncio.create_task(background_memory_creation(update, content, user_id))
@@ -239,22 +197,13 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
         if message.chat.type != "private":
             data = "***RULES***\n"
             with open("data/info/group_rules.shadow", "rb") as f:
-                data += fernet.decrypt(f.read()).decode("utf-8")
-                data += "\n***END OF RULES***\n\n\n"
-            data += "******TRAINING DATA******\n\n"
+                data += fernet.decrypt(f.read()).decode("utf-8") + "\n***END OF RULES***\n\n\n"
             with open("data/info/group_training_data.txt", "r") as f:
-                data += f.read()
-                data += "******END OF TRAINING DATA******\n\n"
-            data += "***MEMORY***\n"
-            with open(f"data/memory/memory-group.txt", "a+", encoding="utf-8") as f:
-                f.seek(0)
-                data += f.read()
-                data += "\n***END OF MEMORY***\n\n\n"
-            with open(f"data/Conversation/conversation-group.txt", "a+", encoding="utf-8") as f:
-                f.seek(0)
-                data += "***CONVERSATION HISTORY***\n\n"
-                data += f.read()
-                data += "\nUser: " + user_message
+                data +=  "******TRAINING DATA******\n\n" + f.read() + "******END OF TRAINING DATA******\n\n"
+            with open(f"data/memory/memory-group.txt", "r", encoding="utf-8") as f:
+                data += "***MEMORY***\n" + f.read() + "\n***END OF MEMORY***\n\n\n"
+            with open(f"data/Conversation/conversation-group.txt", "r", encoding="utf-8") as f:
+                data += "***CONVERSATION HISTORY***\n\n" + f.read() + "\nUser: " + user_message
                 f.seek(0)
                 if(f.read().count("You: ")>200):
                     asyncio.create_task(background_memory_creation(update, content, user_id))

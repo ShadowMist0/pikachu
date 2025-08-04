@@ -31,7 +31,6 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             markup = InlineKeyboardMarkup(keyboard)
             await message.reply_text("You are not registered.", reply_markup=markup)
             return
-        user_name = f"{update.effective_user.first_name or update.effective_user.last_name or "Unknown"}".strip()
         user_message = (message.text or "...").strip()
         try:
             if (update.message and message.chat.type == "private") or (message.chat.type != "private" and (f"@{bot_name}" in user_message.lower() or f"{bot_name}" in user_message.lower() or "mama" in user_message.lower() or "@" in user_message.lower() or "bot" in user_message.lower() or "pika" in user_message.lower())):

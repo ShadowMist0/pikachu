@@ -25,7 +25,8 @@ from bot.command_handler import(
     admin_handler
 )
 from bot.media_handler import(
-    handle_media
+    handle_media,
+    handle_location
 )
 from conv.conv_tool import(
     api_conv_handler,
@@ -76,7 +77,7 @@ async def main():
         app.add_handler(CommandHandler("restart",restart))
         app.add_handler(CallbackQueryHandler(button_handler))
         app.add_handler(CommandHandler("admin", admin_handler))
-        #app.add_handler(MessageHandler(filters.LOCATION, handle_location))
+        app.add_handler(MessageHandler(filters.LOCATION, handle_location))
         app.add_handler(MessageHandler(
             (filters.PHOTO |
             filters.Document.ALL | 

@@ -14,13 +14,15 @@ from utils.config import(
     global_requests,
     global_time_limit,
     user_requests,
-    db,
-    channel_id,
-    FIREBASE_URL,
-    fernet
+    db
 )
 import sqlite3, re
 from utils.db import gemini_model_list
+
+
+
+
+
 
 async def is_ddos(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id):
     try:
@@ -82,13 +84,17 @@ async def send_to_channel(update: Update, content : ContextTypes.DEFAULT_TYPE, c
 
 
 #function to retry in case of TimeOut Error
-async def safe_send(bot_func, *args, retries =3, **kwargs):
-    for i in range(retries):
+async def safe_send(update:Update, content:ContextTypes.DEFAULT_TYPE, message):
+    try:
         try:
-            return await bot_func(*args, **kwargs)
-        except Exception as e:
-            print(f"In safe_send, failed after{i+1} tries. \n\n Error Code -{e}")
-    raise Exception(f"Sending failed after {retries} tries")
+            await update.message.reply_text(add_escape_character(message), parse_mode="MarkdownV2")
+        except:
+            try:
+                await update.message.reply_text(message, parse_mode="Markdown")
+            except:
+                await update.message.reply_text(message)
+    except Exception as e:
+        print(f"Message sending failed. Error code - {e}")
 
 
 #function to get settings

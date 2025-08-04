@@ -4,7 +4,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 import requests
 from utils.config import db, FIREBASE_URL
 import asyncio
-from utils.message_utils import add_escape_character
+from utils.utils import add_escape_character
 from utils.db import all_users
 
 
@@ -43,15 +43,18 @@ def get_ct_data():
 
 
 
-#function to handle ct command
-async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
+
+#function to inform all the student 
+async def inform_all(query, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        await query.edit_message_text("please wait while the bot is sending the message to all user.")
+        all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
         ct_data = get_ct_data()
         if ct_data == None:
-            await update.message.reply_text("Couldn't Connect to FIREBASE URL. Try again later.")
+            await query.message.reply_text("Couldn't Connect to FIREBASE URL. Try again later.")
             return
         elif not ct_data:
-            await update.message.reply_text("📭 No CTs scheduled yet.")
+            await query.message.reply_text("📭 No CTs scheduled yet.")
             return
         else:
             now = datetime.now()
@@ -73,7 +76,7 @@ async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
                     print(f"Skipping malformed CT {ct_id}: {e}")
 
             if not upcoming:
-                await update.message.reply_text("🎉 No upcoming CTs! You're all caught up!")
+                await query.message.reply_text("🎉 No upcoming CTs! You're all caught up!")
                 return
 
             # Sort by nearest date
@@ -95,50 +98,6 @@ async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
                     f"👨‍🏫 {ct['teacher']}\n"
                     f"📖 {ct['syllabus']}"
                 )
-
-            await update.message.reply_text("\n".join(message), parse_mode='HTML')
-    except Exception as e:
-        print(f"Error in handle_ct function. \n\nError Code - {e}")
-        await update.message.reply_text(f"Internal Error\n {e}. \nPlease contact admin or try again later.")
-
-
-
-#function to inform all the student 
-async def inform_all(query, content:ContextTypes.DEFAULT_TYPE) -> None:
-    try:
-        await query.edit_message_text("please wait while the bot is sending the message to all user.")
-        all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
-        ct_data = get_ct_data()
-        if ct_data is None or not ct_data:
-            await query.edit_message_text("⚠️ Couldn't connect to database or no CT data available.")
-            return
-        now = datetime.now()
-        tomorrow = now.date() + timedelta(days=1)
-        tomorrow_cts = []
-        for ct_id, ct in ct_data.items():
-            try:
-                ct_date = datetime.strptime(ct['date'], "%Y-%m-%d").date()
-                if ct_date == tomorrow:
-                    tomorrow_cts.append({
-                        'subject': ct.get('subject', 'No Subject'),
-                        'teacher': ct.get('teacher', 'Not specified'),
-                        'syllabus': ct.get('syllabus', 'No syllabus')
-                    })
-            except (KeyError, ValueError) as e:
-                print(f"Skipping malformed CT {ct_id}: {e}")
-        if not tomorrow_cts:
-            await query.edit_message_text("ℹ️ No CTs scheduled for tomorrow.")
-            return
-
-        # Format the reminder message
-        message = ["🔔 <b>CT Reminder: Tomorrow's Tests</b>"]
-        for ct in tomorrow_cts:
-            message.append(
-                f"\n📚 <b>{ct['subject']}</b>\n"
-                f"👨‍🏫 {ct['teacher']}\n"
-                f"📖 {ct['syllabus']}\n"
-            )
-        full_message = "\n".join(message)
         try:
             failed = 0
             failed_list = "Failed to send message to those user:\n"
@@ -147,7 +106,7 @@ async def inform_all(query, content:ContextTypes.DEFAULT_TYPE) -> None:
             async def send_ct_routine(user):
                 nonlocal failed, failed_list
                 try:
-                    await content.bot.send_message(chat_id=user, text=full_message, parse_mode="HTML")
+                    await content.bot.send_message(chat_id=user, text=message, parse_mode="HTML")
                     return True
                 except:
                     failed += 1

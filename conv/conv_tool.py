@@ -6,7 +6,6 @@ from telegram import (
     KeyboardButton
 )
 from telegram.ext import(
-    ApplicationBuilder,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -19,7 +18,7 @@ from utils.config import fernet, db, channel_id
 from utils.db import load_admin, load_gemini_api, load_all_user, load_gemini_model, gemini_api_keys
 import sqlite3
 from utils.utils import get_settings
-from utils.message_utils import add_escape_character, send_to_channel
+from utils.utils import add_escape_character, send_to_channel
 from telegram.constants import ChatAction
 from google import genai
 import os
@@ -61,7 +60,6 @@ async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> No
         user_api = update.message.text.strip()
         await update.message.chat.send_action(action = ChatAction.TYPING)
         try:
-            settings = await get_settings(update.effective_user.id)
             client = genai.Client(api_key=user_api)
             response = client.models.generate_content(
                 model = "gemini-2.5-flash",
@@ -933,8 +931,6 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
             list = f.read().split("-")
         present_students = tuple(db[f"Attendance-{date}"].find_one({"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"})["present"])
         student_data = db["names"].find_one({"type" : "official_data"})["data"]
-        conn = sqlite3.connect("data/info/user_data.db")
-        cursor = conn.cursor()
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", size=10, style="B")
@@ -1082,37 +1078,37 @@ async def verify_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE)
             if message_age > 20:
                 await message.reply_text("Sorry scammig is not allowed. Your location is not fresh. If there is an acitve live location sharing stop it and try again.")
                 return "VL"
-            if message_age < 20:
-                user_location = (location.latitude, location.longitude)
-                user_id = update.effective_user.id
-                conn = sqlite3.connect("data/info/user_data.db")
-                cursor = conn.cursor()
-                cursor.execute("SELECT name, roll FROM users WHERE user_id = ?", (user_id,))
-                info = cursor.fetchone()
-                user_roll = info[1]
-                conn.close()
-                
+            user_location = (location.latitude, location.longitude)
+            user_id = update.effective_user.id
+            conn = sqlite3.connect("data/info/user_data.db")
+            cursor = conn.cursor()
+            cursor.execute("SELECT name, roll FROM users WHERE user_id = ?", (user_id,))
+            info = cursor.fetchone()
+            user_roll = info[1]
+            conn.close()
+            
 
-                #logic to handle the location difference
-                allowed_distance = 200
-                distance = geodesic(cr_location, user_location).meters
-                if distance >= allowed_distance:
-                    await message.reply_text(f"You are not allowed to take the attendance as you are {distance} meters away from CR. If you are facing problem contact admin")
-                    return ConversationHandler.END
-                elif user_roll == 0:
-                    await message.reply_text(f"Guest member are not allowed to take attendance.")
-                else:
-                    collection = db[f"Attendance-{date}"]
-                    collection.update_one(
-                        {"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"},
-                        {"$push" : {"present" : user_roll}}
-                    )
-                    collection.update_one(
-                        {"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"},
-                        {"$push" : {"distance" : {f"{user_roll}" : distance}}}
-                    )
-                    await message.reply_text(f"Name: {info[0]}\nRoll: {info[1]}\nYour attendance submitted successfully.\n\nIf you are seeing wrong information here please contact admin.")
-                    return ConversationHandler.END
+            #logic to handle the location difference
+            allowed_distance = 200
+            distance = geodesic(cr_location, user_location).meters
+            if distance >= allowed_distance:
+                await message.reply_text(f"You are not allowed to take the attendance as you are {distance} meters away from CR. If you are facing problem contact admin")
+                return ConversationHandler.END
+            elif user_roll == 0:
+                await message.reply_text(f"Guest member are not allowed to take attendance.")
+                return ConversationHandler.END
+            else:
+                collection = db[f"Attendance-{date}"]
+                collection.update_one(
+                    {"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"},
+                    {"$push" : {"present" : user_roll}}
+                )
+                collection.update_one(
+                    {"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"},
+                    {"$push" : {"distance" : {f"{user_roll}" : distance}}}
+                )
+                await message.reply_text(f"Name: {info[0]}\nRoll: {info[1]}\nYour attendance submitted successfully.\n\nIf you are seeing wrong information here please contact admin.")
+                return ConversationHandler.END
         else:
             return ConversationHandler.END
     except Exception as e:

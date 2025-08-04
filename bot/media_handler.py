@@ -7,16 +7,12 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from utils.utils import is_ddos, get_settings, send_to_channel, load_persona
 from telegram.constants import ChatAction
-from PIL import Image
 from google import genai
 from google.genai import types
 from utils.config import channel_id, media_count_limit, media_size_limit, premium_media_count_limit, premium_media_size_limit
 from ext.user_content_tools import create_prompt
-from utils.db import gemini_api_keys, gemini_model_list, premium_users
-from collections import defaultdict, deque
+from utils.db import gemini_api_keys, premium_users
 import time
-from utils.func_description import media_description_generator_function, search_online_function
-from ai.gemini_schema import search_online
 from utils.utils import(
     is_ddos,
     send_to_channel,
@@ -26,7 +22,7 @@ from utils.utils import(
     has_codeblocks,
     is_code_block_open
 )
-from ext.user_content_tools import save_conversation, save_group_conversation
+from ext.user_content_tools import save_conversation
 
 
 
@@ -41,7 +37,6 @@ valid_ext = [
     ".ogg", ".wav", ".m4a"
 ]
 
-tools = []
 
 
 
@@ -50,7 +45,7 @@ async def save_media_conversation(update:Update, content:ContextTypes.DEFAULT_TY
     try:
         description = await media_description_generator(update,content, path, file_id)
         if description:
-            await asyncio.to_thread(save_conversation, f"<{file_type}>Type: {description[1]}, Description: {description[2]}, Path: {description[3]}, Size: {description[4]} MB</{file_type}>\n" + prompt + "\n", response.text, user_id)
+            await asyncio.to_thread(save_conversation, f"<{file_type}>Type: {description[1]}, Path: {description[2]}, Size: {description[3]} MB</{file_type}>\n" + prompt + "\n", response.text, user_id)
         else:
             await asyncio.to_thread(save_conversation, f"<{file_type}>"+prompt, response.text, user_id)
     except Exception as e:
@@ -66,102 +61,16 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
             return
         if await is_ddos(update, content, update.effective_user.id):
             return
-        if(settings[5]):
-            message_object  = await message.reply_text("Typing...")
-            buffer = ""
-            sent_message = ""
-            chunks = ''
-            for chunk in response:
-                if not chunk.text:
-                    continue
-                chunks += chunk.text
-                if chunk.text is not None and chunk.text.strip() and len(buffer+chunk.text)<4080:
-                    buffer += chunk.text if chunk.text else "."
-                    sent_message += chunk.text if chunk.text else "."
-                    if len(chunks) > 500:
-                        for i in range(0,5):
-                            try:
-                                await message_object.edit_text(buffer)
-                                chunks = ""
-                                break
-                            except TimeoutError as e:
-                                print(f"Error in editing message for {i+1} times. \n\n Error Code - {e}")
-                                await send_to_channel(update,content,channel_id, f"Error in editing message for {i+1} times. \n\n Error Code - {e}")
-
-                else:
-                    if is_code_block_open(buffer):
-                        buffer += "\n```"
-                        try:
-                            await message_object.edit_text(buffer, parse_mode="Markdown")
-                        except:
-                            try:
-                                await message_object.edit_text(add_escape_character(buffer), parse_mode="MarkdownV2")
-                            except:
-                                await message_object.edit_text(buffer)
-                        buffer = "```\n" + chunk.text
-                        message_object = await safe_send(message.reply_text,buffer)
-                    else:
-                        buffer = chunk.text
-                        sent_message += chunk.text
-                        message_object = await safe_send(message.reply_text, buffer)
-            if not(has_codeblocks(buffer)):
-                try:
-                    await message_object.edit_text(buffer+"\n.", parse_mode="Markdown")
-                except:
-                    try:
-                        await message_object.edit_text(add_escape_character(buffer+"\n."), parse_mode="MarkdownV2")
-                    except:
-                        await message_object.edit_text(buffer+"\n.")
-            else:
-                try:
-                    await message_object.edit_text(buffer+"\n.", parse_mode="Markdown")
-                except:
-                    try:
-                        await message_object.edit_text(add_escape_character(buffer+"\n."), parse_mode="MarkdownV2")
-                    except:
-                        await message_object.edit_text(buffer+"\n")
-        #if streaming is off
+        message_to_send = response.text
+        if len(message_to_send) > 4080:
+            message_chunks = [message_to_send[i:i+4080] for i in range(0, len(message_to_send), 4080)]
+            for i,msg in enumerate(message_chunks):
+                if is_code_block_open(msg):
+                    message_chunks[i] += "```"
+                    message_chunks[i+1] = "```\n" + message_chunks[i+1]
+                await safe_send(update, content, message_chunks[i])
         else:
-            sent_message = response.text
-            if len(sent_message) > 4080:
-                messages = [sent_message[i:i+4080] for i in range(0, len(sent_message), 4080)]
-                for i,msg in enumerate(messages):
-                    if is_code_block_open(msg):
-                        messages[i] += "```"
-                        messages[i+1] = "```\n" + messages[i+1]
-                    if not (has_codeblocks(msg)):
-                        try:
-                            await safe_send(message.reply_text, messages[i], parse_mode="Markdown")
-                        except:
-                            try:
-                                await message.reply_text(add_escape_character(messages[i]), parse_mode="MarkdownV2")
-                            except:
-                                await message.reply_text(messages[i])
-                    else:
-                        try:
-                            await message.reply_text(messages[i], parse_mode="Markdown")
-                        except:
-                            try:
-                                await message.reply_text(add_escape_character(messages[i]), parse_mode="MarkdownV2")
-                            except:
-                                await message.reply_text(messages[i])
-            else:
-                if not(has_codeblocks(sent_message)):
-                    try:
-                        await message.reply_text(sent_message, parse_mode ="Markdown")
-                    except:
-                        try:
-                            await message.reply_text(add_escape_character(sent_message), parse_mode="MarkdownV2")
-                        except:
-                            await message.reply_text(sent_message)
-                else:
-                    try:
-                        await safe_send(message.reply_text, sent_message, parse_mode ="Markdown")
-                    except:
-                        try:
-                            await message.reply_text(add_escape_character(sent_message), parse_mode="MarkdownV2")
-                        except:
-                            await message.reply_text(sent_message)
+            await safe_send(update, content, message_to_send)
     except Exception as e:
         print(f"Error in send_message function Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in send_message function \n\nError Code -{e}")
@@ -174,10 +83,6 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
 async def media_description_generator(update:Update, content:ContextTypes.DEFAULT_TYPE, path, file_id):
     try:
         await media_manager(update, content, path, os.path.getsize(path)/(1024*1024))
-        user_id = update.effective_user.id
-        settings = await get_settings(user_id)
-        conn = sqlite3.connect('user_media/user_media.db')
-        c = conn.cursor()
         def get_description():
             temp_api = list(gemini_api_keys)
             for _ in range(len(gemini_api_keys)):
@@ -198,10 +103,6 @@ async def media_description_generator(update:Update, content:ContextTypes.DEFAUL
                                     "media_type" : {
                                         "type" : "string",
                                         "description" : "The type of media e.g. image, screenshot, video, python code etc."
-                                    },
-                                    "description" : {
-                                        "type" : "string",
-                                        "description" : "A short summarized yet precise description in one sentence"
                                     }
                                 }
                             },
@@ -216,12 +117,10 @@ async def media_description_generator(update:Update, content:ContextTypes.DEFAUL
         response = await asyncio.to_thread(get_description)
         response = json.loads(response.text)
         media_type = response.get("media_type", "unknown")
-        media_description = response.get("description", "")
         print(media_type)
-        print(media_description)
         if not response:
             return
-        return [file_id, media_type, media_description, path, os.path.getsize(path)/(1024*1024)]
+        return [file_id, media_type, path, os.path.getsize(path)/(1024*1024)]
     except Exception as e:
         print(f"Error getting user id in media_description_generator function.\n\nError Code - {e}")
 

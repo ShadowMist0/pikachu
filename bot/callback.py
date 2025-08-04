@@ -7,15 +7,14 @@ from telegram.ext import(
     ContextTypes,
     ConversationHandler,
 )
-from utils.utils import get_settings
-from utils.message_utils import add_escape_character
+from utils.utils import get_settings, add_escape_character
 from glob import glob
 import os
 from utils.db import gemini_model_list, all_admins
 from utils.config import db,fernet
 import sqlite3
 import asyncio
-from circulation.circulate import circulate_message, circulate_routine, inform_all
+from circulation.circulate import circulate_routine, inform_all
 from ext.user_content_tools import see_memory, delete_memory, reset
 
 

@@ -229,23 +229,18 @@ media_description_generator_function = {
 fetch_media_content = {
     "name": "fetch_media_content",
     "description": (
-        "Retrieves and analyzes media files (Images, Videos, Audio, Voice Notes, Documents, Stickers, etc.) from all the media recorded in conversation history when there is not enough context in the conversation history.\n"
-        "to provide contextually accurate responses when user queries reference or involve previous media. \n\n"
-        "This function provide detailed media content , so always call this function when user requests directly or indirectly involves previous media context.\n"
-        "This function gets media files relevant to the current user request and fetches their content and analyzes them to provide contextually accurate responses."
+        "Accesses the content of previous media files for in-depth analysis. "
+        "Call this function to answer specific questions about a media's contents when a general description is insufficient."
+        "Do not guess or assume the media content, call this too to find out."
+        "Do not guess or assume that the requested content is not available in the media, call this function to find out."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "media_paths": {
                 "type": "array",
-                "items": {
-                    "type": "string",
-                },
-                "description": (
-                    "An array of file paths (absolute or relative) pointing to the media files required for analysis.\n"
-                    "These paths enable real-time content inspection to ensure responses are grounded in actual media content."
-                )
+                "items": {"type": "string"},
+                "description": "The file paths of the media from the conversation history that need to be inspected."
             }
         },
         "required": ["media_paths"]
