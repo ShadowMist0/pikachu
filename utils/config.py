@@ -8,6 +8,8 @@ from collections import defaultdict
 decryption_key = os.getenv("decryption_key")
 mongo_pass = os.getenv("MDB_pass_shadow")
 
+
+
 fernet = Fernet(decryption_key)
 
 channel_id = -1002575042671

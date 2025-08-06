@@ -1,5 +1,7 @@
+from urllib import response
 from google import genai
 from google.genai import types
+from pkg_resources import run_main
 from utils.db import gemini_model_list
 from utils.utils import load_persona
 from telegram import Update
@@ -7,8 +9,9 @@ from telegram.ext import ContextTypes
 import asyncio
 from PIL import Image
 from io import BytesIO
-import os
+import os, time
 import sqlite3
+from fpdf import FPDF
 import random
 from bot.info_handler import get_ct_data, routine_handler, information_handler
 from utils.func_description import(
@@ -17,7 +20,7 @@ from utils.func_description import(
 import json
 from ext.user_content_tools import save_conversation, save_group_conversation
 from utils.utils import is_ddos, send_to_channel, safe_send, is_code_block_open
-from utils.config import channel_id
+from utils.config import channel_id, db
 from utils.db import gemini_api_keys
 
 
@@ -25,6 +28,11 @@ from utils.db import gemini_api_keys
 
 
 
+
+#a function to convert hex to rgb
+def hex_to_rgb(hex_color):
+    hex_color = hex_color.lstrip("#")
+    return tuple(int(hex_color[i:i+2], 16) for i in (0,2,4))
 
 
 
@@ -91,6 +99,47 @@ def search_online(user_message, api, settings):
     except Exception as e:
         print(f"Error getting gemini response in search_online function.\n\n Error Code - {e}")
         return None
+
+
+async def create_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE, argument: dict, usr_msg, pre_msg):
+    try:
+        now = time.time()
+        user_id = update.effective_user.id
+        os.makedirs("media", exist_ok=True)
+        pdf_filename = f"data/media/{user_id}-{now}.pdf"
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_font('DejaVu', '', 'font/DejaVu.ttf', uni=True)
+        pdf.add_font('DejaVu', 'B', 'font/DejaVuB.ttf', uni=True)
+        pdf.add_font('DejaVu', 'I', 'font/DejaVuI.ttf', uni=True)
+        pdf.add_font('DejaVu', 'BI', 'font/DejaVuBI.ttf', uni=True)
+        texts = argument.get("text", [])
+        font_sizes = argument.get("font_size", [])
+        font_colors_hex = argument.get("font_color", [])
+        font_styles = argument.get("font_style", [])
+        alignments = argument.get("text_alignment", [])
+        font_colors_rgb = [hex_to_rgb(color) for color in font_colors_hex]
+        for i in range(len(texts)):
+            current_text = texts[i].replace("💋", "[kiss]")
+            pdf.set_font("DejaVu", style=font_styles[i], size=font_sizes[i])
+            r, g, b = font_colors_rgb[i]
+            pdf.set_text_color(r, g, b)
+            pdf.multi_cell(w=0, txt=current_text, border=0, align=alignments[i], ln=1)
+            pdf.ln(5)
+        pdf.output(pdf_filename)
+        with open(pdf_filename, "rb") as file:
+            await context.bot.send_document(
+                chat_id=user_id, 
+                document=file, 
+                caption="Here is your PDF, created by AI."
+            )
+        response = "\n".join(texts)
+        await asyncio.to_thread(save_conversation, usr_msg, pre_msg + "\n<PDF CONTENT>\n" + response + "\n</PDF CONTENT>", user_id)
+        if os.path.exists(pdf_filename):
+            os.remove(pdf_filename)
+    except Exception as e:
+        print(f"Error in create_pdf function.\n\nError Code -{e}")
 
 
 #function to get response using group data
@@ -253,114 +302,134 @@ async def analyze_media(update: Update, content: ContextTypes.DEFAULT_TYPE, medi
 
 #gemini response for stream off
 async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, user_message, api, settings, usr_msg):
-    try:
-        user_id = update.effective_user.id
-        tools=[]
-        tools.append(types.Tool(function_declarations=func_list))
-        if settings[2] == "gemini-2.5-pro" or settings[2] == "gemini-2.5-flash":
-            config = types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
-                temperature = settings[4],
-                system_instruction=load_persona(settings),
-                tools = tools,
-                response_modalities=["TEXT"],
-            )
-        else:
-            config = types.GenerateContentConfig(
-                temperature = settings[4],
-                system_instruction=load_persona(settings),
-                tools = tools,
-                response_modalities=["TEXT"]
-            )
-        def sync_block(api):
-            client = genai.Client(api_key=api)
-            response = client.models.generate_content(
-                model = settings[2],
-                contents = [user_message],
-                config = config,
-            )
-            with open("Main/response.txt", "w") as file:
-                json.dump(response.to_json_dict(), file, indent=2, ensure_ascii=False)
-            return response
-        response = await asyncio.to_thread(sync_block, api)
-        has_function = False
-        for part in response.candidates[0].content.parts:
-            if hasattr(part, "function_call") and part.function_call is not None:
-                has_function = True
-                function_call = part.function_call
-        if has_function:
-            if function_call.name == "search_online":
-                for part in response.candidates[0].content.parts:
-                    if hasattr(part, "text") and part.text is not None:
-                        await update.message.reply_text(part.text)
-                    if hasattr(part, "function_call") and part.function_call is not None:
-                        msg = await update.message.reply_text("Searching...")
-                        response = await asyncio.to_thread(search_online,function_call.args["query"], api, settings)
-                        if response.text is not None:
-                            await send_message(update, content, response, usr_msg, settings)
-                        await content.bot.delete_message(chat_id = update.effective_user.id, message_id=msg.message_id)
-            elif function_call.name == "get_group_data":
-                response = await get_group_data(update, content, user_message, settings, api, function_call.name)
-                return response
-            elif function_call.name == "get_ct_data":
-                response = await get_group_data(update, content, user_message, settings, api, function_call.name)
-                return response
-            elif function_call.name == "create_image":
-                for part in response.candidates[0].content.parts:
-                    if hasattr(part, "text") and part.text is not None:
-                        await update.message.reply_text(part.text)
-                prompt = function_call.args["prompt"]
-                await create_image(update,content, api, prompt)
-            elif function_call.name == "get_routine":
-                for part in response.candidates[0].content.parts:
-                    if hasattr(part, "text") and part.text is not None:
-                        await update.message.reply_text(part.text)
-                        await asyncio.to_thread(save_conversation,usr_msg, part.text, user_id)
-                await routine_handler(update, content)
-            elif function_call.name == "add_memory_content":
-                data = function_call.args["memory_content"]
-                for part in response.candidates[0].content.parts:
-                    if hasattr(part, "text") and part.text is not None:
-                        await update.message.reply_text(part.text)
-                        await asyncio.to_thread(save_conversation,usr_msg, part.text, user_id)
-                await add_memory_content(update, content, data)
-                return False
-            elif function_call.name == "information_handler":
-                markup = await information_handler(update, content, function_call.args["info_name"])
-                for part in response.candidates[0].content.parts:
-                    if hasattr(part, "text") and part.text is not None:
-                        if type(markup) == str or markup is None:
-                            await update.message.reply_text(part.text)
-                            await asyncio.to_thread(save_conversation, usr_msg, part.text, user_id)
-                        else:
-                            text = part.text
-                            await update.message.reply_text(text, reply_markup=markup)
-                            await asyncio.to_thread(save_conversation, usr_msg, text, user_id)
-                            return False
-                    else:
-                        await update.message.reply_text("Click the button to see your requested data", reply_markup=markup)
-                        await asyncio.to_thread(save_conversation, usr_msg, "Click the button to see your requested data", user_id)
-                        return False
-            elif function_call.name == "fetch_media_content":
-                media_paths = function_call.args["media_paths"]
-                print(f"Media Paths: {media_paths}")
-                await analyze_media(update, content, media_paths, user_message, settings, usr_msg)
-                return False
-            elif function_call.name == "run_code":
-                data = ""
-                for part in response.candidates[0].content.parts:
-                    if hasattr(part, "text") and part.text is not None:
-                        data += part.text
-                    if hasattr(part, "function_call") and part.function_call is not None:
-                        code = part.function_call.args["code"]
-                        if code:
-                            data += "\n" + code
-                if data:
-                    await send_message(update, content, data, user_message, settings)
-                    return False
-            return False
+    #try:
+    user_id = update.effective_user.id
+    tools=[]
+    tools.append(types.Tool(function_declarations=func_list))
+    if settings[2] == "gemini-2.5-pro" or settings[2] == "gemini-2.5-flash":
+        config = types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
+            temperature = settings[4],
+            system_instruction=load_persona(settings),
+            tools = tools,
+            response_modalities=["TEXT"],
+        )
+    else:
+        config = types.GenerateContentConfig(
+            temperature = settings[4],
+            system_instruction=load_persona(settings),
+            tools = tools,
+            response_modalities=["TEXT"]
+        )
+    def sync_block(api):
+        client = genai.Client(api_key=api)
+        response = client.models.generate_content(
+            model = settings[2],
+            contents = [user_message],
+            config = config,
+        )
+        with open("Main/response.txt", "w") as file:
+            json.dump(response.to_json_dict(), file, indent=2, ensure_ascii=False)
         return response
-    except Exception as e:
-        print(f"Error getting gemini response.\n\n Error Code - {e}")
+    response = await asyncio.to_thread(sync_block, api)
+    if response.prompt_feedback and response.prompt_feedback.block_reason:
+        await update.message.reply_text("Prohibited content detected. Conversation history will be deleted.")
+        if os.path.exists(f"data/Conversation/conversation-{user_id}.txt"):
+            with open(f"data/Conversation/conversation-{user_id}.txt", "w") as f:
+                pass
+            await asyncio.to_thread(db[f"{user_id}"].update_one,
+                {"id" : user_id},
+                {"$set" : {"conversation" : None}}
+            )
+        return False
+    has_function = False
+    for part in response.candidates[0].content.parts:
+        if hasattr(part, "function_call") and part.function_call is not None:
+            has_function = True
+            function_call = part.function_call
+    if has_function:
+        if function_call.name == "search_online":
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, "text") and part.text is not None:
+                    await update.message.reply_text(part.text)
+                if hasattr(part, "function_call") and part.function_call is not None:
+                    msg = await update.message.reply_text("Searching...")
+                    response = await asyncio.to_thread(search_online,function_call.args["query"], api, settings)
+                    if response.text is not None:
+                        await send_message(update, content, response, usr_msg, settings)
+                    await content.bot.delete_message(chat_id = update.effective_user.id, message_id=msg.message_id)
+        elif function_call.name == "get_group_data":
+            response = await get_group_data(update, content, user_message, settings, api, function_call.name)
+            return response
+        elif function_call.name == "get_ct_data":
+            response = await get_group_data(update, content, user_message, settings, api, function_call.name)
+            return response
+        elif function_call.name == "create_image":
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, "text") and part.text is not None:
+                    await update.message.reply_text(part.text)
+            prompt = function_call.args["prompt"]
+            await create_image(update,content, api, prompt)
+        elif function_call.name == "get_routine":
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, "text") and part.text is not None:
+                    await update.message.reply_text(part.text)
+                    await asyncio.to_thread(save_conversation,usr_msg, part.text, user_id)
+            await routine_handler(update, content)
+        elif function_call.name == "add_memory_content":
+            data = function_call.args["memory_content"]
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, "text") and part.text is not None:
+                    await update.message.reply_text(part.text)
+                    await asyncio.to_thread(save_conversation,usr_msg, part.text, user_id)
+            await add_memory_content(update, content, data)
+            return False
+        elif function_call.name == "information_handler":
+            markup = await information_handler(update, content, function_call.args["info_name"])
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, "text") and part.text is not None:
+                    if type(markup) == str or markup is None:
+                        await update.message.reply_text(part.text)
+                        await asyncio.to_thread(save_conversation, usr_msg, part.text, user_id)
+                    else:
+                        text = part.text
+                        await update.message.reply_text(text, reply_markup=markup)
+                        await asyncio.to_thread(save_conversation, usr_msg, text, user_id)
+                        return False
+                else:
+                    await update.message.reply_text("Click the button to see your requested data", reply_markup=markup)
+                    await asyncio.to_thread(save_conversation, usr_msg, "Click the button to see your requested data", user_id)
+                    return False
+        elif function_call.name == "fetch_media_content":
+            media_paths = function_call.args["media_paths"]
+            print(f"Media Paths: {media_paths}")
+            await analyze_media(update, content, media_paths, user_message, settings, usr_msg)
+            return False
+        elif function_call.name == "run_code":
+            data = ""
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, "text") and part.text is not None:
+                    data += part.text
+                if hasattr(part, "function_call") and part.function_call is not None:
+                    code = part.function_call.args["code"]
+                    if code:
+                        data += "\n" + code
+            if data:
+                await send_message(update, content, data, user_message, settings)
+                return False
+        elif function_call.name == "create_pdf":
+            if hasattr(response, "text"):
+                if response.text:
+                    await update.message.reply_text(response.text)
+                else:
+                    await update.message.reply_text("Here is your requested pdf:")
+            else:
+                await update.message.reply_text("Here is your requested pdf:")
+            pre_msg = response.text or "Here is your requested pdf:"
+            await create_pdf(update, content, function_call.args, usr_msg, pre_msg)
+        return False
+    return response
+    # except Exception as e:
+    #     print(f"Error getting gemini response.\n\n Error Code - {e}")
         
 

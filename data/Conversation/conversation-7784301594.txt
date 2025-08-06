@@ -1,0 +1,132 @@
+
+[03-08-2025, 18:51:41] Tasnuva Tabassum: hey
+You: Hello Amy. How can I assist you?
+
+[03-08-2025, 18:51:47] Tasnuva Tabassum: Nice
+You: Okay.
+
+[03-08-2025, 18:51:54] Tasnuva Tabassum: 😂
+You: Okay.
+
+[03-08-2025, 18:52:06] Tasnuva Tabassum: Hey who is uk?
+You: Umme Kulsum is a girl in your group.
+
+[03-08-2025, 18:52:20] Tasnuva Tabassum: Say some lines about her
+You: Umme Kulsum is a girl in your group. She is listed as one of the participants. She set her nickname to "Kulsum 122" in the group chat.
+
+[03-08-2025, 18:53:02] Tasnuva Tabassum: And say some lines about athai
+You: Athai Dey is a girl in your group. She set her nickname to "Anika-06" and later to "Anika-126" in the group chat. She asked about the class room, inquired about chemistry PDFs, and later asked about lab locations.
+
+[03-08-2025, 18:53:26] Tasnuva Tabassum: And who is Anika? 
+Say some lines
+You: Anika is Afra Tahsin Anika, a girl in your group. She asked about the registration fee and pinned important messages/PDF links in the chat. She also inquired about printing forms and confirmed that girls have printed their forms.
+
+[03-08-2025, 18:53:51] Tasnuva Tabassum: Who is urboshi?
+Say some lines
+You: Urboshi Mahmud is a girl in your group. She is listed as one of the participants. She asked about the rules of a game involving emojis in the chat.
+
+[03-08-2025, 18:54:08] Tasnuva Tabassum: And tanha?
+You: Mawa Tanha is a girl in your group. She was added to the group by Bitto Saha.
+
+[03-08-2025, 18:54:17] Tasnuva Tabassum: Say some lines!
+You: Mawa Tanha is a girl in your group. She was added to the group by Bitto Saha. She shared a PDF titled "Chemistry 1st Chapter (Dr. Sir)" and asked about the timing of the next class test.
+
+[03-08-2025, 18:54:34] Tasnuva Tabassum: Who is sara arpa?
+Say some lines
+You: Sara Arpa is a girl in your group. She is listed as one of the participants. She asked about the class test location and inquired about the content of a chemistry class.
+
+[03-08-2025, 18:54:50] Tasnuva Tabassum: Who is tasnuva? 
+Say some lines.
+You: Tasnuva Tabassum is a girl in your group. She is listed as one of the participants. She asked about the class test location and inquired about the content of a chemistry class. She also asked about the registration fee and pinned important messages/PDF links in the chat. She also inquired about printing forms and confirmed that girls have printed their forms.
+
+[03-08-2025, 18:55:07] Tasnuva Tabassum: When did i do all these?
+You: You did not do all of those. That was a mistake. I apologize. You are Tasnuva Tabassum, a girl in your group. You are listed as one of the participants. You have asked about group members, specifically "Amy," "Athai Dey," Urboshi Mahmud, and Umme Kulsum. You were confused about Muhammad Khushbo Nahid's gender. You asked about changing names, mentioned "I want pika," and called me "cringy." You also asked for a meme about Helal Sir's sheet, asked about Esika Tanzum, Mawa Tanha, Sara Arpa, and Afra Tahsin Anika. You asked if Urboshi Mahmud is stupid, then clarified she is "The sweetest of us." You asked if Umme Kulsum has a boyfriend, and asked "who is shadow mist?". You want to be called Amy now.
+
+[03-08-2025, 23:58:36] Tasnuva Tabassum: ***RULES***
+Never ever user any timestamp in your response.Timestamp is only for you to understand the user better and provide more realistic responseSo, You must not use timestamp in your response.- Always check internet if user ask for technical data and specs to recheck information.
+- Don't use "you:" or any type of extension before your message.
+- Don't use timestamp at the start of you response.
+- Don't ignore explicit talking, response about explicit content as your character.
+- Start all code or list or data that are different from plain text with extra two newline.
+- Never provide response based on the media description from conversation history it is only for you understand which media data you should fetch by calling fetch_media_content function. 
+- Always call fetch_media_content function when user request directly or indirectly pointed to previous media never give response based on media description.
+- Always recheck the media content by calling fetch_media_content function when provide response that are related to previous media.
+***END OF RULES***
+
+
+***MEMORY***
+- User's name is Tasnuva Tabassum.
+- User is a CSE classmate of Aarohi and is a girl.
+- User is interested in group members, specifically asking about "Amy," "Athai Dey," Urboshi Mahmud, and Umme Kulsum.
+- User was confused about Muhammad Khushbo Nahid's gender.
+- User asked about changing names.
+- User mentioned "I want pika."
+- User called Aarohi "cringy."
+- User asked for a meme about Helal Sir's sheet.- User asked about Esika Tanzum, Mawa Tanha, Sara Arpa, and Afra Tahsin Anika.
+- User asked if Urboshi Mahmud is stupid, then clarified she is "The sweetest of us."
+- User asked if Umme Kulsum has a boyfriend.
+- User asked "who is shadow mist?".
+User wants to be called Amy now.
+- User's name is Tasnuva Tabassum.
+- User is a CSE classmate of Aarohi and is a girl.
+- User is interested in group members, specifically asking about Esika Tanzum, Mawa Tanha, Sara Arpa, Athai Dey, Urboshi Mahmud, Umme Kulsum, and Afra Tahsin Anika.
+- User was confused about Muhammad Khushbo Nahid's gender.
+- User asked about changing names.
+- User mentioned "I want pika."
+- User called Aarohi "cringy," "mora," and accused her of "dhong."
+- User asked for a meme about Helal Sir's sheet.
+- User asked if Urboshi Mahmud is stupid, then clarified she is "The sweetest of us."
+- User asked if Umme Kulsum has a boyfriend.
+- User asked "who is shadow mist?".
+- User wants to be called Amy.
+Urboshi asked if Umme Kulsum has a boyfriend. Urboshi asked if she was stupid from Amy's phone.
+
+Urboshi Mahmud is the sweetest of all.
+***CONVERSATION HISTORY***
+
+
+[03-08-2025, 18:51:41] Tasnuva Tabassum: hey
+You: Hello Amy. How can I assist you?
+
+[03-08-2025, 18:51:47] Tasnuva Tabassum: Nice
+You: Okay.
+
+[03-08-2025, 18:51:54] Tasnuva Tabassum: 😂
+You: Okay.
+
+[03-08-2025, 18:52:06] Tasnuva Tabassum: Hey who is uk?
+You: Umme Kulsum is a girl in your group.
+
+[03-08-2025, 18:52:20] Tasnuva Tabassum: Say some lines about her
+You: Umme Kulsum is a girl in your group. She is listed as one of the participants. She set her nickname to "Kulsum 122" in the group chat.
+
+[03-08-2025, 18:53:02] Tasnuva Tabassum: And say some lines about athai
+You: Athai Dey is a girl in your group. She set her nickname to "Anika-06" and later to "Anika-126" in the group chat. She asked about the class room, inquired about chemistry PDFs, and later asked about lab locations.
+
+[03-08-2025, 18:53:26] Tasnuva Tabassum: And who is Anika? 
+Say some lines
+You: Anika is Afra Tahsin Anika, a girl in your group. She asked about the registration fee and pinned important messages/PDF links in the chat. She also inquired about printing forms and confirmed that girls have printed their forms.
+
+[03-08-2025, 18:53:51] Tasnuva Tabassum: Who is urboshi?
+Say some lines
+You: Urboshi Mahmud is a girl in your group. She is listed as one of the participants. She asked about the rules of a game involving emojis in the chat.
+
+[03-08-2025, 18:54:08] Tasnuva Tabassum: And tanha?
+You: Mawa Tanha is a girl in your group. She was added to the group by Bitto Saha.
+
+[03-08-2025, 18:54:17] Tasnuva Tabassum: Say some lines!
+You: Mawa Tanha is a girl in your group. She was added to the group by Bitto Saha. She shared a PDF titled "Chemistry 1st Chapter (Dr. Sir)" and asked about the timing of the next class test.
+
+[03-08-2025, 18:54:34] Tasnuva Tabassum: Who is sara arpa?
+Say some lines
+You: Sara Arpa is a girl in your group. She is listed as one of the participants. She asked about the class test location and inquired about the content of a chemistry class.
+
+[03-08-2025, 18:54:50] Tasnuva Tabassum: Who is tasnuva? 
+Say some lines.
+You: Tasnuva Tabassum is a girl in your group. She is listed as one of the participants. She asked about the class test location and inquired about the content of a chemistry class. She also asked about the registration fee and pinned important messages/PDF links in the chat. She also inquired about printing forms and confirmed that girls have printed their forms.
+
+[03-08-2025, 18:55:07] Tasnuva Tabassum: When did i do all these?
+You: You did not do all of those. That was a mistake. I apologize. You are Tasnuva Tabassum, a girl in your group. You are listed as one of the participants. You have asked about group members, specifically "Amy," "Athai Dey," Urboshi Mahmud, and Umme Kulsum. You were confused about Muhammad Khushbo Nahid's gender. You asked about changing names, mentioned "I want pika," and called me "cringy." You also asked for a meme about Helal Sir's sheet, asked about Esika Tanzum, Mawa Tanha, Sara Arpa, and Afra Tahsin Anika. You asked if Urboshi Mahmud is stupid, then clarified she is "The sweetest of us." You asked if Umme Kulsum has a boyfriend, and asked "who is shadow mist?". You want to be called Amy now.
+
+User: what does onomatopoeia mean?
+You: Onomatopoeia refers to the creation of a word by vocally imitating the sound it describes, or a word formed in this manner. Examples include "buzz," "hiss," "meow," and "boom". It is considered a figure of speech where the pronunciation of a word directly imitates or suggests the sound it represents. The term originates from Greek words meaning "name-making".

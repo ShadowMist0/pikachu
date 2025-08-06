@@ -670,7 +670,7 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
             settings = await get_settings(update.effective_user.id)
             conn = sqlite3.connect("data/settings/user_settings.db")
             cursor = conn.cursor()
-            if gemini_model_list[settings[2]] != "gemini-2.5-pro":
+            if settings[2] != "gemini-2.5-pro":
                 cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
                 conn.commit()
                 conn.close()
@@ -933,6 +933,9 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
         student_data = db["names"].find_one({"type" : "official_data"})["data"]
         pdf = FPDF()
         pdf.add_page()
+        pdf.add_font('Arial', '', 'font/arial.ttf', uni=True)
+        pdf.add_font('DejaVu', 'B', 'font/DejaVuB.ttf', uni=True)
+        pdf.add_font('DejaVu', 'I', 'font/DejaVuI.ttf', uni=True)
         pdf.set_font("Arial", size=10, style="B")
         pdf.cell(190,5,"ATTENDANCE SHEET",ln=1, align="C")
         pdf.set_font("Arial",size=10,style="B")

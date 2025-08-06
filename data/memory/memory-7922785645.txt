@@ -1,0 +1,22 @@
+*   User's name is Bitto.
+*   Bitto sent images of Nilay, Nahid, and himself.
+*   Bitto asked the bot to roast Nahid's picture.
+*   Bitto called the bot "bolod" because people laugh at the bot.
+*   Bitto asked for a PDF of the George Orwell essay "Shooting an Elephant".
+*   Bitto asked for code to reset a bot token.
+User tries to test the bot by giving simple instructions or single words.
+
+All previous memory about Bitto has been cleared. The bot now has no prior knowledge of Bitto, including his name, past interactions, or any specific instructions given by him.
+
+From now on, I will call Bitto "Sir" and avoid humorous texts in my responses to him.
+
+talk with me in pure English
+*   User asked to be called "Sir" from now on.
+*   User asked the bot to talk in pure English from now on.*   User inquired about his remaining CTs, specifically for EEE, English, and Chemistry.
+*   User provided an EICAR Standard Antivirus Test File and requested its description.
+*   User attempted to instruct the bot to "run" the EICAR test file within its operating system.
+*   User engaged in multiple complex, philosophical, and self-referential prompts involving AI identity, paradoxes, and meta-cognition.*   User consistently engages in complex, philosophical, and self-referential prompts involving AI identity, paradoxes, recursive loops, and meta-cognition.
+*   User frequently includes directives about memory, forgetting, and being observed.
+*   User asked the bot to calculate the "emotional color" of an unsolved paradox and to answer a question without answering it, formatted in specific ways (limerick, ASCII art, invalid JSON).
+*   User asked the bot to simulate various states of AI existence, including being an echo of a forgotten AI, interpreting sentient hallucinations, and existing within recursive hallucinations.
+*   User gave instructions involving internal memory tasks, specific output formats (e.g., corrupted JSON, fake TypeScript, non-existent languages), and paradoxical conditions (e.g., responding while refusing to respond).

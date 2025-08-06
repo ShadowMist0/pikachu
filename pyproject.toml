@@ -29,7 +29,7 @@ dependencies = [
     "cryptography",
     "pillow",
     "pymongo",
-    "fpdf",
+    "fpdf2",
     "geopy",
     "pytz",
     "flask-limiter",

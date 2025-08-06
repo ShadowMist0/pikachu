@@ -250,6 +250,53 @@ fetch_media_content = {
 
 
 
+create_pdf_function = {
+    "name" : "create_pdf",
+    "description" : "Generates pdf",
+    "parameters" : {
+        "type" : "object",
+        "properties" : {
+            "text" : {
+                "type" : "array",
+                "items" : {"type" : "string"},
+                "description" : "The text that will be written in the pdf, separated by design difference from top to bottom. Add '\n' for newline."
+            },
+            "font_size" : {
+                "type" : "array",
+                "items" : {"type" : "integer"},
+                "description" : "Font size for every text separated by design from top to bottom. Must be added for every text part"
+            },
+            "font_color" : {
+                "type" : "array",
+                "items" : {"type" : "string"},
+                "description" : "Font color in hex format for every text separated by design from top to bottom. Must be added for every text part"
+            },
+            "font_style" : {
+                "type" : "array",
+                "items" : {"type" : "string"},
+                "description" : (
+                    "Text style for for every part separated by design from top to bottom."
+                    "Allowed style (I, B, U, '')"
+                    "I for italic, B for bold, U for underline, '' for normal"
+                    "Combining them also possible like IU, IB etc."
+                    "Must be added for every text part"
+                )
+            },
+            "text_alignment" : {
+                "type" : "array",
+                "items" : {"type" : "string"},
+                "description" : (
+                    "Text alignment for every part separated by design from top to bottom"
+                    "Allowed alignment 'C' for center, 'L' for left, 'R' for right" 
+                    "Must be added for every text part"
+                )
+            }
+        },
+        "required" : ["text", "font_size", "font_color", "font_style", "text_alignment"]
+    }
+}
+
+
 
 
 func_list = [
@@ -260,5 +307,6 @@ func_list = [
     get_routine_function,
     create_memory_function,
     information_handler_function,
-    fetch_media_content
+    fetch_media_content,
+    create_pdf_function
 ]
