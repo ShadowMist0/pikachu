@@ -33,7 +33,7 @@ async def restart(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
 async def start(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = [
         ["Routine", "CT"],
-        ["Settings", "Resources"]
+        ["⚙️Settings", "🔗Resources"]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
     try:

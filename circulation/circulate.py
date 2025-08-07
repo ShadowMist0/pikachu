@@ -135,7 +135,7 @@ async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE
     try:
         keyboard = [
             ["Routine", "CT"],
-            ["Settings", "Resources"]
+            ["⚙️Settings", "🔗Resources"]
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
  
@@ -281,7 +281,7 @@ async def circulate_attendance(update:Update, content:ContextTypes.DEFAULT_TYPE,
     try:
         rkeyboard = [
             ["Routine", "CT"],
-            ["Settings", "Resources"]
+            ["⚙️Settings", "🔗Resources"]
         ]
         rmarkup = ReplyKeyboardMarkup(rkeyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
         await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("message_id"))
