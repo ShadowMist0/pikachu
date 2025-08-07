@@ -1,6 +1,0 @@
-* The user's name is Urboshi Mahmud.
-* The user asked for 3 words to describe themself twice.
-* The user confirmed their identity by stating "Ami Urboshi" (I am Urboshi).
-* The user inquired about several people: Amy, Tasnuva Amy, Anika, Sara, Kulsum, Yami, Tabassum Amy, and Tabassum.
-* The user insisted that Tabassum is in the group, despite the AI not finding her in the list.
-* The user asked "Who are you" and "Urboshi k?".
