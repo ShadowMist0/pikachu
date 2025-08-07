@@ -124,7 +124,7 @@ async def create_pdf(update: Update, content: ContextTypes.DEFAULT_TYPE, argumen
 
         # Set default values
         default_font_size = 12
-        default_font_color = (0, 0, 0)
+        default_font_color = "#000000"
         default_font_style = ''
         default_alignment = 'L'
 
@@ -145,6 +145,7 @@ async def create_pdf(update: Update, content: ContextTypes.DEFAULT_TYPE, argumen
             pdf.set_text_color(r, g, b)
             pdf.multi_cell(w=0, txt=current_text, border=0, align=alignments[i], ln=1)
             pdf.ln(5)
+            texts[i] = f"[color:{font_colors_rgb[i]}, size:{font_sizes[i]}, align:{alignments[i]}, font_style:{font_styles[i]}] {current_text}"
         pdf.output(pdf_filename)
         try:
             with open(pdf_filename, "rb") as file:
@@ -154,8 +155,8 @@ async def create_pdf(update: Update, content: ContextTypes.DEFAULT_TYPE, argumen
                     caption="Here is your PDF, created by AI."
                 )
             await content.bot.delete_message(chat_id=user_id, message_id=msg.message_id)
-        except:
-            print("not found")
+        except Exception as e:
+            print(f"Error sending PDF: {e}")
         response = "\n".join(texts)
         await asyncio.to_thread(save_conversation, usr_msg, pre_msg + "\n<PDF CONTENT>\n" + response + "\n</PDF CONTENT>", user_id)
         return pdf_filename
@@ -261,7 +262,7 @@ async def add_memory_content(update:Update, content:ContextTypes.DEFAULT_TYPE, d
             with open(f"data/memory/memory-{user_id}.txt", "a+") as file:
                 file.write("\n" + data + "\n")
     except Exception as e:
-        print(f"Error in create_image function.\n\nError Code - {e}")
+        print(f"Error in add_memory_content function.\n\nError Code - {e}")
 
 
 
