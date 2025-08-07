@@ -9,7 +9,6 @@ venv/
 
 # Project Data
 data/
-user_media/
 
 # IDE / Editor
 .vscode/
