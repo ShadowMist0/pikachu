@@ -584,7 +584,7 @@ async def temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
         ]
         markup = InlineKeyboardMarkup(keyboard)
         query = update.callback_query
-        msg = await query.edit_message_text(f"Temperature represents the creativity of the bots response.\nCurrent Temperature is {settings[4]}\n\nEnter a value between 0.0 to 2.0:", reply_markup=markup)
+        msg = await query.edit_message_text(f"Temperature represents the creativity of the bots response.\nCurrent Temperature is {settings[4]}\n\nEnter a value between 0.0 to 1.0:", reply_markup=markup)
         content.user_data["t_message_id"] = msg.message_id
         return "TT"
     except Exception as e:
