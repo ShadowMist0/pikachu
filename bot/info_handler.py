@@ -183,7 +183,7 @@ async def handle_settings(update : Update, content : ContextTypes.DEFAULT_TYPE) 
     try:
         await update.message.chat.send_action(action=ChatAction.TYPING)
         keyboard= [
-            [InlineKeyboardButton("🧠AI Engine", callback_data = "c_model"),InlineKeyboardButton("💡Creativity", callback_data="c_temperature")],
+            [InlineKeyboardButton("🤖AI Engine", callback_data = "c_model"),InlineKeyboardButton("🧠Creativity", callback_data="c_temperature")],
             [InlineKeyboardButton("🤔Thinking", callback_data = "c_thinking"), InlineKeyboardButton("🎭Persona", callback_data="c_persona")],
             [InlineKeyboardButton("📒Conversation History", callback_data="c_conv_history"), InlineKeyboardButton("📜Memory", callback_data="c_memory")],
             [InlineKeyboardButton("cancel", callback_data="cancel")]
