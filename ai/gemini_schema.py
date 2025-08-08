@@ -326,10 +326,13 @@ async def analyze_media(update: Update, content: ContextTypes.DEFAULT_TYPE, medi
 #gemini response for stream off
 async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, user_message, api, settings, usr_msg):
     try:
+        tmsg = False
         user_id = update.effective_user.id
         tools=[]
         tools.append(types.Tool(function_declarations=func_list))
         if settings[2] == "gemini-2.5-pro" or settings[2] == "gemini-2.5-flash":
+            if settings[3] != 0:
+                tmsg = await update.message.reply_text("Thinking...")
             config = types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
                 temperature = settings[4],
@@ -355,6 +358,8 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 json.dump(response.to_json_dict(), file, indent=2, ensure_ascii=False)
             return response
         response = await asyncio.to_thread(sync_block, api)
+        if tmsg:
+            await content.bot.delete_message(chat_id=user_id, message_id=tmsg.message_id)
         if response.prompt_feedback and response.prompt_feedback.block_reason:
             await update.message.reply_text("Prohibited content detected. Conversation history will be deleted.")
             if os.path.exists(f"data/Conversation/conversation-{user_id}.txt"):
