@@ -369,7 +369,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                     {"id" : user_id},
                     {"$set" : {"conversation" : None}}
                 )
-            return False
+            return "false"
         has_function = False
         for part in response.candidates[0].content.parts:
             if hasattr(part, "function_call") and part.function_call is not None:
@@ -411,7 +411,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                         await update.message.reply_text(part.text)
                         await asyncio.to_thread(save_conversation,usr_msg, part.text, user_id)
                 await add_memory_content(update, content, data)
-                return False
+                return "false"
             elif function_call.name == "information_handler":
                 markup = await information_handler(update, content, function_call.args["info_name"])
                 for part in response.candidates[0].content.parts:
@@ -423,16 +423,16 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                             text = part.text
                             await update.message.reply_text(text, reply_markup=markup)
                             await asyncio.to_thread(save_conversation, usr_msg, text, user_id)
-                            return False
+                            return "false"
                     else:
                         await update.message.reply_text("Click the button to see your requested data", reply_markup=markup)
                         await asyncio.to_thread(save_conversation, usr_msg, "Click the button to see your requested data", user_id)
-                        return False
+                        return 'false'
             elif function_call.name == "fetch_media_content":
                 media_paths = function_call.args["media_paths"]
                 print(f"Media Paths: {media_paths}")
                 await analyze_media(update, content, media_paths, user_message, settings, usr_msg)
-                return False
+                return 'false'
             elif function_call.name == "run_code":
                 data = ""
                 for part in response.candidates[0].content.parts:
@@ -444,7 +444,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                             data += "\n" + code
                 if data:
                     await send_message(update, content, data, user_message, settings)
-                    return False
+                    return 'false'
             elif function_call.name == "create_pdf":
                 if hasattr(response, "text"):
                     if response.text:
@@ -453,7 +453,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 path = await create_pdf(update, content, function_call.args, usr_msg, pre_msg)
                 if os.path.exists(path):
                     os.remove(path)
-            return False
+            return 'false'
         if not response:
             if tmsg:
                 await content.bot.delete_message(chat_id=user_id, message_id=tmsg.message_id)
