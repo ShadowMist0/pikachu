@@ -94,24 +94,21 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                 api = random.choice(temp_api)
                 temp_api.remove(api)
                 response = await gemini_non_stream(update, content, prompt, api,settings, user_message)
-                if response == False:
-                    return
+                if response == "false" or response.text:
+                    break
                 if response.prompt_feedback and response.prompt_feedback.block_reason:
                     await message.reply_text(f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason} Conversation history is erased.")
-                    break
-                if response == "false" or response.text:
                     break
             except Exception as e:
                 print(f"Error getting gemini response for API-{gemini_api_keys.index(api)}. \n Error Code -{e}")
                 continue
-        if response is not None:
-            await send_message(update, content, response, user_message, settings)
-        elif response != False:
+        if response == None:
+            await update.message.reply_text("Failed to get response from gemini. Your conversation history is erased.")
             if os.path.exists(f"data/Conversation/conversation-{user_id}.txt"):
-                await message.reply_text("Failed to process your request. Try again later.")
                 with open(f"data/Conversation/conversation-{user_id}.txt", "w") as f:
                     pass
-            print("Failed to get a response from gemini.")
+        elif response != "false":
+            await send_message(update, content, response, user_message, settings)
     except Exception as e:
         await update.message.reply_text(f"Telegram Limit hit, need to wait {e.retry_after} seconds.")
         await send_to_channel(update, content, channel_id, f"Telegram Limit hit for user {user_id}, He need to wait {e.retry_after} seconds.")

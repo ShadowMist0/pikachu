@@ -417,17 +417,23 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 for part in response.candidates[0].content.parts:
                     if hasattr(part, "text") and part.text is not None:
                         if type(markup) == str or markup is None:
-                            await update.message.reply_text(part.text)
-                            await asyncio.to_thread(save_conversation, usr_msg, part.text, user_id)
+                            text = response.text + markup
+                            await update.message.reply_text(text)
+                            await asyncio.to_thread(save_conversation, usr_msg, text, user_id)
                         else:
                             text = part.text
                             await update.message.reply_text(text, reply_markup=markup)
                             await asyncio.to_thread(save_conversation, usr_msg, text, user_id)
                             return "false"
                     else:
-                        await update.message.reply_text("Click the button to see your requested data", reply_markup=markup)
-                        await asyncio.to_thread(save_conversation, usr_msg, "Click the button to see your requested data", user_id)
-                        return 'false'
+                        if type(markup) == str or markup is None:
+                            text = markup
+                            await update.message.reply_text(text)
+                            return "false"
+                        else:
+                            await update.message.reply_text("Click the button to see your requested data", reply_markup=markup)
+                            await asyncio.to_thread(save_conversation, usr_msg, "Click the button to see your requested data", user_id)
+                            return 'false'
             elif function_call.name == "fetch_media_content":
                 media_paths = function_call.args["media_paths"]
                 print(f"Media Paths: {media_paths}")
