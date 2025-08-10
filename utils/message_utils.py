@@ -99,8 +99,8 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                 if response.prompt_feedback and response.prompt_feedback.block_reason:
                     await message.reply_text(f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason} Conversation history is erased.")
                     break
-                response.text
-                break
+                if response == "false" or response.text:
+                    break
             except Exception as e:
                 print(f"Error getting gemini response for API-{gemini_api_keys.index(api)}. \n Error Code -{e}")
                 continue
