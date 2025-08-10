@@ -454,8 +454,13 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 if os.path.exists(path):
                     os.remove(path)
             return False
+        if not response:
+            if tmsg:
+                await content.bot.delete_message(chat_id=user_id, message_id=tmsg.message_id)
         return response
     except Exception as e:
+        if tmsg:
+            await content.bot.delete_message(chat_id=user_id, message_id=tmsg.message_id)
         print(f"Error getting gemini response.\n\n Error Code - {e}")
         
 
