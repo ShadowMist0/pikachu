@@ -369,6 +369,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
         response = await asyncio.to_thread(sync_block, api)
         if tmsg:
             await content.bot.delete_message(chat_id=user_id, message_id=tmsg.message_id)
+            tmsg = None
         if response.prompt_feedback and response.prompt_feedback.block_reason:
             await update.message.reply_text("Prohibited content detected. Conversation history will be deleted.")
             if os.path.exists(f"data/Conversation/conversation-{user_id}.txt"):
@@ -474,10 +475,12 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
         if not response:
             if tmsg:
                 await content.bot.delete_message(chat_id=user_id, message_id=tmsg.message_id)
+                tmsg = None
         return response
     except Exception as e:
         if tmsg:
             await content.bot.delete_message(chat_id=user_id, message_id=tmsg.message_id)
+            tmsg = None
         print(f"Error getting gemini response.\n\n Error Code - {e}")
         
 
