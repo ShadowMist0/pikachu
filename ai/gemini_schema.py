@@ -228,15 +228,24 @@ async def create_image(update:Update, content:ContextTypes.DEFAULT_TYPE, api, pr
         user_id = update.effective_user.id
         msg = await message.reply_text("Image creation is in process, This may take a while please wait patiently.")
         def sync_block(prompt,api):
-            client = genai.Client(api_key=api)
-            response = client.models.generate_content(
-                model = "gemini-2.0-flash-preview-image-generation",
-                contents = prompt,
-                config = types.GenerateContentConfig(
-                    response_modalities=["TEXT", "IMAGE"],
-                )
-            )
-            return response
+            temp_api = gemini_api_keys
+            for _ in range(len(gemini_api_keys)):
+                try:
+                    api_key = random.choice(temp_api)
+                    client = genai.Client(api_key=api)
+                    response = client.models.generate_content(
+                        model = "gemini-2.0-flash-preview-image-generation",
+                        contents = prompt,
+                        config = types.GenerateContentConfig(
+                            response_modalities=["TEXT", "IMAGE"],
+                        )
+                    )
+                    if response:
+                        return response
+                    else:
+                        raise Exception
+                except:
+                    temp_api.remove(api_key)
         response = await asyncio.to_thread(sync_block, prompt, api)
         await content.bot.delete_message(chat_id=user_id, message_id=msg.message_id)
         for part in response.candidates[0].content.parts:
@@ -396,6 +405,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 for part in response.candidates[0].content.parts:
                     if hasattr(part, "text") and part.text is not None:
                         await update.message.reply_text(part.text)
+                await asyncio.to_thread(save_conversation,usr_msg, response.text, user_id)
                 prompt = function_call.args["prompt"]
                 await create_image(update,content, api, prompt)
             elif function_call.name == "get_routine":
@@ -416,19 +426,20 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 markup = await information_handler(update, content, function_call.args["info_name"])
                 for part in response.candidates[0].content.parts:
                     if hasattr(part, "text") and part.text is not None:
-                        if type(markup) == str or markup is None:
+                        if type(markup) == str and markup:
                             text = response.text + markup
-                            await update.message.reply_text(text)
+                            await update.message.reply_text(text, parse_mode="Markdown")
                             await asyncio.to_thread(save_conversation, usr_msg, text, user_id)
                         else:
                             text = part.text
-                            await update.message.reply_text(text, reply_markup=markup)
+                            await update.message.reply_text(text, reply_markup=markup, parse_mode="Markdown")
                             await asyncio.to_thread(save_conversation, usr_msg, text, user_id)
                             return "false"
                     else:
-                        if type(markup) == str or markup is None:
+                        if type(markup) == str and markup:
                             text = markup
-                            await update.message.reply_text(text)
+                            await asyncio.to_thread(save_conversation, usr_msg,text, user_id)
+                            await update.message.reply_text(text, parse_mode="Markdown")
                             return "false"
                         else:
                             await update.message.reply_text("Click the button to see your requested data", reply_markup=markup)

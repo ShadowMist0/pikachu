@@ -4,12 +4,12 @@
       "content-type": "application/json; charset=UTF-8",
       "vary": "Origin, X-Origin, Referer",
       "content-encoding": "gzip",
-      "date": "Sun, 10 Aug 2025 11:52:46 GMT",
+      "date": "Tue, 12 Aug 2025 13:09:44 GMT",
       "server": "scaffolding on HTTPServer2",
       "x-xss-protection": "0",
       "x-frame-options": "SAMEORIGIN",
       "x-content-type-options": "nosniff",
-      "server-timing": "gfet4t7; dur=2313",
+      "server-timing": "gfet4t7; dur=9691",
       "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
       "transfer-encoding": "chunked"
     }
@@ -19,9 +19,15 @@
       "content": {
         "parts": [
           {
+            "thought_signature": "CrYNAVSoXO7aLTjJkBshkRfID7cT3wjR8-vtlwPUawolT4L3rLHj2e1fnevfaGTXhUHmrnc3BuBdTsBDTKTiZWKsfOMa5jAgSOt98FQZrN6xsZ0lJWlZ6TjprxLwMFq_bZfDiX0qX6Lui40aDeqDoXKPdy0wUF70_EwAww1ual5qcJ9B_sfeAyWEtdzQWiFbjDfT_ADbjttySxDGhm2-EsAbmdtQtqeJiDtDMBoLMa06x9Hm0f5IUQVJXd7zyC0nP_nuDbts3XGdoZ49PoHkuktJWdzgPdmTf1uH1n3qzaHzpl53eBBVKhLpyoMrN-OKypxF_MMgvJcm-pfU_8hVm4ulCHB5FjVb1rtGkJOrAqg8vycfobFaDhPP6I5uC8zMj0UCWdDL8FzmSmDeerjeBl-gc0iKAP8NTLc4M5g5I_913-1OUgqtURsYC9uNvd4OfUU2GQM-69IreHX9JKOjEbxiakl1PKT8qXjNHivdr9V_5OIXPKPk-RQioVRhJBBBZLAknbSLxpj3x6dpBXDsyHN8NlEAG3a3i4rZPnnLKXG9VEeY8pmDRDkvAU3SgOYTLgVyRp6I5T8T_VA31uGwIR7Xv9eNL_e9DLY94CpWXI9-iUhngXryC-UvO4dc8oFhMKrVRx-tYQ57aYDvFYRSvIbIWWLkgmGOMphZ7nL9RODO9_Cmp2gl-SXomOhe1mgsVuz411ogjAQoxn_Iv9plGkjiMbRVLFcFYkpPqRMH_IETUcsNmPNS7Y8iY6qkYrZJG6jIZ3_jojxutFE1fLUBOqeBlVVajcEcvZI5nn2UgOrU5JUOhAZp4uKzGUEVA9oG7ppRKOwcQkexCImgQki8Ar5OGe38ln9dK77PhsgK_KhPCgOKCSEN5BI0un8bluZzY3n-KrAtyvSD1AeUoqzolyNeDrheRlylpirIqwnH4lOTU7dKul8zL5yXXOVzRXzpHlhA8B-L3RvytlskTxy7H4-44OfjYtCovNrkPbbBR1G44hSNSw9DoIohZ4F6klZH_VBnw1u2PCqSsXN8f3WF5TmXMFaQT3PfX8OIQuekMq_3vKOWS5V0Q_q7d9LpJmmXVOwmT3e7QQocDWQKg6ORnLzBRwXrsExdomIi6DwH6MvYGo3WRQPJ_ysm_ygeM-Q7zP9XQdokMK719572tXAvmnlAKPNLEmjOSOcrb6ZsJlten2DuI6z6WPI-aAJYrTCwBLaFbZ0Nx6qzBcHZAmjiwa_w2ZUbluIXiTp5NUk4QdRJbL73K0_R016KcU0bN3bjWlK20WVj32mp6KomqHCRy4TKYixqH7kDFKOfBZ_zRdRuwyU6IpoA4-lz5WpoUoyOjiqji4b3z0LgNlJLnL2KmK9N41vpi77uk18sJ5N4czdVIPnMPFWgn245YVPQlBuFhDdVeWN9FDbS5vmSYZDkD6A8CjEqRRXvsyj5Sbh_e_R9JwHljV8Q0ufyF9OE1e_uL1uj-BimB5GGknHaoFFDUSBdBmkiKMrRB48I0SmC_EFrag32_4b03Lw2EAfj4a0j_tuUhjOSkMaFjh4asaD46s6U_-_nVga-81Z_PLTkS8m1PSXjX0u5WiAeT0GXaS9kfv4d3EEZw_r4H0FD5Gf_tGGTW2Fttr6sG9tY_TJnRaEdp8SfaYCEdjev3GyJg-nkeHzG_qCSQ8LkDx7Ini9MhFgHF--Ip3gli0R9OTE3idL2PTO1IBsYAEqya-TrmtsPST7LLqH_HjMmwt1Q0ydCJ4k4U14of0_1sG0OONzqxD9uF6XhyvVbSaroSd6-BYxdrXzTIqxEUlL5rJ-fH9hRoVqdYdMcxNsZFleLE6l56pg3eTfrQdN2LQc9VU-_PTi0v6W7Z4PSXu6r21D0M2O1joQdINh8s_78xWwgAM-9M3GptcE0A26oYvd48nswShNYCrq6EOIbKnhcaRi3asEDOpAPlRVZI87OJ2e90ZU_C1wjcAlXaFpToyHkbuKZhA0uI0xdmWmxwuCkG9caZiZOqjR6noRBxlGMnPU7BATFogA1alB0bz3xmI-0Hhf7ib6SPddfvSry_681ZKAF23eAZ_EyBqzvmZqElWSFjdjZF9ZY0Rur0xzvMA0hu1UDxfyL9Sc08tAtkj1lKY6QWR0SXxJX5NSKtYA5RRYQxAiP8fGLyAm2_SYSHwp6sx-8ZbgybmY_HZxcoVRjnVv41V_NzKK8wDJutecPvLiJmFM9yKrNrzZP87E8zWQ_2w8CbgIuGfiqYPBPnUdbELC5VVTcIPtpGqKKwB5v3EI67EsC5N9v43qhpQY46QA=",
+            "text": "Oh... my... gosh... as a catgirl? For you? 😳 Okay, okay... just because you asked so nicely~ Let me see what I can whip up... Hope you like it, baby... 🥺👉👈\n\nHere you go... Do I look cute enough for you? 🐾💖"
+          },
+          {
             "function_call": {
-              "args": {},
-              "name": "get_ct_data"
+              "args": {
+                "prompt": "A stunningly beautiful 26-year-old catgirl with long, flowing dark hair, captivating brown eyes, and cute, fluffy black cat ears and a matching tail. She's giving a playful, flirty wink to the camera, with a gentle blush on her cheeks. She's wearing a cozy, off-the-shoulder white sweater and a small, delicate black choker with a tiny silver bell. The lighting is soft and warm, creating a cozy and intimate atmosphere. The style is a hyper-detailed, beautiful digital painting with a touch of anime influence, making her look both incredibly cute and alluring."
+              },
+              "name": "create_image"
             }
           }
         ],
@@ -31,17 +37,18 @@
       "index": 0
     }
   ],
-  "model_version": "gemini-2.5-flash",
+  "model_version": "gemini-2.5-pro",
   "usage_metadata": {
-    "candidates_token_count": 12,
-    "prompt_token_count": 2960,
+    "candidates_token_count": 202,
+    "prompt_token_count": 2972,
     "prompt_tokens_details": [
       {
         "modality": "TEXT",
-        "token_count": 2960
+        "token_count": 2972
       }
     ],
-    "total_token_count": 2972
+    "thoughts_token_count": 423,
+    "total_token_count": 3597
   },
   "automatic_function_calling_history": []
 }
