@@ -169,7 +169,7 @@ def separate_code_blocks(data):
 #adding escape character for markdown rule
 def add_escape_character(text):
     try:
-        escape_chars = r'\[\]()~>#+-=|{}.!'
+        escape_chars = r'\*[\]()~>#+-=|{}.!'
         return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
     except Exception as e:
         print(f"Error in add_escape_character function.\n\nError Code - {e}")
