@@ -30,7 +30,7 @@ from geopy.distance import geodesic
 from google import genai
 from circulation.circulate import circulate_message, circulate_attendance, user_message_id
 from utils.db import all_users, all_admins, all_settings, load_all_user_settings
-
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
 
@@ -490,6 +490,9 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
         password = content.user_data.get("password")
         if password == c_password:
             try:
+                key = AESGCM.generate_key(bit_length=256)
+                key = key.hex()
+                nonce = os.urandom(12).hex()
                 conn = sqlite3.connect("data/info/user_data.db")
                 cursor = conn.cursor()
                 if is_guest:
@@ -499,7 +502,9 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                         content.user_data.get("gender"),
                         0,
                         content.user_data.get("password"),
-                        content.user_data.get("user_api")
+                        content.user_data.get("user_api"),
+                        key,
+                        nonce
                     ]
                 else:
                     user_info = [
@@ -508,11 +513,13 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                         content.user_data.get("gender"),
                         content.user_data.get("roll"),
                         content.user_data.get("password"),
-                        content.user_data.get("user_api")
+                        content.user_data.get("user_api"),
+                        key,
+                        nonce
                     ]
                 cursor.execute("""
-                    INSERT OR IGNORE INTO users(user_id, name, gender, roll, password, api)
-                    VALUES(?,?,?,?,?,?)
+                    INSERT OR IGNORE INTO users(user_id, name, gender, roll, password, api, secret_key, nonce)
+                    VALUES(?,?,?,?,?,?,?,?)
                 """,
                 tuple(info for info in user_info)
                 )

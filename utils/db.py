@@ -74,7 +74,19 @@ def load_all_user_settings():
         print(f"Error in load_all_user_settings function.\n\nError Code - {e}")
 
 
-
+#function to load all users info
+def load_all_user_info():
+    try:
+        user_info = {}
+        conn = sqlite3.connect("data/info/user_data.db")
+        c = conn.cursor()
+        c.execute("select * from users")
+        for info in c.fetchall():
+            user_info[info[0]] = info
+        conn.close()
+        return user_info
+    except Exception as e:
+        print(f"Error in load_all_user_info function.\n\nError Code - {e}")
 
 
 
@@ -84,4 +96,5 @@ gemini_model_list = load_gemini_model()
 all_users = load_all_user()
 all_admins = load_admin()
 all_settings = load_all_user_settings()
+all_user_info = load_all_user_info()
 TOKEN = get_token()[2]
