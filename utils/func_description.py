@@ -298,6 +298,24 @@ create_pdf_function = {
 
 
 
+execute_code_function = {
+    "name": "execute_code",
+    "description": (
+        "get the response with gemini CodeExecution tools. It does not run the code, it generate response with gemini CodeExecution tools from user message."
+        "this function don't take anything as argument, it take user message in the backend."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            
+        }
+    }
+}
+
+ 
+
+
+
 
 func_list = [
     search_online_function,
@@ -308,5 +326,6 @@ func_list = [
     create_memory_function,
     information_handler_function,
     fetch_media_content,
-    create_pdf_function
+    create_pdf_function,
+    execute_code_function
 ]

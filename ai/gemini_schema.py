@@ -101,6 +101,71 @@ def search_online(user_message, api, settings):
         print(f"Error getting gemini response in search_online function.\n\n Error Code - {e}")
         return None
 
+#a function to use gemini CodeExecution Tool
+async def execute_code(update: Update, content: ContextTypes.DEFAULT_TYPE, user_message, settings, usr_msg):
+    try:
+        tmsg = await update.message.reply_text("Working...")
+        tools=[]
+        tools.append(types.Tool(code_execution=types.ToolCodeExecution))
+        if settings[2] == "gemini-2.5-pro" or settings[2] == "gemini-2.5-flash":
+            config = types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
+                temperature = settings[4],
+                system_instruction=load_persona(settings),
+                tools = tools
+            )
+        else:
+            config = types.GenerateContentConfig(
+                temperature = settings[4],
+                system_instruction=load_persona(settings),
+                tools = tools
+            )
+        def sync_block():
+            temp_api = gemini_api_keys.copy()
+            for _ in range(len(gemini_api_keys)):
+                try:
+                    api_key = random.choice(temp_api)
+                    client = genai.Client(api_key=api_key)
+                    response = client.models.generate_content(
+                        model = settings[2],
+                        contents = [user_message],
+                        config = config,
+                    )
+                    if response:
+                        return response
+                    else:
+                        raise Exception
+                except:
+                    temp_api.remove(api_key)
+        response = await asyncio.to_thread(sync_block)
+        if tmsg:
+            await content.bot.delete_message(chat_id=update.effective_user.id, message_id=tmsg.message_id)
+        data = False
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, "text") and part.text is not None:
+                if data:
+                    await send_message(update, content, part.text, None, settings)
+                else:
+                    await send_message(update, content, part.text, usr_msg, settings)
+                    data = True
+            if hasattr(part, "executable_code") and part.executable_code is not None:
+                if data:
+                    await send_message(update, content, "Code:\n```\n" + str(part.executable_code.code) + "\n```", None, settings)
+                else:
+                    await send_message(update, content, "Code:\n```\n" + str(part.executable_code.code) + "\n```", usr_msg, settings)
+                    data = True
+            if hasattr(part, "code_execution_result") and part.code_execution_result is not None:
+                if data:
+                    await send_message(update, content, "Output:\n" + str(part.code_execution_result.output), None, settings)
+                else:
+                    await send_message(update, content, "Output:\n" + str(part.code_execution_result.output), usr_msg, settings)
+                    data = True
+    except Exception as e:
+        print(f"Error in execute_code function.\n\nError Code - {e}")
+        await send_to_channel(update, content, channel_id, f"Error in execute_code function.\n\nError Code - {e}")
+
+
+
 
 async def create_pdf(update: Update, content: ContextTypes.DEFAULT_TYPE, argument: dict, usr_msg, pre_msg):
     try:
@@ -228,7 +293,7 @@ async def create_image(update:Update, content:ContextTypes.DEFAULT_TYPE, api, pr
         user_id = update.effective_user.id
         msg = await message.reply_text("Image creation is in process, This may take a while please wait patiently.")
         def sync_block(prompt,api):
-            temp_api = gemini_api_keys
+            temp_api = gemini_api_keys.copy()
             for _ in range(len(gemini_api_keys)):
                 try:
                     api_key = random.choice(temp_api)
@@ -286,7 +351,7 @@ async def analyze_media(update: Update, content: ContextTypes.DEFAULT_TYPE, medi
             await content.bot.delete_message(chat_id=user_id, message_id=message.message_id)
             await update.message.reply_text("No media found to analyze.")
             return None
-        temp_api = list(gemini_api_keys)
+        temp_api = gemini_api_keys.copy()
         def sync_block(media_list):
             for _ in range(len(gemini_api_keys)):
                 try:
@@ -471,6 +536,8 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 path = await create_pdf(update, content, function_call.args, usr_msg, pre_msg)
                 if os.path.exists(path):
                     os.remove(path)
+            elif function_call.name == "execute_code":
+                await asyncio.create_task(execute_code(update, content, user_message, settings, usr_msg))
             return 'false'
         if not response:
             if tmsg:

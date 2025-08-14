@@ -82,7 +82,7 @@ async def media_description_generator(update:Update, content:ContextTypes.DEFAUL
     try:
         await media_manager(update, content, path, os.path.getsize(path)/(1024*1024))
         def get_description():
-            temp_api = list(gemini_api_keys)
+            temp_api = gemini_api_keys.copy()
             for _ in range(len(gemini_api_keys)):
                 api_key = random.choice(temp_api)
                 if not api_key:
@@ -241,7 +241,7 @@ async def handle_media(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None
         await msg.edit_text("🤖 Analyzing content...\nThis may take a while ⏳")
 
         def gemini_analysis_worker():
-                temp_api = list(gemini_api_keys)
+                temp_api = gemini_api_keys.copy()
                 model = "gemini-2.5-pro" if settings[2] == "gemini-2.5-pro" else "gemini-2.5-flash"
                 for _ in range(len(gemini_api_keys)):
                     api_key = random.choice(temp_api)

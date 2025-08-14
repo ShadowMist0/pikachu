@@ -661,7 +661,7 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
             await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
             await update.message.delete()
             return ConversationHandler.END
-        if data > 24576 or data < 0:
+        if data > 24576 or data < -1:
             await update.message.reply_text("Invalid Input. Temperature should be between 0 to 24576")
             await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
             await update.message.delete()
@@ -684,7 +684,7 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 await update.message.delete()
                 return ConversationHandler.END
             else:
-                data = data if data>=128 else 1024
+                data = data if data>=128 or data==-1 else 1024
                 cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
                 conn.commit()
                 conn.close()

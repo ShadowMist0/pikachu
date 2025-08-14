@@ -58,7 +58,7 @@ def load_gemini_api():
 
 
 premium_users = ("5888166321", "6226239719")  # Example premium user IDs
-gemini_api_keys = load_gemini_api()
+gemini_api_keys = list(load_gemini_api())
 gemini_model_list = load_gemini_model()
 all_users = load_all_user()
 all_admins = load_admin()

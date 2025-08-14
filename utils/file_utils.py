@@ -124,15 +124,16 @@ def create_user_data_file():
                 gender TEXT,
                 roll INTEGER,
                 password TEXT,
-                api TEXT
+                api TEXT,
+                secret_key TEXT
             )
         """)
         for user in all_users:
             user_data = tuple(data for data in db[f"{user}"].find_one({"id":user})["user_data"])
             cursor.execute("""
                 INSERT OR IGNORE INTO users 
-                (user_id, name, gender, roll, password, api)
-                VALUES (?,?,?,?,?,?)
+                (user_id, name, gender, roll, password, api, secret_key)
+                VALUES (?,?,?,?,?,?,?)
         """, user_data
         )
         conn.commit()

@@ -88,7 +88,7 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
             group_id = update.effective_chat.id
             settings = (group_id,"group",1,0,0.7,0,4)
         prompt = await create_prompt(update, content, user_message, user_id, 0)
-        temp_api = list(gemini_api_keys)
+        temp_api = gemini_api_keys.copy()
         for _ in range(len(gemini_api_keys)):
             try:
                 api = random.choice(temp_api)
