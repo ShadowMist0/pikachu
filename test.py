@@ -1,16 +1,30 @@
 from utils.db import db, all_users, gemini_api_keys
 import sqlite3
+import os
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from glob import glob
+
+
+# 
 
 
 
-all_user = tuple(int(user) for user in db.list_collection_names() if user.isdigit())
 
-for user in all_user:
-    key = AESGCM.generate_key(bit_length=256)
-    settings = db[f"{user}"].find()[0]["user_data"]
-    # db[f"{user}"].update_one(
-    #     {"id":user},
-    #     {"$pop":{"user_data":1}}
-    # )
-    print(settings)
+
+def load_all_user_settings():
+    try:
+        print("Loading all user settings...")
+        user_settings = {}
+        conn = sqlite3.connect("data/settings/user_settings.db")
+        c = conn.cursor()
+        c.execute("select * from user_settings")
+        for settings in c.fetchall():
+            user_settings[settings[0]] = settings
+        conn.close()
+        return user_settings
+    except Exception as e:
+        print(f"Error in load_all_user_settings function.\n\nError Code - {e}")
+
+
+all_settings = load_all_user_settings()
+print(all_settings[5888166321])

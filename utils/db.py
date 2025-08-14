@@ -1,4 +1,6 @@
 from utils.config import db
+import sqlite3
+
 
 
 
@@ -57,9 +59,29 @@ def load_gemini_api():
         print(f"Error lading gemini API. \n\nError Code -{e}")
 
 
+#function to load all user settings as dictionary
+def load_all_user_settings():
+    try:
+        user_settings = {}
+        conn = sqlite3.connect("data/settings/user_settings.db")
+        c = conn.cursor()
+        c.execute("select * from user_settings")
+        for settings in c.fetchall():
+            user_settings[settings[0]] = settings
+        conn.close()
+        return user_settings
+    except Exception as e:
+        print(f"Error in load_all_user_settings function.\n\nError Code - {e}")
+
+
+
+
+
+
 premium_users = ("5888166321", "6226239719")  # Example premium user IDs
 gemini_api_keys = list(load_gemini_api())
 gemini_model_list = load_gemini_model()
 all_users = load_all_user()
 all_admins = load_admin()
+all_settings = load_all_user_settings()
 TOKEN = get_token()[2]

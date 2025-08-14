@@ -29,7 +29,7 @@ from io import BytesIO
 from geopy.distance import geodesic
 from google import genai
 from circulation.circulate import circulate_message, circulate_attendance, user_message_id
-from utils.db import all_users, all_admins
+from utils.db import all_users, all_admins, all_settings, load_all_user_settings
 
 
 
@@ -543,7 +543,11 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 conn.commit()
                 conn.close()
                 global all_users
+                global all_settings
                 all_users = await asyncio.to_thread(load_all_user)
+                new_settings = load_all_user_settings()
+                all_settings.clear()
+                all_settings.update(new_settings)
                 if user_info[3] == 0:
                     await update.message.reply_text("You have been registered as a guest with limited functionality.", reply_markup=reply_markup)
                 else:
@@ -621,6 +625,10 @@ async def take_temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
                     {"id" : user_id},
                     {"$set" : {"settings.4":data}}
             )
+            global all_settings
+            new_settings = load_all_user_settings()
+            all_settings.clear()
+            all_settings.update(new_settings)
             await update.message.reply_text(f"Temperature is successfully set to {data}.")
             await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
             await update.message.delete()
@@ -680,6 +688,10 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
                         {"$set" : {"settings.3":data}}
                 )
                 await update.message.reply_text(f"Thinking Budget is successfully set to {data}.")
+                global all_settings
+                new_settings = load_all_user_settings()
+                all_settings.clear()
+                all_settings.update(new_settings)
                 await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
                 await update.message.delete()
                 return ConversationHandler.END

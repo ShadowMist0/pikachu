@@ -17,7 +17,7 @@ from utils.config import(
     db
 )
 import sqlite3, re
-from utils.db import gemini_model_list
+from utils.db import gemini_model_list, all_settings
 
 
 
@@ -100,6 +100,9 @@ async def safe_send(update:Update, content:ContextTypes.DEFAULT_TYPE, message):
 #function to get settings
 async def get_settings(user_id):
     try:
+        settings = all_settings[int(user_id)]
+        if settings:
+            return settings
         conn = sqlite3.connect("data/settings/user_settings.db")
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM user_settings WHERE id = ?", (user_id,))

@@ -10,7 +10,7 @@ from telegram.ext import(
 from utils.utils import get_settings, add_escape_character
 from glob import glob
 import os
-from utils.db import gemini_model_list, all_admins
+from utils.db import gemini_model_list, all_admins, all_settings, load_all_user_settings
 from utils.config import db,fernet
 import sqlite3
 import asyncio
@@ -25,6 +25,7 @@ from ext.user_content_tools import see_memory, delete_memory, reset
 #A function to handle button response
 async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        global all_settings
         query = update.callback_query
         await query.answer()
         try:
@@ -56,32 +57,6 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             settings = await get_settings(user_id)
             c_s = "ON" if settings[5] == 1 else "OFF"
             await query.edit_message_text(f"Streaming let you stream the bot response in real time.\nCurrent setting : {c_s}", reply_markup=markup)
-
-        elif query.data == "c_streaming_on":
-            conn = sqlite3.connect("data/settings/user_settings.db")
-            cursor = conn.cursor()
-            cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (1, user_id))
-            conn.commit()
-            conn.close()
-            await asyncio.to_thread(
-                db[f"{user_id}"].update_one,
-                    {"id" : user_id},
-                    {"$set" : {"settings.5":1}}
-            )
-            await query.edit_message_text("Streaming has turned on.")
-
-        elif query.data == "c_streaming_off":
-            conn = sqlite3.connect("data/settings/user_settings.db")
-            cursor = conn.cursor()
-            cursor.execute("UPDATE user_settings SET streaming = ? WHERE id = ?", (0, user_id))
-            conn.commit()
-            conn.close()
-            await asyncio.to_thread(
-                db[f"{user_id}"].update_one,
-                    {"id" : user_id},
-                    {"$set" : {"settings.5":0}}
-            )
-            await query.edit_message_text("Streaming has turned off.")
 
         elif query.data == "c_persona":
             conn = sqlite3.connect("data/info/user_data.db")
@@ -137,6 +112,9 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                         {"$set" : {"settings.2":model}}
                 )
                 await query.edit_message_text(f"AI model is successfully changed to {model}.")
+                new_settings = load_all_user_settings()
+                all_settings.clear()
+                all_settings.update(new_settings)
             elif model == "gemini-2.5-pro":
                 cursor.execute("UPDATE user_settings SET model = ?, thinking_budget = ? WHERE id = ? AND thinking_budget < 128", (model, 1024, user_id))
                 conn.commit()
@@ -163,6 +141,9 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             )
             personas = sorted(glob("data/persona/*txt"))
             await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(persona))[0]}.")
+            new_settings = load_all_user_settings()
+            all_settings.clear()
+            all_settings.update(new_settings)
 
         elif query.data == "g_classroom":
             await query.edit_message_text("CSE Google classroom code: ```2o2ea2k3```\n\nMath G. Classroom code: ```aq4vazqi```\n\nChemistry G. Classroom code: ```wnlwjtbg```", parse_mode="Markdown")

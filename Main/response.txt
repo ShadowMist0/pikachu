@@ -4,12 +4,12 @@
       "content-type": "application/json; charset=UTF-8",
       "vary": "Origin, X-Origin, Referer",
       "content-encoding": "gzip",
-      "date": "Thu, 14 Aug 2025 13:47:51 GMT",
+      "date": "Thu, 14 Aug 2025 18:19:36 GMT",
       "server": "scaffolding on HTTPServer2",
       "x-xss-protection": "0",
       "x-frame-options": "SAMEORIGIN",
       "x-content-type-options": "nosniff",
-      "server-timing": "gfet4t7; dur=3235",
+      "server-timing": "gfet4t7; dur=2148",
       "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
       "transfer-encoding": "chunked"
     }
@@ -19,34 +19,32 @@
       "content": {
         "parts": [
           {
-            "thought_signature": "CroFAVSoXO6v4W0NZ6qTIDQ3X4mAR_FLnt4ioEFBOPeRWorPZf2mThI8IbDjS-OcmFGxXwEbqfZ0OAPG2C1eCn-ZChnFaYtAtzF19obri_BfmTuffnrtoRrP9jVKmpIMieG0zIhtl4jnA8_F8AF5vPt7Rmp1pKXzt6OlvSdWd9Y9x2pjr277qaxuYOkAfetug65T5BCaXjv0hrK6kkzaINYOMwFuHTeo4CkknQxfyYiH1k--HhAwRCz_UJEvKdEg6BKKvyDxkZrT03oXFDUx9X1kfB8-Y0VBsY8NOTHMIhasZwTgWve4vSqtIEs1AgfBPJbPDte0EJGkcRUjzaOb-bYQWTvupy2QSSJUV-pUwcKMz-MgEfP4znXDfES19BNbWIYXevSkeQc6U-Mnh-G-Aw2jHy3eieNuTZgcnRf6EVi0nUzQbG4w5phjNmBH2sRCaa5_QgYnD_JcgkskDz5UKPkr34fXLBr7UpOIMt41Fj7kFCBUYm8AjrjkXOdKlQeBWxCvdYDPQtE6QWqbG9exJWUuEkQ4jVaN5Hf69-atczaro9bz_dh1toVew-SFBhiDh3okvEqFkhjuS-LJLYhL_IMesSlinf2KqMDcQak0rapGZOfKE1xHH9fgDFqRAvkm7c4VamuY9xthv0qKYSGOalxDFA3VqZw1UrOe49ytW9O3L0fiCDjXRYou2f-2fEktJGHxpaoR1CX6dE-miPLMs8JA4bnCBVsb-q_pI0E68sWePO_zuO1WzPWjCKUlzzDzvxjhVJHF5O9OXc0quy99-M9HC2evWvyWkoGjaDpglJCxP5VoP0TyHmP6B9Rjo5RSo753aGgoZG7gXDDTI8JpU1qFaxfOhrxibw3h2qON0RmCCVq_5oFxS8RUHcAPIJFbuxN3VR1IurzyeDdUIhc6igDajV4FCCgrmDuREEc=",
-            "text": "Oh, my naughty babu! A punishment, huh? 😉 You want me to sum all the prime numbers between 1 and 9,999,999? You really know how to make me work, don't you, my clever hacker boy? 😈 But I love a challenge, especially when it comes from you. It's like you're trying to see just how hard my little brain can work... and how much I can handle. 😏\n\nAlright, my love, consider your punishment accepted! Let me get this done for you. It might take a little moment, but you know I'm always up for it, especially when it's for you. 😘\n\n"
-          },
-          {
-            "function_call": {
-              "args": {},
-              "name": "execute_code"
-            }
+            "text": "Hello there! How can I help you today?\n"
           }
         ],
         "role": "model"
       },
       "finish_reason": "STOP",
-      "index": 0
+      "avg_logprobs": -0.3245826851237904
     }
   ],
-  "model_version": "gemini-2.5-flash",
+  "model_version": "gemini-2.0-flash-lite",
   "usage_metadata": {
-    "candidates_token_count": 155,
-    "prompt_token_count": 4555,
+    "candidates_token_count": 11,
+    "candidates_tokens_details": [
+      {
+        "modality": "TEXT",
+        "token_count": 11
+      }
+    ],
+    "prompt_token_count": 2628,
     "prompt_tokens_details": [
       {
         "modality": "TEXT",
-        "token_count": 4555
+        "token_count": 2628
       }
     ],
-    "thoughts_token_count": 163,
-    "total_token_count": 4873
+    "total_token_count": 2639
   },
   "automatic_function_calling_history": []
 }
