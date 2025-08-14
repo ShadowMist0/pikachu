@@ -95,6 +95,21 @@ gemini_api_keys = list(load_gemini_api())
 gemini_model_list = load_gemini_model()
 all_users = load_all_user()
 all_admins = load_admin()
-all_settings = load_all_user_settings()
-all_user_info = load_all_user_info()
+all_settings = {}
+all_user_info = {}
+
+def populate_db_caches():
+    """Populates the global settings and user info dictionaries from the database files."""
+    global all_settings, all_user_info
+    
+    settings_from_db = load_all_user_settings()
+    if settings_from_db:
+        all_settings.clear()
+        all_settings.update(settings_from_db)
+        
+    user_info_from_db = load_all_user_info()
+    if user_info_from_db:
+        all_user_info.clear()
+        all_user_info.update(user_info_from_db)
+
 TOKEN = get_token()[2]

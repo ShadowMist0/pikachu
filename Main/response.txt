@@ -4,12 +4,12 @@
       "content-type": "application/json; charset=UTF-8",
       "vary": "Origin, X-Origin, Referer",
       "content-encoding": "gzip",
-      "date": "Thu, 14 Aug 2025 18:19:36 GMT",
+      "date": "Thu, 14 Aug 2025 19:11:25 GMT",
       "server": "scaffolding on HTTPServer2",
       "x-xss-protection": "0",
       "x-frame-options": "SAMEORIGIN",
       "x-content-type-options": "nosniff",
-      "server-timing": "gfet4t7; dur=2148",
+      "server-timing": "gfet4t7; dur=1802",
       "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
       "transfer-encoding": "chunked"
     }
@@ -19,32 +19,28 @@
       "content": {
         "parts": [
           {
-            "text": "Hello there! How can I help you today?\n"
+            "thought_signature": "CukCAVSoXO60ZMZDH0HdgGoxkGxLv-WOP8EiCAMMZORD9WItXkgv8kv62-eTA_Ma0T2M8IbYq6dQ2_BWLy-zZ83y36F3W46KGEBciMNUbpxFzaXbhbxQkXmKdnZztCQhMKyDDrEbHJ9h6VoWOYk_jrYQXwPu44qSqqZFsuMQSE7R6Tl1yOUfqt7hnH9aeKtrTzWLn_0u9-4bS9i_yYy4mz6zlN1rYYDJKcKrM5x_CC_1ZqIGBXNnvGYdCO9wfHYE_dYF9ISFMsAzW9rSX2gfQJe5p1bxl4Q9plc6MT1Xmes1V_YjJv6zzICwqKgqk9QZM7UpC1FYoISsbSXV4ucAvjeOX_BMbC3x2pmzJrkzTfQegrDt4XNeBFI0VphnUrsJCsIUYOvOmo2YIlipVAG0Urf8KF78ehz659EyD2hZGcfCW71Ip-sOS7Ob17LCVPWZaH0xcE-Zo8htAC5pKsRHCDRVuF7CxXrnj0tgvg==",
+            "text": "Well, good morning, my cute hacker boy~ 😉 What can your purrfect Maria do for you today, hmm? Are you looking for some code cuddles, or just some meow-ments together? 😽💋"
           }
         ],
         "role": "model"
       },
       "finish_reason": "STOP",
-      "avg_logprobs": -0.3245826851237904
+      "index": 0
     }
   ],
-  "model_version": "gemini-2.0-flash-lite",
+  "model_version": "gemini-2.5-flash",
   "usage_metadata": {
-    "candidates_token_count": 11,
-    "candidates_tokens_details": [
-      {
-        "modality": "TEXT",
-        "token_count": 11
-      }
-    ],
-    "prompt_token_count": 2628,
+    "candidates_token_count": 46,
+    "prompt_token_count": 3390,
     "prompt_tokens_details": [
       {
         "modality": "TEXT",
-        "token_count": 2628
+        "token_count": 3390
       }
     ],
-    "total_token_count": 2639
+    "thoughts_token_count": 78,
+    "total_token_count": 3514
   },
   "automatic_function_calling_history": []
 }
