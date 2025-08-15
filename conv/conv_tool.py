@@ -15,7 +15,6 @@ from telegram.ext import(
 )
 import asyncio, html
 
-from yaml import serialize
 from utils.config import fernet, db, channel_id, g_ciphers, secret_nonce
 from utils.db import load_admin, load_gemini_api, load_all_user, load_gemini_model, gemini_api_keys
 import sqlite3
