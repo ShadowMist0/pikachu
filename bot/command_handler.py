@@ -12,7 +12,7 @@ from telegram.ext import(
 from utils.file_utils import load_all_files
 from utils.utils import send_to_channel
 from utils.db import load_all_user, all_admins
-from utils.config import channel_id, fernet
+from utils.config import channel_id, fernet, g_ciphers, secret_nonce
 
 
 
@@ -32,20 +32,20 @@ async def restart(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
 #fuction for start command
 async def start(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = [
-        ["Routine", "CT"],
+        ["Routine", "Schedule"],
         ["⚙️Settings", "🔗Resources"]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
     try:
         user_id = update.effective_chat.id
         paths = [
-            f"data/Conversation/conversation-{user_id}.txt",
-            f"data/memory/memory-{user_id}.txt",
+            f"data/Conversation/conversation-{user_id}.shadow",
+            f"data/memory/memory-{user_id}.shadow",
         ]
 
         for path in paths:
             if not os.path.exists(path):
-                with open(path, "w", encoding = "utf-8") as f:
+                with open(path, "wb", encoding = "utf-8") as f:
                     pass
         users = await asyncio.to_thread(load_all_user)
         if user_id in users:
@@ -73,7 +73,7 @@ async def help(update: Update, content : ContextTypes.DEFAULT_TYPE) -> None:
         ]
         help_markup = InlineKeyboardMarkup(keyboard)
         with open("data/info/help.shadow", "rb") as file:
-            await update.message.reply_text(fernet.decrypt(file.read()).decode("utf-8"), reply_markup=help_markup)
+            await update.message.reply_text(g_ciphers.decrypt(secret_nonce, file.read(), None).decode("utf-8"), reply_markup=help_markup)
     except Exception as e:
         print(f"Error in help function. \n\n Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in help function. \n\n Error Code - {e}")

@@ -14,7 +14,9 @@ from telegram.ext import(
     CallbackQueryHandler,
 )
 import asyncio, html
-from utils.config import fernet, db, channel_id
+
+from yaml import serialize
+from utils.config import fernet, db, channel_id, g_ciphers, secret_nonce
 from utils.db import load_admin, load_gemini_api, load_all_user, load_gemini_model, gemini_api_keys
 import sqlite3
 from utils.utils import get_settings
@@ -45,7 +47,7 @@ async def api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
         keyboard = [[InlineKeyboardButton("cancel", callback_data="cancel_conv")]]
         markup = InlineKeyboardMarkup(keyboard)
         with open("data/info/getting_api.shadow", "rb") as f:
-            data = fernet.decrypt(f.read()).decode("utf-8")
+            data = g_ciphers.decrypt(secret_nonce, f.read(), None).decode("utf-8")
             await update.message.reply_text(data, reply_markup=markup)
         return 1
     except Exception as e:
@@ -346,7 +348,7 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
                 markup = InlineKeyboardMarkup(keyboard)
                 with open("data/info/getting_api.shadow", "rb") as file:
-                    help_data = add_escape_character(fernet.decrypt(file.read()).decode("utf-8"))
+                    help_data = add_escape_character(g_ciphers.decrypt(secret_nonce, file.read(), None).decode("utf-8"))
                 msg = await update.message.reply_text(help_data, reply_markup=markup, parse_mode="MarkdownV2")
                 content.user_data["ra_message_id"] = msg.message_id
                 await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
@@ -371,7 +373,7 @@ async def take_user_password(update:Update, content:ContextTypes.DEFAULT_TYPE) -
             keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
             markup = InlineKeyboardMarkup(keyboard)
             with open("data/info/getting_api.shadow", "rb") as file:
-                help_data = add_escape_character(fernet.decrypt(file.read()).decode("utf-8"))
+                help_data = add_escape_character(g_ciphers.decrypt(secret_nonce, file.read(), None).decode("utf-8"))
                 msg = await update.message.reply_text(help_data, reply_markup=markup, parse_mode="MarkdownV2")
             content.user_data["ra_message_id"] = msg.message_id
             await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
@@ -523,7 +525,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 """,
                 tuple(info for info in user_info)
                 )
-                persona = "data/persona/pikachu.txt"
+                persona = "data/persona/pikachu.shadow"
                 data = {
                     "id" : user_info[0],
                     "name" : user_info[1],

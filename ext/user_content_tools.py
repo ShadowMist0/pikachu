@@ -1,5 +1,5 @@
-from utils.config import db, fernet, channel_id
-from utils.db import gemini_api_keys
+from utils.config import db, fernet, channel_id, g_ciphers, secret_nonce
+from utils.db import gemini_api_keys, all_user_info
 from telegram import Update
 from telegram.ext import ContextTypes
 from google import genai
@@ -12,7 +12,8 @@ import sqlite3
 from datetime import datetime
 from utils.utils import get_settings, load_persona
 import html
-
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from flask import request
 
 
 
@@ -21,6 +22,9 @@ import html
 #A function to delete n times convo from conversation history
 def delete_n_convo(user_id, n):
     try:
+        key = bytes.fromhex(all_user_info[user_id][6])
+        nonce = bytes.fromhex(all_user_info[user_id][7])
+        ciphers = AESGCM(key)
         conn = sqlite3.connect("user_media/user_media.db")
         c = conn.cursor()
         c.execute("select media_path from user_media")
@@ -50,31 +54,28 @@ def delete_n_convo(user_id, n):
                         {"$set" : {"conversation" : data}}
                     )
             return
-        with open(f"data/Conversation/conversation-{user_id}.txt", "r+", encoding="utf-8") as f:
-            data = f.read()
+        with open(f"data/Conversation/conversation-{user_id}.shadow", "rb") as f:
+            data = ciphers.decrypt(nonce, f.read(), None).decode("utf-8")
             data = data.split("You: ")
+
             if len(data) >= n+1 and len(data)-n < n:
                 data = data[n:]
-                f.seek(0)
-                f.truncate(0)
-                data =  "You: ".join(data)
-                f.write(data)
-                db[f"{user_id}"].update_one(
-                    {"id" : user_id},
-                    {"$set" : {"conversation" : data}}
-                )
             elif len(data)-n > n:
                 data = data[-n:]
-                f.seek(0)
-                f.truncate(0)
-                data = "You: ".join(data)
+
+            data = "You: ".join(data)
+            data = ciphers.encrypt(nonce, data.encode("utf-8"), None)
+
+            with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
                 f.write(data)
-                db[f"{user_id}"].update_one(
-                    {"id" : user_id},
-                    {"$set" : {"conversation" : data}}
-                )
-        with open(f"data/Conversation/conversation-{user_id}.txt", "r") as file:
-            conv_data = f.read()
+            
+            db[f"{user_id}"].update_one(
+                {"id" : user_id},
+                {"$set" : {"conversation" : data}}
+            )
+
+        with open(f"data/Conversation/conversation-{user_id}.txt", "rb") as file:
+            conv_data = ciphers.decrypt(nonce, file.read(), None).decode("utf-8")
             if not paths:
                 return
             for path in paths:
@@ -92,19 +93,42 @@ def delete_n_convo(user_id, n):
 #creating memory, SPECIAL_NOTE: THIS FUNCTION ALWAYS REWRITE THE WHOLE MEMORY, SO THE MEMORY SIZE IS LIMITED TO THE RESPONSE SIZE OF GEMINI, IT IS DONE THIS WAY BECAUSE OTHERWISE THERE WILL BE DUPLICATE DATA 
 async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, user_id):
     try:
+        key = bytes.fromhex(all_user_info[user_id][6])
+        nonce = bytes.fromhex(all_user_info[user_id][7])
+        ciphers = AESGCM(key)
         message = update.message or update.edited_message
         settings = await get_settings(update.effective_user.id)
         if user_id > 0:
-            with open("data/persona/memory_persona.txt", "r", encoding="utf-8") as f:
-                instruction = load_persona(settings) + f.read()
-            with open(f"data/memory/memory-{user_id}.txt", "r", encoding = "utf-8") as f:
-                data = "***PREVIOUS MEMORY***\n\n" + f.read() + "\n\n***END OF MEMORY***\n\n"
-            with open(f"data/Conversation/conversation-{user_id}.txt", "r", encoding = "utf-8") as f:
-                data += "\n\n***CONVERSATION HISTORY***\n\n" + f.read() +  "\n\n***END OF CONVERSATION***\n\n"
+            with open("data/persona/memory_persona.shadow", "rb") as f:
+                instruction = g_ciphers.decrypt(secret_nonce, f.read(), None).decode("utf-8")
+            data = ""
+            with open(f"data/memory/memory-{user_id}.shadow", "rb", encoding = "utf-8") as f:
+                pre_mem = f.read()
+                if pre_mem:
+                    try:
+                        data += "***PREVIOUS MEMORY***\n\n" + ciphers.decrypt(nonce, pre_mem, None).decode("utf-8") + "\n\n***END OF MEMORY***\n\n"
+                    except:
+                        with open(f"data/memory/memory-{user_id}.shadow", "wb") as f:
+                            pass
+                        db[f"{user_id}"].update_one(
+                            {"id" : user_id},
+                            {"$set" : {"memory" : None}}
+                        )
+            with open(f"data/Conversation/conversation-{user_id}.shadow", "rb") as f:
+                try:
+                    data += "\n\n***CONVERSATION HISTORY***\n\n" + ciphers.decrypt(nonce, f.read(), None).decode("utf-8") +  "\n\n***END OF CONVERSATION***\n\n"
+                except:
+                    with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
+                        pass
+                    db[f"{user_id}"].update_one(
+                        {"id" : user_id},
+                        {"$set" : {"conversation" : None}}
+                    )
+                    data += "Nothing to show"
         elif user_id < 0:
             group_id = user_id
-            with open("data/persona/memory_persona.txt", "r") as f:
-                instruction = f.read()
+            with open("data/persona/memory_persona.txt", "rb") as f:
+                instruction = g_ciphers.decrypt(secret_nonce, f.read(), None).decode("utf-8")
             with open(f"data/memory/memory-group.txt", "r", encoding = "utf-8") as f:
                 data = "***PREVIOUS MEMORY***\n\n" + f.read() + "\n\n***END OF MEMORY***\n\n"
             with open(f"data/Conversation/conversation-group.txt", "r", encoding = "utf-8") as f:
@@ -128,8 +152,8 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
         )
         if response.prompt_feedback and response.prompt_feedback.block_reason:
             await message.reply_text(f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason} Conversation history is erased.")
-            if os.path.exists(f"data/Conversation/conversation-{user_id}.txt"):
-                with open(f"data/Conversation/conversation-{user_id}.txt", "w") as f:
+            if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
+                with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
                     pass
                 await asyncio.to_thread(db[f"{user_id}"].update_one,
                     {"id" : user_id},
@@ -138,10 +162,9 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
             return True
         if response.text is not None:
             if user_id > 0:
-                with open(f"data/memory/memory-{user_id}.txt", "a+", encoding="utf-8") as f:
-                    f.write(response.text)
-                    f.seek(0)
-                    memory = f.read()
+                with open(f"data/memory/memory-{user_id}.shadow", "wb") as f:
+                    memory = ciphers.encrypt(nonce, response.text.encode("utf-8"), None)
+                    f.write(memory)
                 await asyncio.to_thread(db[f"{user_id}"].update_one,
                     {"id" : user_id},
                     {"$set" : {"memory" : memory}}
@@ -161,8 +184,8 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
             return True
         else:
             if (gemini_api_keys.index(api) > len(gemini_api_keys)-3):
-                if os.path.exists(f"data/Conversation/conversation-{user_id}.txt"):
-                    with open(f"data/Conversation/conversation-{user_id}.txt", "w") as f:
+                if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
+                    with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
                         pass
                     await asyncio.to_thread(db[f"{user_id}"].update_one,
                         {"id" : user_id},
@@ -179,6 +202,11 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
 #create the conversation history as prompt
 async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_message, user_id, media):
     try:
+        key = bytes.fromhex(all_user_info[user_id][6])
+        nonce = bytes.fromhex(all_user_info[user_id][7])
+        ciphers = AESGCM(key)
+        bd_tz = pytz.timezone("Asia/Dhaka")
+        now = datetime.now(bd_tz).strftime("%d-%m-%Y, %H:%M:%S")
         message = update.message or update.edited_message
         if message.chat.type == "private":
             data = "***RULES***\n"
@@ -188,24 +216,50 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 "So, You must not use timestamp in your response."
             )
             with open("data/info/rules.shadow", "rb" ) as f:
-                data += fernet.decrypt(f.read()).decode("utf-8") + "\n***END OF RULES***\n\n\n"
-            with open(f"data/memory/memory-{user_id}.txt", "r", encoding="utf-8") as f:
-                data += "***MEMORY***\n" + f.read()
-            with open(f"data/Conversation/conversation-{user_id}.txt", "r", encoding="utf-8") as f:
-                data += "***CONVERSATION HISTORY***\n\n" + f.read() + "\nUser: " + user_message 
-                f.seek(0)
-                if(f.read().count("You: ")>30):
-                    asyncio.create_task(background_memory_creation(update, content, user_id))
+                data += g_ciphers.decrypt(secret_nonce, f.read(), None).decode("utf-8")
+            with open(f"data/memory/memory-{user_id}.shadow", "rb") as f:
+                mem_data = f.read()
+                if mem_data:
+                    try:
+                        data += "\n\n***MEMORY***\n" + ciphers.decrypt(nonce, mem_data, None).decode("utf-8")
+                    except:
+                        with open(f"data/memory/memory-{user_id}.shadow", "wb") as f:
+                            pass
+                        db[f"{user_id}"].update_one(
+                            {"id" : user_id},
+                            {"$set" : {"memory" : None}}
+                        )
+            with open(f"data/Conversation/conversation-{user_id}.shadow", "rb") as f:
+                conv_data = f.read()
+                if conv_data:
+                    try:
+                        data += "***CONVERSATION HISTORY***\n\n" + ciphers.decrypt(nonce, conv_data, None).decode("utf-8") + f"\n[{now}] {all_user_info[user_id][1]}: " + user_message
+                        f.seek(0)
+                        if(ciphers.decrypt(nonce, f.read(), None).decode("utf-8").count("You: ")>30):
+                            await asyncio.create_task(background_memory_creation(update, content, user_id))
+                    except:
+                        data += f"\n[{now}] {all_user_info[user_id][1]}: " + user_message
+                        with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
+                            pass
+                        db[f"{user_id}"].update_one(
+                            {"id" : user_id},
+                            {"$set" : {"conversation" : None}}
+                        )
             if data:
+                with open("data.txt", "w") as file:
+                    file.write(data)
                 return data
             else:
                 return "Hi"
         if message.chat.type != "private":
             data = "***RULES***\n"
             with open("data/info/group_rules.shadow", "rb") as f:
-                data += fernet.decrypt(f.read()).decode("utf-8") + "\n***END OF RULES***\n\n\n"
-            with open("data/info/group_training_data.txt", "r") as f:
-                data +=  "******TRAINING DATA******\n\n" + f.read() + "******END OF TRAINING DATA******\n\n"
+                data += g_ciphers.decrypt(secret_nonce, f.read(), None).decode("utf-8") + "\n***END OF RULES***\n\n\n"
+            with open("data/info/group_training_data.shadow", "rb") as f:
+                try:
+                    data +=  "******TRAINING DATA******\n\n" + g_ciphers.decrypt(secret_nonce, f.read(), None).decode("utf-8") + "******END OF TRAINING DATA******\n\n"
+                except:
+                    pass         
             with open(f"data/memory/memory-group.txt", "r", encoding="utf-8") as f:
                 data += "***MEMORY***\n" + f.read() + "\n***END OF MEMORY***\n\n\n"
             with open(f"data/Conversation/conversation-group.txt", "r", encoding="utf-8") as f:
@@ -214,7 +268,6 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 if(f.read().count("You: ")>200):
                     asyncio.create_task(background_memory_creation(update, content, user_id))
             if data:
-    
                 return data
             else:
                 return "Hi"
@@ -226,19 +279,27 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
 #function to save conversation
 def save_conversation(user_message : str , gemini_response:str , user_id:int) -> None:
     try:
+        key = bytes.fromhex(all_user_info[user_id][6])
+        nonce = bytes.fromhex(all_user_info[user_id][7])
+        ciphers = AESGCM(key)
         bd_tz = pytz.timezone("Asia/Dhaka")
         now = datetime.now(bd_tz).strftime("%d-%m-%Y, %H:%M:%S")
         conn = sqlite3.connect("data/info/user_data.db")
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM users WHERE user_id = ?", (user_id,))
         name = cursor.fetchone()[0]
-        with open(f"data/Conversation/conversation-{user_id}.txt", "a+", encoding="utf-8") as f:
+        
+        with open(f"data/Conversation/conversation-{user_id}.shadow", "rb") as f:
+            data = ciphers.decrypt(nonce,f.read(), None).decode("utf-8")
+        with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
             if user_message == None:
-                f.write(f"{gemini_response}\n")
+                data += gemini_response + "\n"
+                data = ciphers.encrypt(nonce, data.encode("utf-8"), None)
+                f.write(data)
             else:
-                f.write(f"\n[{now}] {name}: {user_message}\nYou: {gemini_response}\n")
-            f.seek(0)
-            data = f.read()
+                data += f"\n[{now}] {name}: {user_message}\nYou: {gemini_response}\n"
+                data = ciphers.encrypt(nonce, data.encode("utf-8"), None)
+                f.write(data)
         db[f"{user_id}"].update_one(
             {"id" : user_id},
             {"$set" : {"conversation" : data}}
@@ -288,7 +349,7 @@ async def background_memory_creation(update: Update,content,user_id):
 async def delete_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> None:
     try:
         user_id = update.effective_chat.id
-        with open(f"data/memory/memory-{update.callback_query.from_user.id}.txt", "w") as f:
+        with open(f"data/memory/memory-{update.callback_query.from_user.id}.shadow", "wb") as f:
             pass
         await asyncio.to_thread(db[f"{user_id}"].update_one,
             {"id" : user_id},
@@ -311,8 +372,8 @@ async def reset(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> 
                 return
         except:
             pass
-        if os.path.exists(f"data/Conversation/conversation-{user_id}.txt"):
-            with open(f"data/Conversation/conversation-{user_id}.txt", "w") as f:
+        if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
+            with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
                 pass
             await asyncio.to_thread(db[f"{user_id}"].update_one,
                 {"id" : user_id},
@@ -342,15 +403,18 @@ async def reset(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> 
    #A function to return memory for user convention
 async def see_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> None:
     try:
+        user_id = update.callback_query.from_user.id
+        key = bytes.fromhex(all_user_info[user_id][6])
+        nonce = bytes.fromhex(all_user_info[user_id][7])
+        ciphers = AESGCM(key)
         try:
             if update.message.chat.type != "private":
                 await update.message.reply_text("Memory is not visible from group. Privacy concern idiot.")
                 return
         except:
             pass
-        with open(f"data/memory/memory-{update.callback_query.from_user.id}.txt", "a+") as f:
-            f.seek(0)
-            data = f.read()
+        with open(f"data/memory/memory-{user_id}.shadow", "rb") as f:
+            data = ciphers.decrypt(nonce, f.read(), None).decode("utf-8")
             await query.edit_message_text("Here is my Diary about you:")
             if data.strip() == "":
                 await update.callback_query.message.reply_text("I haven't written anything about you. You expected something huh\nLOL")

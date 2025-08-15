@@ -14,7 +14,9 @@ from utils.config import(
     global_requests,
     global_time_limit,
     user_requests,
-    db
+    db,
+    g_ciphers,
+    secret_nonce
 )
 import sqlite3, re
 from utils.db import gemini_model_list, all_settings
@@ -108,7 +110,7 @@ async def get_settings(user_id):
         cursor.execute("SELECT * FROM user_settings WHERE id = ?", (user_id,))
         row = cursor.fetchone()
         if not row:
-            return (999999, "XX", "gemini-2.5-pro", 0, 0.7, 0, "data/persona/pikachu.txt")
+            return (999999, "XX", "gemini-2.5-pro", 0, 0.7, 0, "data/persona/pikachu.shadow")
         if row[2] not in gemini_model_list:
             row = list(row)
             row[2] = gemini_model_list[-1]
@@ -137,8 +139,8 @@ async def get_settings(user_id):
 #loading persona
 def load_persona(settings):
     try:
-        with open(settings[6], "r") as file:
-            persona = file.read()
+        with open(settings[6], "rb") as file:
+            persona = g_ciphers.decrypt(secret_nonce, file.read(), None).decode("utf-8")
         return persona
     except Exception as e:
         print(f"Error in load_persona function. \n\n Error Code - {e}")

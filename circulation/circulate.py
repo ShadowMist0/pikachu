@@ -134,7 +134,7 @@ async def inform_all(query, content:ContextTypes.DEFAULT_TYPE) -> None:
 async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE):
     try:
         keyboard = [
-            ["Routine", "CT"],
+            ["Routine", "Schedule"],
             ["⚙️Settings", "🔗Resources"]
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
@@ -280,7 +280,7 @@ user_message_id = {}
 async def circulate_attendance(update:Update, content:ContextTypes.DEFAULT_TYPE, teacher, subject, limit):
     try:
         rkeyboard = [
-            ["Routine", "CT"],
+            ["Routine", "Schedule"],
             ["⚙️Settings", "🔗Resources"]
         ]
         rmarkup = ReplyKeyboardMarkup(rkeyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)

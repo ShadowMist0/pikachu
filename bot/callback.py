@@ -10,13 +10,12 @@ from telegram.ext import(
 from utils.utils import get_settings, add_escape_character
 from glob import glob
 import os
-from utils.db import gemini_model_list, all_admins, all_settings, load_all_user_settings
-from utils.config import db,fernet
+from utils.db import gemini_model_list, all_admins, all_settings, load_all_user_settings, all_user_info
+from utils.config import db,fernet, g_ciphers, secret_nonce
 import sqlite3
 import asyncio
 from circulation.circulate import circulate_routine, inform_all
 from ext.user_content_tools import see_memory, delete_memory, reset
-
 
 
 
@@ -34,8 +33,8 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             user_id = query.from_user.id
         settings = await get_settings(user_id)
         c_model = tuple(model for model in gemini_model_list)
-        personas = sorted(glob("data/persona/*txt"))
-        personas.remove("data/persona/memory_persona.txt")
+        personas = sorted(glob("data/persona/*shadow"))
+        personas.remove("data/persona/memory_persona.shadow")
 
         if query.data == "c_model":
             keyboard = []
@@ -65,7 +64,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             user = cursor.fetchone()
             if user[3] == 0:
                 try:
-                    personas.remove("data/persona/Maria.txt")
+                    personas.remove("data/persona/Maria.shadow")
                 except Exception as e:
                     print(f"Error in c_data part. Error Code - {e}")
             settings = await get_settings(user_id)
@@ -92,8 +91,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
 
         elif query.data == "c_conv_history":
             keyboard = [
-                [InlineKeyboardButton("Show", callback_data="c_ch_show"), InlineKeyboardButton("Reset", callback_data="c_ch_reset")],
-                [InlineKeyboardButton("Cancel", callback_data="cancel")]
+                [InlineKeyboardButton("Reset", callback_data="c_ch_reset"), InlineKeyboardButton("Cancel", callback_data="cancel")],
             ]
             ch_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text("Conversation history holds your conversation with the bot.", reply_markup=ch_markup, parse_mode="Markdown")
@@ -139,7 +137,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                     {"id" : user_id},
                     {"$set" : {"settings.6":persona}}
             )
-            personas = sorted(glob("data/persona/*txt"))
+            personas = sorted(glob("data/persona/*shadow"))
             await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(persona))[0]}.")
             new_settings = load_all_user_settings()
             all_settings.clear()
@@ -191,14 +189,6 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
         elif query.data == "c_delete_memory":
             await delete_memory(update, content, query)
 
-        elif query.data == "c_ch_show":
-            with open(f"data/Conversation/conversation-{user_id}.txt", "rb") as file:
-                if os.path.getsize(f"data/Conversation/conversation-{user_id}.txt") == 0:
-                    await query.edit_message_text("You don't have any conversation history.")
-                else:
-                    await query.edit_message_text("Your conversation history:")
-                    await content.bot.send_document(chat_id=user_id, document=file)
-
         elif query.data == "c_ch_reset":
             await reset(update, content, query)
 
@@ -210,7 +200,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                 ]
                 markup = InlineKeyboardMarkup(keyboard)
                 with open("data/info/admin_help.shadow", "rb") as file:
-                    help_data = fernet.decrypt(file.read()).decode("utf-8")
+                    help_data = g_ciphers.decrypt(secret_nonce, file.read(), None).decode("utf-8")
                     help_data = help_data if help_data else "Sorry no document. Try again later."
                 await query.edit_message_text(help_data, reply_markup=markup)
             else:

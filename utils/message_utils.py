@@ -86,7 +86,7 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
         settings = await get_settings(user_id)
         if message.chat.type != "private":
             group_id = update.effective_chat.id
-            settings = (group_id,"group",1,0,0.7,0,4)
+            settings = (group_id,"group","gemini-2.5-flash",0,0.7,0,"data/persona/Pikachu.shadow")
         prompt = await create_prompt(update, content, user_message, user_id, 0)
         temp_api = gemini_api_keys.copy()
         for _ in range(len(gemini_api_keys)):
@@ -104,8 +104,8 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                 continue
         if response == None:
             await update.message.reply_text("Failed to get response from gemini. Your conversation history is erased.")
-            if os.path.exists(f"data/Conversation/conversation-{user_id}.txt"):
-                with open(f"data/Conversation/conversation-{user_id}.txt", "w") as f:
+            if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
+                with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
                     pass
         elif response != "false":
             await send_message(update, content, response, user_message, settings)

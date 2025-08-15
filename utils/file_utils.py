@@ -2,10 +2,9 @@ import os
 import shutil
 import sqlite3
 import asyncio
-from utils.db import all_users, db
-from utils.config import fernet
-
-
+from utils.db import all_users, db, all_user_info
+from utils.config import g_ciphers, secret_nonce, fernet
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
 
@@ -50,7 +49,7 @@ def create_conversation_file():
         os.makedirs("data/Conversation", exist_ok=True)
         for user in all_users:
             conv_data = db[f"{user}"].find()[0]["conversation"]
-            with open(f"data/Conversation/conversation-{user}.txt", "w") as file:
+            with open(f"data/Conversation/conversation-{user}.shadow", "wb") as file:
                 if conv_data:
                     file.write(conv_data)
                 else:
@@ -75,7 +74,7 @@ def create_memory_file():
         os.makedirs("data/memory", exist_ok=True)
         for user in all_users:
             mem_data = db[f"{user}"].find()[0]["memory"]
-            with open(f"data/memory/memory-{user}.txt", "w") as file:
+            with open(f"data/memory/memory-{user}.shadow", "wb") as file:
                 if mem_data:
                     file.write(mem_data)
                 else:
@@ -99,8 +98,8 @@ def create_persona_file():
         os.makedirs("data/persona", exist_ok=True)
         personas = [persona for persona in db["persona"].find({"type":"persona"})]
         for persona in personas:
-            with open(f"data/persona/{persona["name"]}.txt", "w") as f:
-                f.write(persona["persona"])
+            with open(f"data/persona/{persona["name"]}.shadow", "wb") as f:
+                f.write(g_ciphers.encrypt(secret_nonce, persona["persona"].encode("utf-8"), None))
     except Exception as e:
         print(f"Error in create_persona_file function. \n\n Error Code  {e}")
 
@@ -185,13 +184,9 @@ def create_info_file():
         colllection = db["info"]
         for file in colllection.find({"type" : "info"}):
             file_name = file["name"]
-            path = f"data/info/{file_name}.txt" if file_name == "group_training_data" else f"data/info/{file_name}.shadow"
-            if file_name == "group_training_data":
-                with open(path, "w") as f:
-                    f.write(file["data"])
-            else:
-                with open(path, "wb") as f:
-                    f.write(fernet.encrypt(file["data"].encode()))
+            path = f"data/info/{file_name}.shadow"
+            with open(path, "wb") as f:
+                f.write(g_ciphers.encrypt(secret_nonce, file["data"].encode("utf-8"), None))
     except Exception as e:
         print(f"Error in create_info_file function.\n\nError Code - {e}")
 

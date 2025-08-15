@@ -21,9 +21,9 @@ from utils.func_description import(
 import json
 from ext.user_content_tools import save_conversation, save_group_conversation
 from utils.utils import is_ddos, send_to_channel, safe_send, is_code_block_open
-from utils.config import channel_id, db
-from utils.db import gemini_api_keys
-
+from utils.config import channel_id, db, g_ciphers, secret_nonce
+from utils.db import gemini_api_keys, all_user_info
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
 
@@ -90,12 +90,28 @@ def search_online(user_message, api, settings):
                 response_modalities=["TEXT"]
             )
         
-        client = genai.Client(api_key=api)
-        response = client.models.generate_content(
-            model = settings[2],
-            contents = [user_message],
-            config = config,
-        )
+        def sync_block():
+            temp_api = gemini_api_keys.copy()
+            for _ in range(len(gemini_api_keys)):
+                try:
+                    api_key = random.choice(temp_api)
+                    client = genai.Client(api_key=api_key)
+                    response = client.models.generate_content(
+                    model = settings[2],
+                    contents = [user_message],
+                    config = config,
+                    )
+                    if response:
+                        return response
+                    else:
+                        raise Exception
+                except Exception as e:
+                    print(f"Error in searching online with API key {gemini_api_keys.index(api_key)}. Retrying with next key.\n\nError Code - {e}")
+                    temp_api.remove(api_key)
+                    if not temp_api:
+                        return None
+                    
+        response = sync_block()
         return response
     except Exception as e:
         print(f"Error getting gemini response in search_online function.\n\n Error Code - {e}")
@@ -137,6 +153,7 @@ async def execute_code(update: Update, content: ContextTypes.DEFAULT_TYPE, user_
                         raise Exception
                 except:
                     temp_api.remove(api_key)
+
         response = await asyncio.to_thread(sync_block)
         if tmsg:
             await content.bot.delete_message(chat_id=update.effective_user.id, message_id=tmsg.message_id)
@@ -238,8 +255,8 @@ async def get_group_data(update:Update, content:ContextTypes.DEFAULT_TYPE, user_
         tools.append(types.Tool(url_context=types.UrlContext))
         if func_name == "get_group_data":
             data = "****TRAINING DATA****\n\n"
-            with open("data/info/group_training_data.txt") as f:
-                data += f.read()
+            with open("data/info/group_training_data.shadow", "rb") as f:
+                data += g_ciphers.decrypt(secret_nonce, f.read(), None).decode("utf-8")
             data += "\n\n****END OF TRAINIG DATA****\n\n"
             data += user_message
         elif func_name == "get_ct_data":
@@ -274,12 +291,29 @@ async def get_group_data(update:Update, content:ContextTypes.DEFAULT_TYPE, user_
                 response_modalities=["TEXT"],
             )
         
-        client = genai.Client(api_key=api)
-        response = client.models.generate_content(
-            model = settings[2],
-            contents = [data],
-            config = config,
-        )
+
+        def sync_block():
+            temp_api = gemini_api_keys.copy()
+            for _ in range(len(gemini_api_keys)):
+                try:
+                    api_key = random.choice(temp_api)
+                    client = genai.Client(api_key=api_key)
+                    response = client.models.generate_content(
+                    model = settings[2],
+                    contents = [data],
+                    config = config,
+                    )
+                    if response:
+                        return response
+                    else:
+                        raise Exception
+                except Exception as e:
+                    print(f"Error: {e}")
+                    temp_api.remove(api_key)
+                    if not temp_api:
+                        return None
+
+        response = await asyncio.to_thread(sync_block)
         return response
     except Exception as e:
         print(f"Error in get_group_data function.\n\nError Code - {e}")
@@ -292,6 +326,7 @@ async def create_image(update:Update, content:ContextTypes.DEFAULT_TYPE, api, pr
         message = update.message or update.edited_message
         user_id = update.effective_user.id
         msg = await message.reply_text("Image creation is in process, This may take a while please wait patiently.")
+        
         def sync_block(prompt,api):
             temp_api = gemini_api_keys.copy()
             for _ in range(len(gemini_api_keys)):
@@ -305,17 +340,17 @@ async def create_image(update:Update, content:ContextTypes.DEFAULT_TYPE, api, pr
                             response_modalities=["TEXT", "IMAGE"],
                         )
                     )
-                    if response:
+                    if response and (response.candidates[0].content.parts[0].text is not None or response.candidates[0].content.parts[0].inline_data is not None):
                         return response
                     else:
                         raise Exception
                 except:
                     temp_api.remove(api_key)
+
         response = await asyncio.to_thread(sync_block, prompt, api)
-        await content.bot.delete_message(chat_id=user_id, message_id=msg.message_id)
         for part in response.candidates[0].content.parts:
             if hasattr(part, "text") and part.text is not None:
-                await update.message.reply_text(part.text)
+                await msg.edit_text(part.text)
                 await asyncio.to_thread(save_conversation, None, part.text, update.effective_user.id)
             elif hasattr(part, "inline_data") and part.inline_data is not None:
                 image = Image.open(BytesIO(part.inline_data.data))
@@ -332,9 +367,16 @@ async def add_memory_content(update:Update, content:ContextTypes.DEFAULT_TYPE, d
     try:
         await update.message.reply_text("📝🧠 Memory Updated")
         user_id = update.effective_user.id
-        if os.path.exists(f"data/memory/memory-{user_id}.txt"):
-            with open(f"data/memory/memory-{user_id}.txt", "a+") as file:
-                file.write("\n" + data + "\n")
+        key = bytes.fromhex(all_user_info[user_id][6])
+        nonce = bytes.fromhex(all_user_info[user_id][7])
+        ciphers = AESGCM(key)
+        if os.path.exists(f"data/memory/memory-{user_id}.shadow"):
+            with open(f"data/memory/memory-{user_id}.shadow", "rb") as file:
+                pre_mem = ciphers.decrypt(nonce, file.read(), None).decode("utf-8")
+            mem = pre_mem + data
+            mem = ciphers.encrypt(nonce, mem.encode("utf-8"), None)
+            with open(f"data/memory/memory-{user_id}.shadow", "wb") as file:
+                file.write(mem)
     except Exception as e:
         print(f"Error in add_memory_content function.\n\nError Code - {e}")
 
@@ -405,7 +447,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
         tools=[]
         tools.append(types.Tool(function_declarations=func_list))
         if settings[2] == "gemini-2.5-pro" or settings[2] == "gemini-2.5-flash":
-            if settings[3] != 0:
+            if settings[3] != 0 and not tmsg:
                 tmsg = await update.message.reply_text("Thinking...")
             config = types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
@@ -421,6 +463,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 tools = tools,
                 response_modalities=["TEXT"]
             )
+
         def sync_block(api):
             client = genai.Client(api_key=api)
             response = client.models.generate_content(
@@ -431,14 +474,16 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
             with open("Main/response.txt", "w") as file:
                 json.dump(response.to_json_dict(), file, indent=2, ensure_ascii=False)
             return response
+        
         response = await asyncio.to_thread(sync_block, api)
         if tmsg:
             await content.bot.delete_message(chat_id=user_id, message_id=tmsg.message_id)
             tmsg = None
+
         if response.prompt_feedback and response.prompt_feedback.block_reason:
             await update.message.reply_text("Prohibited content detected. Conversation history will be deleted.")
-            if os.path.exists(f"data/Conversation/conversation-{user_id}.txt"):
-                with open(f"data/Conversation/conversation-{user_id}.txt", "w") as f:
+            if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
+                with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
                     pass
                 await asyncio.to_thread(db[f"{user_id}"].update_one,
                     {"id" : user_id},
@@ -446,10 +491,13 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 )
             return "false"
         has_function = False
+
+
         for part in response.candidates[0].content.parts:
             if hasattr(part, "function_call") and part.function_call is not None:
                 has_function = True
                 function_call = part.function_call
+
         if has_function:
             if function_call.name == "search_online":
                 for part in response.candidates[0].content.parts:
@@ -461,12 +509,15 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                         if response.text is not None:
                             await send_message(update, content, response, usr_msg, settings)
                         await content.bot.delete_message(chat_id = update.effective_user.id, message_id=msg.message_id)
+            
             elif function_call.name == "get_group_data":
                 response = await get_group_data(update, content, user_message, settings, api, function_call.name)
                 return response
+            
             elif function_call.name == "get_ct_data":
                 response = await get_group_data(update, content, user_message, settings, api, function_call.name)
                 return response
+            
             elif function_call.name == "create_image":
                 for part in response.candidates[0].content.parts:
                     if hasattr(part, "text") and part.text is not None:
@@ -474,12 +525,14 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 await asyncio.to_thread(save_conversation,usr_msg, response.text, user_id)
                 prompt = function_call.args["prompt"]
                 await create_image(update,content, api, prompt)
+            
             elif function_call.name == "get_routine":
                 for part in response.candidates[0].content.parts:
                     if hasattr(part, "text") and part.text is not None:
                         await update.message.reply_text(part.text)
                         await asyncio.to_thread(save_conversation,usr_msg, part.text, user_id)
                 await routine_handler(update, content)
+            
             elif function_call.name == "add_memory_content":
                 data = function_call.args["memory_content"]
                 for part in response.candidates[0].content.parts:
@@ -488,6 +541,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                         await asyncio.to_thread(save_conversation,usr_msg, part.text, user_id)
                 await add_memory_content(update, content, data)
                 return "false"
+            
             elif function_call.name == "information_handler":
                 markup = await information_handler(update, content, function_call.args["info_name"])
                 for part in response.candidates[0].content.parts:
@@ -511,11 +565,13 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                             await update.message.reply_text("Click the button to see your requested data", reply_markup=markup)
                             await asyncio.to_thread(save_conversation, usr_msg, "Click the button to see your requested data", user_id)
                             return 'false'
+            
             elif function_call.name == "fetch_media_content":
                 media_paths = function_call.args["media_paths"]
                 print(f"Media Paths: {media_paths}")
                 await analyze_media(update, content, media_paths, user_message, settings, usr_msg)
                 return 'false'
+            
             elif function_call.name == "run_code":
                 data = ""
                 for part in response.candidates[0].content.parts:
@@ -528,6 +584,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 if data:
                     await send_message(update, content, data, user_message, settings)
                     return 'false'
+            
             elif function_call.name == "create_pdf":
                 if hasattr(response, "text"):
                     if response.text:
@@ -536,14 +593,13 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 path = await create_pdf(update, content, function_call.args, usr_msg, pre_msg)
                 if os.path.exists(path):
                     os.remove(path)
+            
             elif function_call.name == "execute_code":
                 await asyncio.create_task(execute_code(update, content, user_message, settings, usr_msg))
             return 'false'
-        if not response:
-            if tmsg:
-                await content.bot.delete_message(chat_id=user_id, message_id=tmsg.message_id)
-                tmsg = None
+        
         return response
+    
     except Exception as e:
         if tmsg:
             await content.bot.delete_message(chat_id=user_id, message_id=tmsg.message_id)

@@ -3,16 +3,19 @@ from cryptography.fernet import Fernet
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 from collections import defaultdict
-
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 decryption_key = os.getenv("decryption_key")
 mongo_pass = os.getenv("MDB_pass_shadow")
-
+secret_key = os.getenv("secret_key")
+secret_nonce = bytes.fromhex(os.getenv("secret_nonce"))
 
 
 fernet = Fernet(decryption_key)
 
 channel_id = -1002575042671
+
+g_ciphers = AESGCM(bytes.fromhex(secret_key))
 
 mongo_url = f"mongodb+srv://Shadow:{mongo_pass}@cluster0.zozzwwv.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 FIREBASE_URL = 'https://last-197cd-default-rtdb.firebaseio.com/routines.json'
