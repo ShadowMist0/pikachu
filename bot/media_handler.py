@@ -206,7 +206,12 @@ async def handle_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
         print(f"Error in handle_location function. \n\nError code - {e}")
 
 async def handle_media(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
-    await media_queue.put((update, content))
+    try:
+        if await is_ddos(update, content, update.effective_user.id):
+            return
+        await media_queue.put((update, content))
+    except Exception as e:
+        print(f"Error in handle_media function. \n\nError code - {e}")
 
 
 async def process_media_update(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
@@ -227,8 +232,6 @@ async def process_media_update(update:Update, content:ContextTypes.DEFAULT_TYPE)
             and not message.sticker and not message.document
             and message.chat.type != "private"
         ):
-            return
-        if await is_ddos(update, content, chat_id):
             return
         msg = await update.message.reply_text("Downloading...")
         if message.photo:
