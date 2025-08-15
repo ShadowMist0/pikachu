@@ -236,13 +236,25 @@ async def process_media_update(update:Update, content:ContextTypes.DEFAULT_TYPE)
             file = message.photo[-1]
             photo = await message.photo[-1].get_file()
             ext = os.path.splitext(os.path.basename(photo.file_path))[1]
+            caption = message.caption or "If there is any question answer them if there is code find error and suggest improvement if there is no question and code then describe the content."
+            prompt = await create_prompt(update, content, caption, chat_id, 1)
         elif message.voice:
             file = message.voice
             ext = ".ogg"
-        else:
-            file = message.video or message.audio or message.sticker or message.document
+            caption = message.caption or "If there is any question answer them if there is code find error and suggest improvement if there is no question and code then describe the content."
+            prompt = await create_prompt(update, content, caption, chat_id, 1)
+        elif message.document:
+            file = message.document
             file_obj = await file.get_file()
             ext = os.path.splitext(os.path.basename(file_obj.file_path))[1]
+            caption = message.caption or "If there is any question answer them if there is code find error and suggest improvement if there is no question and code then describe the content."
+            prompt = caption
+        else:
+            file = message.video or message.audio or message.sticker
+            file_obj = await file.get_file()
+            ext = os.path.splitext(os.path.basename(file_obj.file_path))[1]
+            caption = message.caption or "If there is any question answer them if there is code find error and suggest improvement if there is no question and code then describe the content."
+            prompt = await create_prompt(update, content, caption, chat_id, 1)
         file_size = file.file_size/(1024*1024)
         if file_size > 20:
             await message.reply_text("Failed to process your request. Telegram bot only  supports file up to 20 MB.")
@@ -250,10 +262,9 @@ async def process_media_update(update:Update, content:ContextTypes.DEFAULT_TYPE)
         if ext not in valid_ext:
             await update.message.reply_text("Unsupported Format...")
             return
-        caption = message.caption or "If there is any question answer them if there is code find error and suggest improvement if there is no question and code then describe the content."
+        
         file_id = file.file_unique_id
         path = f"data/media/{file_id}{ext}"
-        prompt = await create_prompt(update, content, caption, chat_id, 1)
         media_file = await file.get_file()
         await media_file.download_to_drive(path)
         if not os.path.exists(path):
