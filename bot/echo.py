@@ -20,9 +20,8 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
         bot_name_obj = await content.bot.get_my_name()
         bot_name = bot_name_obj.name.lower()
         user_id = update.effective_user.id
+        ddos = await is_ddos(update, content, update.effective_user.id)
         message = update.message or update.edited_message
-        if await is_ddos(update, content, user_id):
-            return
         if user_id not in all_users and message.chat.type == "private":
             keyboard = [
                 [InlineKeyboardButton("Register", callback_data="c_register"), InlineKeyboardButton("Cancel", callback_data="cancel")]
@@ -33,7 +32,7 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
         user_message = (message.text or "...").strip()
         try:
             if (update.message and message.chat.type == "private") or (message.chat.type != "private" and (f"@{bot_name}" in user_message.lower() or f"{bot_name}" in user_message.lower() or "mama" in user_message.lower() or "@" in user_message.lower() or "bot" in user_message.lower() or "pika" in user_message.lower())):
-                if not update.edited_message:
+                if not update.edited_message and not ddos:
                     await message.chat.send_action(action = ChatAction.TYPING)
         except:
             pass
@@ -52,6 +51,8 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             await message.delete()
             return
         else:
+            if ddos:
+                return
             #await user_message_handler(update, content, bot_name)
             await queue.put((update, content, bot_name))
     except Exception as e:

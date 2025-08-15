@@ -32,8 +32,6 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
         if not response:
             await message.reply_text("Failed to precess your request. Try again later.")
             return
-        if await is_ddos(update, content, update.effective_user.id):
-            return
         message_to_send = response.text if hasattr(response, "text") else str(response)
         if len(message_to_send) > 4080:
             message_chunks = [message_to_send[i:i+4080] for i in range(0, len(message_to_send), 4080)]
