@@ -18,6 +18,7 @@ import asyncio, html
 from utils.config import fernet, db, channel_id, g_ciphers, secret_nonce
 from utils.db import load_admin, load_gemini_api, load_all_user, load_gemini_model, gemini_api_keys
 import sqlite3
+import aiosqlite
 from utils.utils import get_settings
 from utils.utils import add_escape_character, send_to_channel
 from telegram.constants import ChatAction
@@ -320,11 +321,11 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
         else:
             try:
-                conn = sqlite3.connect("data/info/user_data.db")
-                cursor = conn.cursor()
-                cursor.execute("SELECT roll FROM users")
+                conn = await aiosqlite.connect("data/info/user_data.db")
+                cursor = await conn.execute("SELECT roll FROM users")
                 roll = int(roll)
-                rows = cursor.fetchall()
+                rows = await cursor.fetchall()
+                await conn.close()
                 all_rolls = tuple(row[0] for row in rows)
             except:
                 msg = await update.message.reply_text("Invalid Roll Number.")
@@ -364,10 +365,10 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
 async def take_user_password(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
         user_password = update.message.text.strip()
-        conn = sqlite3.connect("data/info/user_data.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT password FROM users WHERE roll = ?", (content.user_data.get("roll"),))
-        password = cursor.fetchone()[0]
+        conn = await aiosqlite.connect("data/info/user_data.db")
+        cursor = await conn.execute("SELECT password FROM users WHERE roll = ?", (content.user_data.get("roll"),))
+        password = await cursor.fetchone()[0]
+        await conn.close()
         if user_password == password:
             keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
             markup = InlineKeyboardMarkup(keyboard)
@@ -494,8 +495,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 key = AESGCM.generate_key(bit_length=256)
                 key = key.hex()
                 nonce = os.urandom(12).hex()
-                conn = sqlite3.connect("data/info/user_data.db")
-                cursor = conn.cursor()
+                conn = await aiosqlite.connect("data/info/user_data.db")
                 if is_guest:
                     user_info = [
                         update.effective_user.id,
@@ -518,7 +518,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                         key,
                         nonce
                     ]
-                cursor.execute("""
+                await conn.execute("""
                     INSERT OR IGNORE INTO users(user_id, name, gender, roll, password, api, secret_key, nonce)
                     VALUES(?,?,?,?,?,?,?,?)
                 """,
@@ -537,19 +537,18 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                     db[f"{user_info[0]}"].insert_one,
                     data
                 )
-                conn.commit()
-                conn.close()
-                conn = sqlite3.connect("data/settings/user_settings.db")
-                cursor = conn.cursor()
-                cursor.execute("""
+                await conn.commit()
+                await conn.close()
+                conn = await aiosqlite.connect("data/settings/user_settings.db")
+                await conn.execute("""
                     INSERT OR IGNORE INTO user_settings
                         (id, name, model, thinking_budget, temperature, streaming, persona)
                         VALUES(?,?,?,?,?,?,?)
                 """,
                 (user_info[0], user_info[1], "gemini-2.5-flash", 0, 0.7, 0, persona)
                 )
-                conn.commit()
-                conn.close()
+                await conn.commit()
+                await conn.close()
                 global all_users
                 global all_settings
                 all_users = await asyncio.to_thread(load_all_user)
@@ -623,11 +622,10 @@ async def take_temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
             await update.message.delete()
             return ConversationHandler.END
         else:
-            conn = sqlite3.connect("data/settings/user_settings.db")
-            cursor = conn.cursor()
-            cursor.execute("UPDATE user_settings SET temperature = ? WHERE id = ?", (data, user_id))
-            conn.commit()
-            conn.close()
+            conn = await aiosqlite.connect("data/settings/user_settings.db")
+            await conn.execute("UPDATE user_settings SET temperature = ? WHERE id = ?", (data, user_id))
+            await conn.commit()
+            await conn.close()
             await asyncio.to_thread(
                 db[f"{user_id}"].update_one,
                     {"id" : user_id},
@@ -684,12 +682,11 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
         else:
             settings = await get_settings(update.effective_user.id)
-            conn = sqlite3.connect("data/settings/user_settings.db")
-            cursor = conn.cursor()
+            conn = await aiosqlite.connect("data/settings/user_settings.db")
             if settings[2] != "gemini-2.5-pro":
-                cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
-                conn.commit()
-                conn.close()
+                await conn.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
+                await conn.commit()
+                await conn.close()
                 await asyncio.to_thread(
                     db[f"{user_id}"].update_one,
                         {"id" : user_id},
@@ -705,9 +702,9 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
             else:
                 data = data if data>=128 or data==-1 else 1024
-                cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
-                conn.commit()
-                conn.close()
+                await conn.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
+                await conn.commit()
+                await conn.close()
                 await asyncio.to_thread(
                 db[f"{user_id}"].update_one,
                         {"id" : user_id},
@@ -1103,12 +1100,11 @@ async def verify_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE)
                 return "VL"
             user_location = (location.latitude, location.longitude)
             user_id = update.effective_user.id
-            conn = sqlite3.connect("data/info/user_data.db")
-            cursor = conn.cursor()
-            cursor.execute("SELECT name, roll FROM users WHERE user_id = ?", (user_id,))
-            info = cursor.fetchone()
+            conn = await aiosqlite.connect("data/info/user_data.db")
+            cursor = await conn.execute("SELECT name, roll FROM users WHERE user_id = ?", (user_id,))
+            info = await cursor.fetchone()
             user_roll = info[1]
-            conn.close()
+            await conn.close()
             
 
             #logic to handle the location difference

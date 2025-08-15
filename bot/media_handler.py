@@ -4,6 +4,7 @@ import random
 import sqlite3
 import asyncio
 from collections import defaultdict
+import aiosqlite
 from telegram import Update
 from telegram.ext import ContextTypes
 from utils.utils import is_ddos, get_settings, send_to_channel, load_persona
@@ -143,16 +144,15 @@ async def media_manager(update: Update, content: ContextTypes.DEFAULT_TYPE, path
     try:
         user_id = update.effective_user.id
         timestamp = int(time.time())
-        conn = sqlite3.connect('user_media/user_media.db')
-        c = conn.cursor()
+        conn = await aiosqlite.connect('user_media/user_media.db')
 
         # Limits based on user type
         size_limit = media_size_limit if str(user_id) not in premium_users else premium_media_size_limit
         count_limit = media_count_limit if str(user_id) not in premium_users else premium_media_count_limit
 
         # Fetch user’s current media
-        c.execute('''SELECT * FROM user_media WHERE user_id=? ORDER BY timestamp ASC''', (user_id,))
-        existing_media = c.fetchall()
+        c = await conn.execute('''SELECT * FROM user_media WHERE user_id=? ORDER BY timestamp ASC''', (user_id,))
+        existing_media = await c.fetchall()
 
         # Enforce media count limit
         while len(existing_media) >= count_limit:
@@ -160,11 +160,11 @@ async def media_manager(update: Update, content: ContextTypes.DEFAULT_TYPE, path
             oldest_path = oldest_media[2]
             if os.path.exists(oldest_path):
                 os.remove(oldest_path)
-            c.execute('''DELETE FROM user_media WHERE media_path=?''', (oldest_media[2],))
-            conn.commit()
+            await conn.execute('''DELETE FROM user_media WHERE media_path=?''', (oldest_media[2],))
+            await conn.commit()
             # Refresh list after deletion
-            c.execute('''SELECT * FROM user_media WHERE user_id=? ORDER BY timestamp ASC''', (user_id,))
-            existing_media = c.fetchall()
+            c = await conn.execute('''SELECT * FROM user_media WHERE user_id=? ORDER BY timestamp ASC''', (user_id,))
+            existing_media = await c.fetchall()
 
         # Enforce size limit
         while sum(media[3] for media in existing_media) + size > size_limit:
@@ -174,19 +174,19 @@ async def media_manager(update: Update, content: ContextTypes.DEFAULT_TYPE, path
             oldest_path = oldest_media[2]
             if os.path.exists(oldest_path):
                 os.remove(oldest_path)
-            c.execute('''DELETE FROM user_media WHERE media_path=?''', (oldest_media[2],))
-            conn.commit()
+            await conn.execute('''DELETE FROM user_media WHERE media_path=?''', (oldest_media[2],))
+            await conn.commit()
             # Refresh list after deletion
-            c.execute('''SELECT * FROM user_media WHERE user_id=? ORDER BY timestamp ASC''', (user_id,))
-            existing_media = c.fetchall()
+            c = await conn.execute('''SELECT * FROM user_media WHERE user_id=? ORDER BY timestamp ASC''', (user_id,))
+            existing_media = await c.fetchall()
 
         # Insert new media
-        c.execute('''
+        await conn.execute('''
             INSERT INTO user_media (user_id, timestamp, media_path, media_size)
             VALUES (?, ?, ?, ?)
         ''', (user_id, timestamp, path, size))
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
     except Exception as e:
         print(f"Error in media_manager function: {e}")
 

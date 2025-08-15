@@ -13,6 +13,7 @@ import os
 from utils.db import gemini_model_list, all_admins, all_settings, load_all_user_settings, all_user_info
 from utils.config import db,fernet, g_ciphers, secret_nonce
 import sqlite3
+import aiosqlite
 import asyncio
 from circulation.circulate import circulate_routine, inform_all
 from ext.user_content_tools import see_memory, delete_memory, reset
@@ -58,10 +59,10 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text(f"Streaming let you stream the bot response in real time.\nCurrent setting : {c_s}", reply_markup=markup)
 
         elif query.data == "c_persona":
-            conn = sqlite3.connect("data/info/user_data.db")
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM users WHERE user_id = ?", (query.from_user.id, ))
-            user = cursor.fetchone()
+            conn = await aiosqlite.connect("data/info/user_data.db")
+            cursor = await conn.execute("SELECT * FROM users WHERE user_id = ?", (query.from_user.id, ))
+            user = await cursor.fetchone()
+            await conn.close()
             if user[3] == 0:
                 try:
                     personas.remove("data/persona/Maria.shadow")
@@ -97,13 +98,12 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("Conversation history holds your conversation with the bot.", reply_markup=ch_markup, parse_mode="Markdown")
 
         elif query.data in c_model :
-            conn = sqlite3.connect("data/settings/user_settings.db")
-            cursor = conn.cursor()
+            conn = await aiosqlite.connect("data/settings/user_settings.db")
             model = query.data
             if model != "gemini-2.5-pro":
-                cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model, user_id))
-                conn.commit()
-                conn.close()
+                await conn.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model, user_id))
+                await conn.commit()
+                await conn.close()
                 await asyncio.to_thread(
                 db[f"{user_id}"].update_one,
                         {"id" : user_id},
@@ -114,9 +114,9 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                 all_settings.clear()
                 all_settings.update(new_settings)
             elif model == "gemini-2.5-pro":
-                cursor.execute("UPDATE user_settings SET model = ?, thinking_budget = ? WHERE id = ? AND thinking_budget < 128", (model, 1024, user_id))
-                conn.commit()
-                conn.close()
+                await conn.execute("UPDATE user_settings SET model = ?, thinking_budget = ? WHERE id = ? AND thinking_budget < 128", (model, 1024, user_id))
+                await conn.commit()
+                await conn.close()
                 await asyncio.to_thread(
                 db[f"{user_id}"].update_one,
                         {"id" : user_id},
@@ -125,12 +125,11 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                 await query.edit_message_text(f"AI model is successfully changed to {model}.")
 
         elif query.data in personas:
-            conn = sqlite3.connect("data/settings/user_settings.db")
-            cursor = conn.cursor()
+            conn = await aiosqlite.connect("data/settings/user_settings.db")
             persona = query.data
-            cursor.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona, user_id))
-            conn.commit()
-            conn.close()
+            await conn.execute("UPDATE user_settings SET persona = ? WHERE id = ?", (persona, user_id))
+            await conn.commit()
+            await conn.close()
             await reset(update, content, query)
             await asyncio.to_thread(
                 db[f"{user_id}"].update_one,
@@ -215,10 +214,10 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("From here you can manage the AI model this bot use to provide response.\n\nChoose an option:", reply_markup=markup, parse_mode="Markdown")
 
         elif query.data == "c_show_all_user":
-            conn = sqlite3.connect("data/info/user_data.db")
-            cursor = conn.cursor()
-            cursor.execute("SELECT user_id from users")
-            rows = cursor.fetchall()
+            conn = await aiosqlite.connect("data/info/user_data.db")
+            cursor = await conn.execute("SELECT user_id from users")
+            rows = await cursor.fetchall()
+            await conn.close()
             users = tuple(row[0] for row in rows)
             user_data = "All registered users are listed below:\n"
             for i, user in enumerate(users):

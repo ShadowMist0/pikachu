@@ -10,6 +10,7 @@ import pytz
 from google.genai import types
 import os
 import sqlite3
+import aiosqlite
 from datetime import datetime
 from utils.utils import get_settings, load_persona
 import html
@@ -375,19 +376,18 @@ async def reset(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> 
                 await query.edit_message_text("All clear, Now we are starting fresh.")
             else:
                 await query.edit_message_text("It seems you don't have a conversation at all.")
-            conn = sqlite3.connect("user_media/user_media.db")
-            c = conn.cursor()
-            c.execute("select media_path from user_media where user_id = ?", (user_id,))
-            paths = c.fetchall()
+            conn = await aiosqlite.connect("user_media/user_media.db")
+            c = await conn.execute("select media_path from user_media where user_id = ?", (user_id,))
+            paths = await c.fetchall()
             if not paths:
                 return
             for path in paths:
                 path = path[0]
-                c.execute("delete from user_media where media_path = ?", (path,))
+                await conn.execute("delete from user_media where media_path = ?", (path,))
                 if os.path.exists(path):
                     os.remove(path)
-            conn.commit()
-            conn.close()
+            await conn.commit()
+            await conn.close()
         else:
             user_id = update.effective_chat.id
             try:
@@ -406,19 +406,18 @@ async def reset(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> 
                 await update.message.reply_text("All clear, Now we are starting fresh.")
             else:
                 await update.message.reply_text("It seems you don't have a conversation at all.")
-            conn = sqlite3.connect("user_media/user_media.db")
-            c = conn.cursor()
-            c.execute("select media_path from user_media where user_id = ?", (user_id,))
-            paths = c.fetchall()
+            conn = await aiosqlite.connect("user_media/user_media.db")
+            c = await conn.execute("select media_path from user_media where user_id = ?", (user_id,))
+            paths = await c.fetchall()
             if not paths:
                 return
             for path in paths:
                 path = path[0]
-                c.execute("delete from user_media where media_path = ?", (path,))
+                await conn.execute("delete from user_media where media_path = ?", (path,))
                 if os.path.exists(path):
                     os.remove(path)
-            conn.commit()
-            conn.close()
+            await conn.commit()
+            await conn.close()
     except Exception as e:
         if update.callback_query:
             await update.callback_query.message.reply_text(f"Sorry, The operation failed. Here's the error message:\n<pre>{html.escape(str(e))}</pre>", parse_mode="HTML")

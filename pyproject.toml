@@ -37,6 +37,7 @@ dependencies = [
     "flask-login",
     "werkzeug",
     "httpx",
+    "aiosqlite"
 ]
 
 [project.urls]

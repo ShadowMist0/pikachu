@@ -18,7 +18,9 @@ from utils.config import(
     g_ciphers,
     secret_nonce
 )
-import sqlite3, re
+import sqlite3
+import aiosqlite
+import re
 from utils.db import gemini_model_list, all_settings
 
 
@@ -105,10 +107,9 @@ async def get_settings(user_id):
         settings = all_settings[int(user_id)]
         if settings:
             return settings
-        conn = sqlite3.connect("data/settings/user_settings.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM user_settings WHERE id = ?", (user_id,))
-        row = cursor.fetchone()
+        conn = await aiosqlite.connect("data/settings/user_settings.db")
+        cursor = await conn.execute("SELECT * FROM user_settings WHERE id = ?", (user_id,))
+        row = await cursor.fetchone()
         if not row:
             return (999999, "XX", "gemini-2.5-pro", 0, 0.7, 0, "data/persona/pikachu.shadow")
         if row[2] not in gemini_model_list:
@@ -118,17 +119,17 @@ async def get_settings(user_id):
                 {"id" : user_id},
                 {"$set" : {"settings" : row}}
             )
-            cursor.execute("UPDATE user_settings SET model = ? WHERE id = ?", (row[2], user_id))
+            await conn.execute("UPDATE user_settings SET model = ? WHERE id = ?", (row[2], user_id))
             if gemini_model_list[-1] == "gemini-2.5-pro":
                 row[3] = row[3] if row[3] > 128 else 1024
                 await asyncio.to_thread(db[f"{user_id}"].update_one,
                     {"id" : user_id},
                     {"$set" : {"settings" : row}}
                 )
-                cursor.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (row[3], user_id))
+                await conn.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (row[3], user_id))
             row = tuple(row)
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
         return row
     except Exception as e:
         print(f"Error in get_settings fucntion.\n\nError Code - {e}")
