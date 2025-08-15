@@ -128,10 +128,13 @@ async def media_description_generator(update:Update, content:ContextTypes.DEFAUL
                     print(f"Error generating description: {e}")
                     temp_api.remove(api_key)
         response = await asyncio.to_thread(get_description)
-        response = json.loads(response.text)
-        media_type = response.get("media_type", "unknown")
+        try:
+            response = json.loads(response.text)
+            media_type = response.get("media_type", "unknown")
+        except:
+            media_type = "media"
         if not response:
-            return
+            return [file_id, "media", path, os.path.getsize(path)/(1024*1024)]
         return [file_id, media_type, path, os.path.getsize(path)/(1024*1024)]
     except Exception as e:
         print(f"Error getting user id in media_description_generator function.\n\nError Code - {e}")
