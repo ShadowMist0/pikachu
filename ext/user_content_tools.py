@@ -131,17 +131,17 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
         client = genai.Client(api_key=api)
         prompt = (
                 "\n\n Make memory based on the above data."
-                "Make it as short and summarized as possible but without missing important information."
+                "Make it as short and summarized as possible but without missing important information from coversation history and previous memory(if exists)."
                 "Again make it short like instead of using user talked about a image about AI that contains blah blah blah use you talked about AI. "
                 "And cut out unnecessary information like timestamp, media description etc."
                 "And cut out unnecessary info in previous memory and conversation history."
             )
-        response = client.models.generate_content(
+        response = await asyncio.to_thread(client.models.generate_content,
             model = "gemini-2.5-flash",
             contents = data + prompt,
             config = types.GenerateContentConfig(
-                thinking_config = types.ThinkingConfig(thinking_budget=1024),
-                temperature = 0.7,
+                thinking_config = types.ThinkingConfig(thinking_budget=128),
+                temperature = 0.3,
                 system_instruction =  instruction,
             ),
         )

@@ -93,7 +93,7 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
 
 async def media_description_generator(update:Update, content:ContextTypes.DEFAULT_TYPE, path, file_id):
     try:
-        await media_manager(update, content, path, os.path.getsize(path)/(1024*1024))
+        asyncio.create_task(media_manager(update, content, path, os.path.getsize(path)/(1024*1024)))
         def get_description():
             temp_api = gemini_api_keys.copy()
             for _ in range(len(gemini_api_keys)):

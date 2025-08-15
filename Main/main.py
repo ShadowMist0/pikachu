@@ -95,8 +95,8 @@ async def main():
         #     port = int(os.environ.get("PORT", 10000)),
         #     webhook_url = url
         #)
-        await run_workers(60)
-        await run_media_workers(10)
+        await run_workers(12)
+        await run_media_workers(6)
         await app.initialize()
         await app.start()
         await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)

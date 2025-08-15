@@ -1,9 +1,6 @@
 from fileinput import filename
-from urllib import response
 from google import genai
 from google.genai import types
-from pkg_resources import run_main
-from utils.db import gemini_model_list
 from utils.utils import load_persona
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -11,7 +8,6 @@ import asyncio
 from PIL import Image
 from io import BytesIO
 import os, time
-import sqlite3
 from fpdf import FPDF
 import random
 from bot.info_handler import get_ct_data, routine_handler, information_handler
@@ -19,10 +15,26 @@ from utils.func_description import(
     func_list
 )
 import json
-from ext.user_content_tools import save_conversation, save_group_conversation
-from utils.utils import is_ddos, send_to_channel, safe_send, is_code_block_open
-from utils.config import channel_id, db, g_ciphers, secret_nonce
-from utils.db import gemini_api_keys, all_user_info
+from ext.user_content_tools import(
+    save_conversation,
+    save_group_conversation
+)
+from utils.utils import(
+    is_ddos,
+    send_to_channel,
+    safe_send,
+    is_code_block_open
+)
+from utils.config import(
+    channel_id,
+    db,
+    g_ciphers,
+    secret_nonce
+)
+from utils.db import(
+    gemini_api_keys,
+    all_user_info
+)
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from ext.user_content_tools import reset
 
@@ -38,7 +50,7 @@ def hex_to_rgb(hex_color):
 
 
 #function for editing and sending message
-async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, response, user_message, settings) -> None:
+async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, response, user_message, settings) -> None:    
     try:
         message = update.message or update.edited_message
         if not response:
