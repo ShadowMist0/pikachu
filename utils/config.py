@@ -23,11 +23,11 @@ base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 
 # Configurable rate limits
-short_term_limit = 3        # seconds
+short_term_limit = 4       # seconds
 short_term_max_request = 5  # max 5 requests in 5 sec
 
 long_term_limit = 60        # seconds
-long_term_max_request = 20  # max 20 requests in 60 sec
+long_term_max_request = 30  # max 20 requests in 60 sec
 
 global_time_limit = 5
 global_max_request = 100
