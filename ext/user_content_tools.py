@@ -1,3 +1,4 @@
+import conv
 from utils.config import db, fernet, channel_id, g_ciphers, secret_nonce
 from utils.db import gemini_api_keys, all_user_info
 from telegram import Update
@@ -27,7 +28,7 @@ def delete_n_convo(user_id, n):
         ciphers = AESGCM(key)
         conn = sqlite3.connect("user_media/user_media.db")
         c = conn.cursor()
-        c.execute("select media_path from user_media")
+        c.execute("select media_path from user_media where user_id = ?", (user_id,))
         paths = c.fetchall()
         if user_id < 0:
             with open(f"data/Conversation/conversation-group.txt", "r+", encoding="utf-8") as f:
@@ -118,13 +119,7 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
                 try:
                     data += "\n\n***CONVERSATION HISTORY***\n\n" + ciphers.decrypt(nonce, f.read(), None).decode("utf-8") +  "\n\n***END OF CONVERSATION***\n\n"
                 except:
-                    with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
-                        pass
-                    db[f"{user_id}"].update_one(
-                        {"id" : user_id},
-                        {"$set" : {"conversation" : None}}
-                    )
-                    data += "Nothing to show"
+                    await reset(update, content, None)
         elif user_id < 0:
             group_id = user_id
             with open("data/persona/memory_persona.txt", "rb") as f:
@@ -153,12 +148,7 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
         if response.prompt_feedback and response.prompt_feedback.block_reason:
             await message.reply_text(f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason} Conversation history is erased.")
             if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
-                with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
-                    pass
-                await asyncio.to_thread(db[f"{user_id}"].update_one,
-                    {"id" : user_id},
-                    {"$set" : {"conversation" : None}}
-                )
+                await reset(update, content, None)
             return True
         if response.text is not None:
             if user_id > 0:
@@ -185,12 +175,7 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
         else:
             if (gemini_api_keys.index(api) > len(gemini_api_keys)-3):
                 if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
-                    with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
-                        pass
-                    await asyncio.to_thread(db[f"{user_id}"].update_one,
-                        {"id" : user_id},
-                        {"$set" : {"conversation" : None}}
-                    )
+                    await reset(update, content, None)
                     return True
             else:
                 return False
@@ -233,18 +218,15 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 conv_data = f.read()
                 if conv_data:
                     try:
-                        data += "***CONVERSATION HISTORY***\n\n" + ciphers.decrypt(nonce, conv_data, None).decode("utf-8") + f"\n[{now}] {all_user_info[user_id][1]}: " + user_message
+                        data += "\n\n***CONVERSATION HISTORY***\n\n" + ciphers.decrypt(nonce, conv_data, None).decode("utf-8") + f"\n[{now}] {all_user_info[user_id][1]}: " + user_message
                         f.seek(0)
                         if(ciphers.decrypt(nonce, f.read(), None).decode("utf-8").count("You: ")>30):
                             await asyncio.create_task(background_memory_creation(update, content, user_id))
                     except:
                         data += f"\n[{now}] {all_user_info[user_id][1]}: " + user_message
-                        with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
-                            pass
-                        db[f"{user_id}"].update_one(
-                            {"id" : user_id},
-                            {"$set" : {"conversation" : None}}
-                        )
+                        await reset(update, content, None)
+                else:
+                    data += f"\n\n***CONVERSATION HISTORY***\n\n[{now}] {all_user_info[user_id][1]}: " + user_message
             if data:
                 with open("data.txt", "w") as file:
                     file.write(data)
@@ -263,7 +245,7 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
             with open(f"data/memory/memory-group.txt", "r", encoding="utf-8") as f:
                 data += "***MEMORY***\n" + f.read() + "\n***END OF MEMORY***\n\n\n"
             with open(f"data/Conversation/conversation-group.txt", "r", encoding="utf-8") as f:
-                data += "***CONVERSATION HISTORY***\n\n" + f.read() + "\nUser: " + user_message
+                data += "\n\n***CONVERSATION HISTORY***\n\n" + f.read() + "\nUser: " + user_message
                 f.seek(0)
                 if(f.read().count("You: ")>200):
                     asyncio.create_task(background_memory_creation(update, content, user_id))
@@ -290,7 +272,11 @@ def save_conversation(user_message : str , gemini_response:str , user_id:int) ->
         name = cursor.fetchone()[0]
         
         with open(f"data/Conversation/conversation-{user_id}.shadow", "rb") as f:
-            data = ciphers.decrypt(nonce,f.read(), None).decode("utf-8")
+            conv_data = f.read()
+            if conv_data:
+                data = ciphers.decrypt(nonce,conv_data, None).decode("utf-8")
+            else:
+                data = ""
         with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
             if user_message == None:
                 data += gemini_response + "\n"
@@ -305,6 +291,12 @@ def save_conversation(user_message : str , gemini_response:str , user_id:int) ->
             {"$set" : {"conversation" : data}}
         )
     except Exception as e:
+        with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
+            pass
+        db[f"{user_id}"].update_one(
+            {"id" : user_id},
+            {"$set" : {"conversation" : None}}
+        )
         print(f"Error in saving conversation. \n\n Error Code - {e}")
 
 
@@ -365,38 +357,73 @@ async def delete_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, qu
 #function for the resetting the conversation history
 async def reset(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> None:
     try:
-        user_id = update.callback_query.from_user.id
-        try:
-            if update.message.chat.type != "private":
-                await update.message.reply_text("This function is not available in group. I don't save conversation of group.")
-                return
-        except:
-            pass
-        if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
-            with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
+        if query:
+            user_id = update.callback_query.from_user.id
+            try:
+                if update.message.chat.type != "private":
+                    await update.message.reply_text("This function is not available in group. I don't save conversation of group.")
+                    return
+            except:
                 pass
-            await asyncio.to_thread(db[f"{user_id}"].update_one,
-                {"id" : user_id},
-                {"$set" : {"conversation" : None}}
-            )
-            await query.edit_message_text("All clear, Now we are starting fresh.")
+            if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
+                with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
+                    pass
+                await asyncio.to_thread(db[f"{user_id}"].update_one,
+                    {"id" : user_id},
+                    {"$set" : {"conversation" : None}}
+                )
+                await query.edit_message_text("All clear, Now we are starting fresh.")
+            else:
+                await query.edit_message_text("It seems you don't have a conversation at all.")
+            conn = sqlite3.connect("user_media/user_media.db")
+            c = conn.cursor()
+            c.execute("select media_path from user_media where user_id = ?", (user_id,))
+            paths = c.fetchall()
+            if not paths:
+                return
+            for path in paths:
+                path = path[0]
+                c.execute("delete from user_media where media_path = ?", (path,))
+                if os.path.exists(path):
+                    os.remove(path)
+            conn.commit()
+            conn.close()
         else:
-            await query.edit_message_text("It seems you don't have a conversation at all.")
-        conn = sqlite3.connect("user_media/user_media.db")
-        c = conn.cursor()
-        c.execute("select media_path from user_media")
-        paths = c.fetchall()
-        if not paths:
-            return
-        for path in paths:
-            path = path[0]
-            c.execute("delete from user_media where media_path = ?", (path,))
-            if os.path.exists(path):
-                os.remove(path)
-        conn.commit()
-        conn.close()
+            user_id = update.effective_chat.id
+            try:
+                if update.message.chat.type != "private":
+                    await update.message.reply_text("This function is not available in group. I don't save conversation of group.")
+                    return
+            except:
+                pass
+            if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
+                with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
+                    pass
+                await asyncio.to_thread(db[f"{user_id}"].update_one,
+                    {"id" : user_id},
+                    {"$set" : {"conversation" : None}}
+                )
+                await update.message.reply_text("All clear, Now we are starting fresh.")
+            else:
+                await update.message.reply_text("It seems you don't have a conversation at all.")
+            conn = sqlite3.connect("user_media/user_media.db")
+            c = conn.cursor()
+            c.execute("select media_path from user_media where user_id = ?", (user_id,))
+            paths = c.fetchall()
+            if not paths:
+                return
+            for path in paths:
+                path = path[0]
+                c.execute("delete from user_media where media_path = ?", (path,))
+                if os.path.exists(path):
+                    os.remove(path)
+            conn.commit()
+            conn.close()
     except Exception as e:
-        await update.callback_query.message.reply_text(f"Sorry, The operation failed. Here's the error message:\n<pre>{html.escape(str(e))}</pre>", parse_mode="HTML")
+        if update.callback_query:
+            await update.callback_query.message.reply_text(f"Sorry, The operation failed. Here's the error message:\n<pre>{html.escape(str(e))}</pre>", parse_mode="HTML")
+        else:
+            await update.message.reply_text(f"Sorry, The operation failed. Here's the error message:\n<pre>{html.escape(str(e))}</pre>", parse_mode="HTML")
         await send_to_channel(update, content, channel_id, f"Error in reset function \n\nError Code -{e}")
 
 

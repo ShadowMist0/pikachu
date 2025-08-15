@@ -26,7 +26,8 @@ from bot.command_handler import(
 )
 from bot.media_handler import(
     handle_media,
-    handle_location
+    handle_location,
+    run_media_workers
 )
 from conv.conv_tool import(
     api_conv_handler,
@@ -95,6 +96,7 @@ async def main():
         #     webhook_url = url
         #)
         await run_workers(60)
+        await run_media_workers(10)
         await app.initialize()
         await app.start()
         await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)

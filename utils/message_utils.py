@@ -1,4 +1,5 @@
 import asyncio
+from collections import defaultdict
 from utils.config import channel_id
 from telegram import (
     Update,
@@ -55,12 +56,16 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
 
 
 #a code to handle multiple user at the same time
+user_locks = defaultdict(asyncio.Lock)
 queue = asyncio.Queue()
 async def handle_all_messages():
     while True:
         update, content, bot_name = await queue.get()
+        user_id = update.effective_user.id
+        lock = user_locks[user_id]
         try:
-            await user_message_handler(update, content, bot_name)
+            async with lock:
+                await user_message_handler(update, content, bot_name)
         finally:
             queue.task_done()
 

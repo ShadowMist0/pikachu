@@ -24,7 +24,7 @@ from utils.utils import is_ddos, send_to_channel, safe_send, is_code_block_open
 from utils.config import channel_id, db, g_ciphers, secret_nonce
 from utils.db import gemini_api_keys, all_user_info
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
+from ext.user_content_tools import reset
 
 
 
@@ -483,12 +483,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
         if response.prompt_feedback and response.prompt_feedback.block_reason:
             await update.message.reply_text("Prohibited content detected. Conversation history will be deleted.")
             if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
-                with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
-                    pass
-                await asyncio.to_thread(db[f"{user_id}"].update_one,
-                    {"id" : user_id},
-                    {"$set" : {"conversation" : None}}
-                )
+                await reset(update, content, query = None)
             return "false"
         has_function = False
 

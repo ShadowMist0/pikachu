@@ -3,14 +3,15 @@ import json
 import random
 import sqlite3
 import asyncio
+from collections import defaultdict
 from telegram import Update
 from telegram.ext import ContextTypes
 from utils.utils import is_ddos, get_settings, send_to_channel, load_persona
 from telegram.constants import ChatAction
 from google import genai
 from google.genai import types
-from utils.config import channel_id, media_count_limit, media_size_limit, premium_media_count_limit, premium_media_size_limit
-from ext.user_content_tools import create_prompt
+from utils.config import channel_id, media_count_limit, media_size_limit, premium_media_count_limit, premium_media_size_limit, db
+from ext.user_content_tools import create_prompt, reset
 from utils.db import gemini_api_keys, premium_users
 import time
 from utils.utils import(
@@ -20,11 +21,26 @@ from utils.utils import(
     get_settings,
     is_code_block_open
 )
-from ext.user_content_tools import save_conversation
+from ext.user_content_tools import save_conversation, reset
 
 
+media_queue = asyncio.Queue()
+media_user_locks = defaultdict(asyncio.Lock)
 
+async def media_worker():
+    while True:
+        update, content = await media_queue.get()
+        user_id = update.effective_user.id
+        lock = media_user_locks[user_id]
+        try:
+            async with lock:
+                await process_media_update(update, content)
+        finally:
+            media_queue.task_done()
 
+async def run_media_workers(n):
+    for _ in range(n):
+        asyncio.create_task(media_worker())
 
 valid_ext = [
     ".pdf", ".json", ".txt", ".docx", ".py", ".c", ".cpp",
@@ -72,7 +88,6 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
     except Exception as e:
         print(f"Error in send_message function Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in send_message function \n\nError Code -{e}")
-
 
 
 
@@ -183,13 +198,15 @@ async def handle_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
         if update.message.location:
             location = update.message.location
             location = (location.latitude, location.longitude)
-            await update.message.reply_text(f"Your latitude is {location[0]} and longitude is {location[1]}")
+            await update.message.reply_text(f"Your latitude is {{location[0]}} and longitude is {{location[1]}}")
     except Exception as e:
         print(f"Error in handle_location function. \n\nError code - {e}")
 
-
-
 async def handle_media(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
+    await media_queue.put((update, content))
+
+
+async def process_media_update(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
         global gemini_api_keys, valid_ext
         tools = [
@@ -259,18 +276,20 @@ async def handle_media(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None
                             )
                         )
                         if response.prompt_feedback and response.prompt_feedback.block_reason:
-                            return f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason}"
+                            return f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason}. Your conversation history is deleted."
                         response.text
                         return response
                     except Exception as e:
                         temp_api.remove(api_key)
                         if not temp_api:
                             return "Failed to process your request. Please try again later."
-                        print(f"Error getting response for API{gemini_api_keys.index(api_key)}.\n\nError Code - {e}")
+                        print(f"Error getting response for API{{gemini_api_keys.index(api_key)}}.\n\nError Code - {e}")
                 return None
         
         response = await asyncio.to_thread(gemini_analysis_worker)
         if type(response) == str:
+            if "blocked" in response.lower():
+                await reset(update, content, None)
             await message.reply_text(response)
             await content.bot.delete_message(chat_id=chat_id, message_id=msg.message_id)
             return
