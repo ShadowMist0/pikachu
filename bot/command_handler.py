@@ -28,6 +28,10 @@ from utils.config import(
 #a function to restart renew all the bot info
 async def restart(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        user_id = update.effective_user.id
+        if user_id not in all_admins:
+            await update.message.reply_text("Sorry, You are not a admin")
+            return
         await update.message.reply_text("Restarting please wait....")
         await load_all_files()
         await update.message.reply_text("Restart Successful.")

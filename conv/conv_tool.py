@@ -87,7 +87,7 @@ async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> No
         await update.message.chat.send_action(action = ChatAction.TYPING)
         try:
             client = genai.Client(api_key=user_api)
-            response = await asyncio.to_thread(client.models.generate_content,
+            response = await client.aio.models.generate_content(
                 model = "gemini-2.5-flash",
                 contents = ["Checking if the gemini api working or not respond with one word."]
             )
@@ -440,7 +440,7 @@ async def handle_api_conv(update : Update, content : ContextTypes.DEFAULT_TYPE) 
         markup = InlineKeyboardMarkup(keyboard)
         try:
             client = genai.Client(api_key=user_api)
-            response = await asyncio.to_thread(client.models.generate_content,
+            response = await client.aio.models.generate_content(
                 model = gemini_model_list[1],
                 contents = "hi, respond in one word.",
             )
@@ -775,7 +775,7 @@ async def take_model_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
             if data not in gemini_model_list:
                 try:
                     client = genai.Client(api_key=gemini_api_keys[-1])
-                    response = await asyncio.to_thread(client.models.generate_content,
+                    response = await client.aio.models.generate_content(
                     model = data,
                     contents = "hi, respond in one word.",
                     )

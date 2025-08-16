@@ -37,7 +37,13 @@ dependencies = [
     "flask-login",
     "werkzeug",
     "httpx",
-    "aiosqlite"
+    "aiosqlite",
+    "fastapi",
+    "uvicorn",
+    "aiofiles",
+    "jinja2",
+    "python-multipart",
+    "slowapi"
 ]
 
 [project.urls]

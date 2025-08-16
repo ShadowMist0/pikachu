@@ -44,6 +44,20 @@ from ext.user_content_tools import(
     save_conversation,
     reset
 )
+import warnings
+
+
+
+
+
+warnings.filterwarnings("ignore", message=".*non-text parts.*")
+
+
+
+
+
+
+
 
 
 media_queue = asyncio.Queue()

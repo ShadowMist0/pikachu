@@ -3,7 +3,7 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import asyncio
 import warnings
-import threading
+import uvicorn
 from telegram.request import HTTPXRequest
 from telegram._utils.warnings import PTBUserWarning
 from telegram import Update
@@ -14,7 +14,7 @@ from telegram.ext import(
     filters,
     CallbackQueryHandler,
 )
-from routes.web_panel import run_web
+from routes.web_panel_fastapi import app as web_app
 from utils.db import (
     TOKEN,
     populate_db_caches,
@@ -47,6 +47,7 @@ from conv.conv_tool import(
 )
 from bot.callback import button_handler
 from bot.echo import echo
+from fastapi import Request, Response
 
 
 
@@ -56,34 +57,45 @@ warnings.filterwarnings("ignore",category=PTBUserWarning)
 tg_request = HTTPXRequest(connection_pool_size=50, pool_timeout=30)
 
 
+# Setting this to your publicly accessible URL
 
+#WEBHOOK_URL = "https://a2e842e7a8a1.ngrok-free.app"            #local testing
+WEBHOOK_URL = "https://pikachu-zhx7.onrender.com"               #original render url
 
 
 
 
 async def main():
     try:
-        threading.Thread(target=run_web).start()
-        app = ApplicationBuilder().token(TOKEN).request(tg_request).concurrent_updates(True).build()
+        bot_app = ApplicationBuilder().token(TOKEN).request(tg_request).concurrent_updates(True).build()
         await load_all_files()
         populate_db_caches()
 
-        app.add_handler(register_conv)
-        app.add_handler(api_conv_handler)
-        app.add_handler(thinking_conv)
-        app.add_handler(temperature_conv)
-        app.add_handler(manage_admin_conv)
-        app.add_handler(take_attendance_conv)
-        app.add_handler(manage_ai_model_conv)
-        app.add_handler(circulate_message_conv)
-        app.add_handler(verify_attendance_conv)
-        app.add_handler(CommandHandler("help", help))
-        app.add_handler(CommandHandler("start",start))
-        app.add_handler(CommandHandler("restart",restart))
-        app.add_handler(CallbackQueryHandler(button_handler))
-        app.add_handler(CommandHandler("admin", admin_handler))
-        app.add_handler(MessageHandler(filters.LOCATION, handle_location))
-        app.add_handler(MessageHandler(
+        # Add webhook handler to the FastAPI app
+        @web_app.post(f"/{TOKEN}")
+        async def telegram_webhook(request: Request):
+            """Handle incoming telegram updates"""
+            update_data = await request.json()
+            update = Update.de_json(update_data, bot_app.bot)
+            await bot_app.process_update(update)
+            return Response(status_code=200)
+
+        bot_app.add_handler(register_conv)
+        bot_app.add_handler(api_conv_handler)
+        bot_app.add_handler(thinking_conv)
+        bot_app.add_handler(temperature_conv)
+        bot_app.add_handler(manage_admin_conv)
+        bot_app.add_handler(take_attendance_conv)
+        bot_app.add_handler(manage_ai_model_conv)
+        bot_app.add_handler(circulate_message_conv)
+        bot_app.add_handler(verify_attendance_conv)
+        bot_app.add_handler(CommandHandler("help", help))
+        bot_app.add_handler(CommandHandler("start",start))
+        bot_app.add_handler(CommandHandler("restart",restart))
+        bot_app.add_handler(CallbackQueryHandler(button_handler))
+        bot_app.add_handler(CommandHandler("admin", admin_handler))
+        bot_app.add_handler(MessageHandler(filters.LOCATION, handle_location))
+        bot_app.add_handler(MessageHandler(
             (filters.PHOTO |
             filters.Document.ALL | 
             filters.AUDIO |
@@ -92,21 +104,40 @@ async def main():
             filters.Sticker.ALL) &
             ~filters.ChatType.CHANNEL, handle_media
         ))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.ChatType.CHANNEL, echo))
-        # with open("data/info/webhook_url.shadow", "rb") as file:
-        #     url = fernet.decrypt(file.read().strip()).decode("utf-8")
-        # app.run_webhook(
-        #     listen = "0.0.0.0",
-        #     port = int(os.environ.get("PORT", 10000)),
-        #     webhook_url = url
-        #)
+        bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.ChatType.CHANNEL, echo))
+        
+        # Setup Uvicorn server to run our FastAPI app
+        config = uvicorn.Config(web_app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), log_level="info")
+        server = uvicorn.Server(config)
+
         await run_workers(12)
         await run_media_workers(6)
-        await app.initialize()
-        await app.start()
-        await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-        await asyncio.Event().wait()
-        #app.run_polling(allowed_updates=Update.ALL_TYPES)
+        
+        # --- WEBHOOK MODE (Currently Active) ---
+        # This runs the bot with webhooks.
+        async with bot_app:
+            await bot_app.start()
+            # Set webhook
+            await bot_app.bot.set_webhook(
+                url=f"{WEBHOOK_URL}/{TOKEN}",
+                allowed_updates=Update.ALL_TYPES
+            )
+            # Run the web server
+            await server.serve()
+            # On shutdown, stop the bot and delete the webhook
+            await bot_app.bot.delete_webhook()
+            await bot_app.stop()
+
+        # --- POLLING MODE (Currently Inactive) ---
+
+        # await bot_app.initialize()
+        # await bot_app.start()
+        # # This will run the bot and the web server concurrently
+        # await asyncio.gather(
+        #     bot_app.updater.start_polling(allowed_updates=Update.ALL_TYPES),
+        #     server.serve()
+        # )
+
     except Exception as e:
         print(f"Error in main function. Error Code - {e}")
 

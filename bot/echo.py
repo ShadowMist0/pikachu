@@ -53,14 +53,12 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             return
         elif user_message == "⚙️Settings" and message.chat.type == "private":
             await handle_settings(update, content)
-            await message.delete()
             return
         elif user_message == "Schedule" and message.chat.type == "private":
             await handle_ct(update, content)
             return
         elif user_message == "🔗Resources" and message.chat.type == "private":
             await resources_handler(update, content)
-            await message.delete()
             return
         else:
             if ddos:

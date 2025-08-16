@@ -32,7 +32,6 @@ from flask import request
 
 
 
-
 #A function to delete n times convo from conversation history
 def delete_n_convo(user_id, n):
     try:
@@ -241,8 +240,6 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 else:
                     data += f"\n\n***CONVERSATION HISTORY***\n\n[{now}] {all_user_info[user_id][1]}: " + user_message
             if data:
-                with open("data.txt", "w") as file:
-                    file.write(data)
                 return data
             else:
                 return "Hi"
