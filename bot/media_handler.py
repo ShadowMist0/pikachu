@@ -92,9 +92,10 @@ valid_ext = [
 #a function to save media conversation history with media description
 async def save_media_conversation(update:Update, content:ContextTypes.DEFAULT_TYPE, prompt, response, user_id, path, file_id, file_type):
     try:
-        description = await media_description_generator(update,content, path, file_id)
-        if description:
-            await save_conversation(f"<{file_type}>Type: {description[1]}, Path: {description[2]}, Size: {description[3]} MB</{file_type}>\n" + prompt + "\n", response.text, user_id)
+        size = os.path.getsize(path)/(1024*1024)
+        await media_manager(update, content, path, os.path.getsize(path)/(1024*1024))
+        if file_type:
+            await save_conversation(f"<{file_type}>Path: {path}, Size: {size} MB</{file_type}>\n" + prompt + "\n", response.text, user_id)
         else:
             await save_conversation(f"<{file_type}>"+prompt, response.text, user_id)
     except Exception as e:
@@ -128,54 +129,6 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
         await send_to_channel(update, content, channel_id, f"Error in send_message function \n\nError Code -{e}")
 
 
-
-
-
-async def media_description_generator(update:Update, content:ContextTypes.DEFAULT_TYPE, path, file_id):
-    try:
-        asyncio.create_task(media_manager(update, content, path, os.path.getsize(path)/(1024*1024)))
-        def get_description():
-            temp_api = gemini_api_keys.copy()
-            for _ in range(len(gemini_api_keys)):
-                api_key = random.choice(temp_api)
-                if not api_key:
-                    return "Failed to process your request. Please try again later."
-                try:
-                    client = genai.Client(api_key=api_key)
-                    file = client.files.upload(file=path)
-                    response = client.models.generate_content(
-                        model="gemini-2.5-flash",
-                        contents=[file, "Generate up to 10 tags about and one line explaining its content. Keep it short but precise so that it can easily be found."],
-                        config=types.GenerateContentConfig(
-                            response_mime_type="application/json",
-                            response_schema={
-                                "type" : "object",
-                                "properties" : {
-                                    "media_type" : {
-                                        "type" : "string",
-                                        "description" : "The type of media e.g. image, screenshot, video, python code etc."
-                                    }
-                                }
-                            },
-                        )
-                    )
-                    if response.prompt_feedback and response.prompt_feedback.block_reason:
-                        print(f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason}.")
-                    return response
-                except Exception as e:
-                    print(f"Error generating description: {e}")
-                    temp_api.remove(api_key)
-        response = await asyncio.to_thread(get_description)
-        try:
-            response = json.loads(response.text)
-            media_type = response.get("media_type", "unknown")
-        except:
-            media_type = "media"
-        if not response:
-            return [file_id, "media", path, os.path.getsize(path)/(1024*1024)]
-        return [file_id, media_type, path, os.path.getsize(path)/(1024*1024)]
-    except Exception as e:
-        print(f"Error getting user id in media_description_generator function.\n\nError Code - {e}")
 
 
 
@@ -272,17 +225,20 @@ async def process_media_update(update:Update, content:ContextTypes.DEFAULT_TYPE)
             return
         msg = await update.message.reply_text("Downloading...")
         if message.photo:
+            media_type = "image"
             file = message.photo[-1]
             photo = await message.photo[-1].get_file()
             ext = os.path.splitext(os.path.basename(photo.file_path))[1]
             caption = message.caption or "If there is any question answer them if there is code find error and suggest improvement if there is no question and code then describe the content."
             prompt = await create_prompt(update, content, caption, chat_id, 1)
         elif message.voice:
+            media_type = "voice"
             file = message.voice
             ext = ".ogg"
             caption = message.caption or "If there is any question answer them if there is code find error and suggest improvement if there is no question and code then describe the content."
             prompt = await create_prompt(update, content, caption, chat_id, 1)
         elif message.document:
+            media_type = "document"
             file = message.document
             file_obj = await file.get_file()
             ext = os.path.splitext(os.path.basename(file_obj.file_path))[1]
@@ -290,6 +246,12 @@ async def process_media_update(update:Update, content:ContextTypes.DEFAULT_TYPE)
             prompt = caption
         else:
             file = message.video or message.audio or message.sticker
+            if message.video:
+                media_type = "video"
+            elif message.audio:
+                media_type = "audio"
+            elif message.sticker:
+                media_type = "sticker"
             file_obj = await file.get_file()
             ext = os.path.splitext(os.path.basename(file_obj.file_path))[1]
             caption = message.caption or "If there is any question answer them if there is code find error and suggest improvement if there is no question and code then describe the content."
@@ -311,36 +273,34 @@ async def process_media_update(update:Update, content:ContextTypes.DEFAULT_TYPE)
             return
         await msg.edit_text("🤖 Analyzing content...\nThis may take a while ⏳")
 
-        def gemini_analysis_worker():
-                temp_api = gemini_api_keys.copy()
-                model = "gemini-2.5-pro" if settings[2] == "gemini-2.5-pro" else "gemini-2.5-flash"
-                for _ in range(len(gemini_api_keys)):
-                    api_key = random.choice(temp_api)
-                    try:
-                        client = genai.Client(api_key=api_key)
-                        media = client.files.upload(file=path)
-                        response = client.models.generate_content(
-                            model=model,
-                            contents = [media, prompt],
-                            config=types.GenerateContentConfig(
-                                system_instruction=load_persona(settings),
-                                tools = tools,
-                                thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
-                                temperature = settings[4]
-                            )
-                        )
-                        if response.prompt_feedback and response.prompt_feedback.block_reason:
-                            return f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason}. Your conversation history is deleted."
-                        response.text
-                        return response
-                    except Exception as e:
-                        temp_api.remove(api_key)
-                        if not temp_api:
-                            return "Failed to process your request. Please try again later."
-                        print(f"Error getting response for API{{gemini_api_keys.index(api_key)}}.\n\nError Code - {e}")
-                return None
-        
-        response = await asyncio.to_thread(gemini_analysis_worker)
+
+        temp_api = gemini_api_keys.copy()
+        model = "gemini-2.5-pro" if settings[2] == "gemini-2.5-pro" else "gemini-2.5-flash"
+        for _ in range(len(gemini_api_keys)):
+            api_key = random.choice(temp_api)
+            try:
+                client = genai.Client(api_key=api_key)
+                media = client.files.upload(file=path)
+                response = await client.aio.models.generate_content(
+                    model=model,
+                    contents = [media, prompt],
+                    config=types.GenerateContentConfig(
+                        system_instruction=load_persona(settings),
+                        tools = tools,
+                        thinking_config=types.ThinkingConfig(thinking_budget=settings[3]),
+                        temperature = settings[4]
+                    )
+                )
+                if response.prompt_feedback and response.prompt_feedback.block_reason:
+                    return f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason}. Your conversation history is deleted."
+                response.text
+                break
+            except Exception as e:
+                temp_api.remove(api_key)
+                if not temp_api:
+                    response = "Failed to process your request. Please try again later."
+                print(f"Error getting response for API{{gemini_api_keys.index(api_key)}}.\n\nError Code - {e}")
+
         if type(response) == str:
             if "blocked" in response.lower():
                 await reset(update, content, None)
@@ -348,7 +308,7 @@ async def process_media_update(update:Update, content:ContextTypes.DEFAULT_TYPE)
             return
         if response:
             await send_message(update, content, response, caption, msg)
-            asyncio.create_task(save_media_conversation(update,content, caption, response, chat_id, path, file_id, "Media"))
+            await save_media_conversation(update,content, caption, response, chat_id, path, file_id, media_type)
             return
     except Exception as e:
         print(f"Error in handle_media function.\n\n Error Code - {e}")
