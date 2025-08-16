@@ -527,12 +527,12 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 text = ""
                 for part in response.candidates[0].content.parts:
                     if hasattr(part, "text") and part.text is not None:
-                        await update.message.reply_text(part.text)
-                    if hasattr(part, "function_call") and part.function_call is not None:
                         if tmsg:
-                            await tmsg.edit_text("Searching...")
+                            await tmsg.edit_text(part.text)
                         else:
-                            tmsg = await update.message.reply_text("Searching...")
+                            await update.message.reply_text(part.text)
+                    if hasattr(part, "function_call") and part.function_call is not None:
+                        tmsg = await update.message.reply_text("Searching...")
                         response = await search_online(function_call.args["query"], api, settings)
                         if response.text is not None:
                             await send_message(update, content, response, usr_msg, tmsg)
