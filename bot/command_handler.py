@@ -13,7 +13,8 @@ from utils.file_utils import load_all_files
 from utils.utils import send_to_channel
 from utils.db import(
     load_all_user,
-    all_admins
+    all_admins,
+    all_users
 )
 from utils.config import(
     channel_id,
@@ -58,17 +59,16 @@ async def start(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             if not os.path.exists(path):
                 with open(path, "wb", encoding = "utf-8") as f:
                     pass
-        users = await asyncio.to_thread(load_all_user)
-        if user_id in users:
+        if user_id in all_users:
             await update.message.reply_text("Hi there, I am your personal assistant. If you need any help feel free to ask me.", reply_markup=reply_markup)
             return
-        if user_id not in users and update.message.chat.type == "private":
+        if user_id not in all_users and update.message.chat.type == "private":
             keyboard = [
                 [InlineKeyboardButton("Register", callback_data="c_register"), InlineKeyboardButton("Cancel", callback_data="cancel")]
             ]
             markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text("You are not registerd yet.", reply_markup=markup)
-        elif user_id not in users and update.message.chat.type != "private":
+        elif user_id not in all_users and update.message.chat.type != "private":
             await update.message.reply_text("You are not registered yet. Please register in private chat with the bot first.", reply_markup=reply_markup)
     except Exception as e:
         print(f"Error in start function. \n Error Code - {e}")
