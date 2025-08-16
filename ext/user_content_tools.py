@@ -457,11 +457,11 @@ async def see_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, query
         except:
             pass
         with open(f"data/memory/memory-{user_id}.shadow", "rb") as f:
-            data = ciphers.decrypt(nonce, f.read(), None).decode("utf-8")
-            await query.edit_message_text("Here is my Diary about you:")
-            if data.strip() == "":
-                await update.callback_query.message.reply_text("I haven't written anything about you. You expected something huh\nLOL")
-            else:
+            mem_data = f.read()
+            if mem_data:
+                data = ciphers.decrypt(nonce, f.read(), None).decode("utf-8")
+                await query.edit_message_text("Here is my Diary about you:")
+            
                 if len(data) > 4080:
                     messages = [data[i:i+4080] for i in range(0, len(data), 4080)]
                 else:
@@ -471,6 +471,8 @@ async def see_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, query
                         await update.callback_query.message.reply_text(message, parse_mode="Markdown")
                     except:
                         await update.callback_query.message.reply_text(message)
+            else:
+                await query.edit_message_text("I haven't written anything about you. You expected something huh\nLOL")
                 
     except Exception as e:
         print(f"Error in see_memory function.\n\nError Code - {e}")
