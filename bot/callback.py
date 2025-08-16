@@ -131,7 +131,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                         {"$set" : {"settings.2":model}}
                 )
                 await query.edit_message_text(f"AI model is successfully changed to {model}.")
-                new_settings = load_all_user_settings()
+                new_settings = await load_all_user_settings()
                 all_settings.clear()
                 all_settings.update(new_settings)
             elif model == "gemini-2.5-pro":
@@ -159,7 +159,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             )
             personas = sorted(glob("data/persona/*shadow"))
             await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(persona))[0]}.")
-            new_settings = load_all_user_settings()
+            new_settings = await load_all_user_settings()
             all_settings.clear()
             all_settings.update(new_settings)
 
