@@ -1,8 +1,20 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import(
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup
+)
 from telegram.ext import ContextTypes
-from utils.utils import is_ddos,send_to_channel
+from utils.utils import(
+    is_ddos,
+    send_to_channel
+)
 from telegram.constants import ChatAction
-from bot.info_handler import routine_handler, handle_ct, resources_handler, handle_settings
+from bot.info_handler import(
+    routine_handler,
+    handle_ct,
+    resources_handler,
+    handle_settings
+)
 from utils.db import all_users
 from utils.config import channel_id
 from utils.message_utils import queue

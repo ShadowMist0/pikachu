@@ -7,13 +7,31 @@ from collections import defaultdict
 import aiosqlite
 from telegram import Update
 from telegram.ext import ContextTypes
-from utils.utils import is_ddos, get_settings, send_to_channel, load_persona
+from utils.utils import(
+    is_ddos,
+    get_settings,
+    send_to_channel,
+    load_persona
+)
 from telegram.constants import ChatAction
 from google import genai
 from google.genai import types
-from utils.config import channel_id, media_count_limit, media_size_limit, premium_media_count_limit, premium_media_size_limit, db
-from ext.user_content_tools import create_prompt, reset
-from utils.db import gemini_api_keys, premium_users
+from utils.config import(
+    channel_id,
+    media_count_limit,
+    media_size_limit,
+    premium_media_count_limit,
+    premium_media_size_limit,
+    db
+)
+from ext.user_content_tools import(
+    create_prompt,
+    reset
+)
+from utils.db import(
+    gemini_api_keys,
+    premium_users
+)
 import time
 from utils.utils import(
     is_ddos,
@@ -22,7 +40,10 @@ from utils.utils import(
     get_settings,
     is_code_block_open
 )
-from ext.user_content_tools import save_conversation, reset
+from ext.user_content_tools import(
+    save_conversation,
+    reset
+)
 
 
 media_queue = asyncio.Queue()
@@ -68,8 +89,9 @@ async def save_media_conversation(update:Update, content:ContextTypes.DEFAULT_TY
 
 
 #function for editing and sending message
-async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, response, user_message, settings) -> None:
+async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, response, user_message, msg_obj) -> None:
     try:
+        count = 0
         message = update.message or update.edited_message
         if not response:
             await message.reply_text("Failed to precess your request. Try again later.")
@@ -78,12 +100,16 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
         if len(message_to_send) > 4080:
             message_chunks = [message_to_send[i:i+4080] for i in range(0, len(message_to_send), 4080)]
             for i,msg in enumerate(message_chunks):
+                if count != 0:
+                    msg_obj =  None
                 if is_code_block_open(msg):
                     message_chunks[i] += "```"
                     message_chunks[i+1] = "```\n" + message_chunks[i+1]
-                await safe_send(update, content, message_chunks[i])
+                await safe_send(update, content, message_chunks[i], msg_obj)
+                count += 1
         else:
-            await safe_send(update, content, message_to_send)
+            await safe_send(update, content, message_to_send, msg_obj)
+            count += 1
     except Exception as e:
         print(f"Error in send_message function Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in send_message function \n\nError Code -{e}")
@@ -305,12 +331,10 @@ async def process_media_update(update:Update, content:ContextTypes.DEFAULT_TYPE)
         if type(response) == str:
             if "blocked" in response.lower():
                 await reset(update, content, None)
-            await message.reply_text(response)
-            await content.bot.delete_message(chat_id=chat_id, message_id=msg.message_id)
+            await msg.edit_text(response)
             return
         if response:
-            await send_message(update, content, response, caption, settings)
-            await content.bot.delete_message(chat_id=chat_id, message_id=msg.message_id)
+            await send_message(update, content, response, caption, msg)
             asyncio.create_task(save_media_conversation(update,content, caption, response, chat_id, path, file_id, "Media"))
             return
     except Exception as e:

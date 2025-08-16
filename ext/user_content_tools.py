@@ -1,6 +1,15 @@
 import conv
-from utils.config import db, fernet, channel_id, g_ciphers, secret_nonce
-from utils.db import gemini_api_keys, all_user_info
+from utils.config import (
+    db,
+    fernet,
+    channel_id,
+    g_ciphers,
+    secret_nonce
+)
+from utils.db import (
+    gemini_api_keys,
+    all_user_info
+)
 from telegram import Update
 from telegram.ext import ContextTypes
 from google import genai
@@ -12,7 +21,10 @@ import os
 import sqlite3
 import aiosqlite
 from datetime import datetime
-from utils.utils import get_settings, load_persona
+from utils.utils import (
+    get_settings,
+    load_persona
+)
 import html
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from flask import request

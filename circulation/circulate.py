@@ -1,11 +1,30 @@
-from datetime import datetime, timedelta
-from telegram import Update, ReplyKeyboardMarkup,InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import ContextTypes, ConversationHandler
+from datetime import (
+    datetime,
+    timedelta
+)
+from telegram import(
+    Update,
+    ReplyKeyboardMarkup,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton
+)
+from telegram.ext import (
+    ContextTypes,
+    ConversationHandler
+) 
 import requests
-from utils.config import db, FIREBASE_URL
+from utils.config import (
+    db,
+    FIREBASE_URL
+)
 import asyncio
 from utils.utils import add_escape_character
 from utils.db import all_users
+import httpx
+
+
+
+
 
 
 #function to identify it is lab for 1st 30 or 2nd 30
@@ -32,11 +51,12 @@ def lab_participant():
 
     
 #function to fetch ct data from firebase url
-def get_ct_data():
+async def get_ct_data():
     try:
-        response = requests.get(FIREBASE_URL)
-        response.raise_for_status()
-        return response.json() or {}
+        async with httpx.AsyncClient() as client:
+            response = await client.get(FIREBASE_URL)
+            response.raise_for_status()
+            return response.json() or {}
     except Exception as e:
         print(f"Error in get_ct_data functio. \n\n Error Code -{e}")
         return None
@@ -49,7 +69,7 @@ async def inform_all(query, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
         await query.edit_message_text("please wait while the bot is sending the message to all user.")
         all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
-        ct_data = get_ct_data()
+        ct_data = await get_ct_data()
         if ct_data == None:
             await query.message.reply_text("Couldn't Connect to FIREBASE URL. Try again later.")
             return
@@ -106,7 +126,7 @@ async def inform_all(query, content:ContextTypes.DEFAULT_TYPE) -> None:
             async def send_ct_routine(user):
                 nonlocal failed, failed_list
                 try:
-                    await content.bot.send_message(chat_id=user, text=message, parse_mode="HTML")
+                    await content.bot.send_message(chat_id=user, text="\n".join(message), parse_mode="HTML")
                     return True
                 except:
                     failed += 1
@@ -327,8 +347,7 @@ async def circulate_attendance(update:Update, content:ContextTypes.DEFAULT_TYPE,
                 f"📋 Attendance Circular sent to {sent} users\n"
                 f"⚠️ Failed to send to {failed} users\n"
             )
-        await update.message.reply_text(report, reply_markup=rmarkup)
-        await content.bot.delete_message(chat_id=user_id, message_id=message.message_id)
+        await message.edit_text(report, reply_markup=rmarkup)
         if failed != 0:
             await update.message.reply_text(failed_list)
             msg = await update.message.reply_text(data, reply_markup=markup, parse_mode="Markdown")

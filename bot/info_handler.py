@@ -1,13 +1,27 @@
-from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from datetime import(
+    datetime,
+    timedelta
+)
+from telegram import(
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup
+)
 from telegram.ext import ContextTypes
 from utils.utils import send_to_channel
-import requests
-from utils.config import channel_id, FIREBASE_URL, db
-import asyncio
-import os
-import html
+from utils.config import(
+    channel_id,
+    FIREBASE_URL,
+    db
+)
+import httpx
 from telegram.constants import ChatAction
+
+
+
+
+
+
 
 
 
@@ -60,11 +74,12 @@ async def routine_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) 
 
     
 #function to fetch ct data from firebase url
-def get_ct_data():
+async def get_ct_data():
     try:
-        response = requests.get(FIREBASE_URL)
-        response.raise_for_status()
-        return response.json() or {}
+        async with httpx.AsyncClient() as client:
+            response = await client.get(FIREBASE_URL)
+            response.raise_for_status()
+            return response.json() or {}
     except Exception as e:
         print(f"Error in get_ct_data functio. \n\n Error Code -{e}")
         return None
@@ -74,7 +89,7 @@ def get_ct_data():
 #function to handle ct command
 async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        ct_data = get_ct_data()
+        ct_data = await get_ct_data()
         if ct_data == None:
             await update.message.reply_text("Couldn't Connect to FIREBASE URL. Try again later.")
             return

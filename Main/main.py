@@ -15,7 +15,12 @@ from telegram.ext import(
     CallbackQueryHandler,
 )
 from routes.web_panel import run_web
-from utils.db import TOKEN, populate_db_caches, all_user_info, all_settings
+from utils.db import (
+    TOKEN,
+    populate_db_caches,
+    all_user_info,
+    all_settings
+)
 from utils.file_utils import load_all_files
 from utils.message_utils import run_workers
 from bot.command_handler import(

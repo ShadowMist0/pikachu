@@ -14,7 +14,10 @@ from utils.utils import(
     get_settings,
     is_code_block_open
 )
-from ext.user_content_tools import save_conversation, save_group_conversation
+from ext.user_content_tools import (
+    save_conversation,
+    save_group_conversation
+)
 import random, os
 from ext.user_content_tools import create_prompt
 from ai.gemini_schema import gemini_non_stream
@@ -26,8 +29,9 @@ from utils.db import gemini_api_keys
 
 
 #function for editing and sending message
-async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, response, user_message, settings) -> None:
+async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, response, user_message, msg_obj) -> None:
     try:
+        count = 0
         message = update.message or update.edited_message
         if not response:
             await message.reply_text("Failed to precess your request. Try again later.")
@@ -36,12 +40,16 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
         if len(message_to_send) > 4080:
             message_chunks = [message_to_send[i:i+4080] for i in range(0, len(message_to_send), 4080)]
             for i,msg in enumerate(message_chunks):
+                if count != 0:
+                    msg_obj =  None
                 if is_code_block_open(msg):
                     message_chunks[i] += "```"
                     message_chunks[i+1] = "```\n" + message_chunks[i+1]
-                await safe_send(update, content, message_chunks[i])
+                await safe_send(update, content, message_chunks[i], msg_obj)
+                count += 1
         else:
-            await safe_send(update, content, message_to_send)
+            await safe_send(update, content, message_to_send, msg_obj)
+            count += 1
         if message.chat.type == "private":
             await asyncio.to_thread(save_conversation, user_message, message_to_send, update.effective_user.id)
         elif message.chat.type != "private":
@@ -97,21 +105,21 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                 api = random.choice(temp_api)
                 temp_api.remove(api)
                 response = await gemini_non_stream(update, content, prompt, api,settings, user_message)
-                if response == "false" or response.text:
+                if response == "false" or response[0].text:
                     break
-                if response.prompt_feedback and response.prompt_feedback.block_reason:
-                    await message.reply_text(f"Your response is blocked by gemini because of {response.prompt_feedback.block_reason} Conversation history is erased.")
+                if response[0].prompt_feedback and response[0].prompt_feedback.block_reason:
+                    await message.reply_text(f"Your response is blocked by gemini because of {response[1].prompt_feedback.block_reason} Conversation history is erased.")
                     break
             except Exception as e:
                 print(f"Error getting gemini response for API-{gemini_api_keys.index(api)}. \n Error Code -{e}")
                 continue
-        if response == None:
+        if response[0] == None:
             await update.message.reply_text("Failed to get response from gemini. Your conversation history is erased.")
             if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
                 with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
                     pass
-        elif response != "false":
-            await send_message(update, content, response, user_message, settings)
+        elif response != "false" and response[0] != None:
+            await send_message(update, content, response[0], user_message, response[1])
     except Exception as e:
         await update.message.reply_text(f"Telegram Limit hit, need to wait {e.retry_after} seconds.")
         await send_to_channel(update, content, channel_id, f"Telegram Limit hit for user {user_id}, He need to wait {e.retry_after} seconds.")

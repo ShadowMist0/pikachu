@@ -155,6 +155,7 @@ create_memory_function = {
         "for future reference—such as preferences, important facts, habits, names, birthdays, or any "
         "custom instruction. The assistant should extract the relevant content from the user message "
         "and pass it as a structured parameter for long-term storage."
+        "Make sure to say something before, don't just call the function without any text"
     ),
     "parameters" : {
         "type" : "object",

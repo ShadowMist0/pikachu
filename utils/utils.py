@@ -21,7 +21,10 @@ from utils.config import(
 import sqlite3
 import aiosqlite
 import re
-from utils.db import gemini_model_list, all_settings
+from utils.db import (
+    gemini_model_list,
+    all_settings
+)
 
 
 
@@ -88,17 +91,26 @@ async def send_to_channel(update: Update, content : ContextTypes.DEFAULT_TYPE, c
 
 
 #function to retry in case of TimeOut Error
-async def safe_send(update:Update, content:ContextTypes.DEFAULT_TYPE, message):
+async def safe_send(update:Update, content:ContextTypes.DEFAULT_TYPE, message, msg_obj):
     try:
         try:
-            await update.message.reply_text(add_escape_character(message), parse_mode="MarkdownV2")
+            if msg_obj:
+                await msg_obj.edit_text(message, parse_mode="Markdown")
+            else:
+                await update.message.reply_text(message, parse_mode="Markdown")
         except:
             try:
-                await update.message.reply_text(message, parse_mode="Markdown")
+                if msg_obj:
+                    await msg_obj.edit_text(add_escape_character(message), parse_mode="MarkdownV2")
+                else:
+                    await update.message.reply_text(add_escape_character(message), parse_mode="MarkdownV2")
             except:
-                await update.message.reply_text(message)
+                if msg_obj:
+                    await msg_obj.edit_text(message)
+                else:
+                    await update.message.reply_text(message)
     except Exception as e:
-        print(f"Message sending failed. Error code - {e}")
+        print(f"Message sending failed fron safe_send function. Error code - {e}")
 
 
 #function to get settings

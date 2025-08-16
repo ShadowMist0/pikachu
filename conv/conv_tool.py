@@ -15,12 +15,27 @@ from telegram.ext import(
 )
 import asyncio, html
 
-from utils.config import fernet, db, channel_id, g_ciphers, secret_nonce
-from utils.db import load_admin, load_gemini_api, load_all_user, load_gemini_model, gemini_api_keys
+from utils.config import (
+    fernet,
+    db,
+    channel_id,
+    g_ciphers,
+    secret_nonce
+)
+from utils.db import (
+    load_admin,
+    load_gemini_api,
+    load_all_user,
+    load_gemini_model,
+    gemini_api_keys
+)
 import sqlite3
 import aiosqlite
 from utils.utils import get_settings
-from utils.utils import add_escape_character, send_to_channel
+from utils.utils import (
+    add_escape_character,
+    send_to_channel
+)
 from telegram.constants import ChatAction
 from google import genai
 import os
@@ -30,8 +45,17 @@ from datetime import datetime, timezone
 from io import BytesIO
 from geopy.distance import geodesic
 from google import genai
-from circulation.circulate import circulate_message, circulate_attendance, user_message_id
-from utils.db import all_users, all_admins, all_settings, load_all_user_settings
+from circulation.circulate import (
+    circulate_message,
+    circulate_attendance,
+    user_message_id
+)
+from utils.db import (
+    all_users,
+    all_admins,
+    all_settings,
+    load_all_user_settings
+)
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
@@ -63,7 +87,7 @@ async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> No
         await update.message.chat.send_action(action = ChatAction.TYPING)
         try:
             client = genai.Client(api_key=user_api)
-            response = client.models.generate_content(
+            response = await asyncio.to_thread(client.models.generate_content,
                 model = "gemini-2.5-flash",
                 contents = ["Checking if the gemini api working or not respond with one word."]
             )
@@ -159,7 +183,7 @@ async def manage_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None
             ]
             ma_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text("Please chose an option:", reply_markup=ma_markup)
-            await update.message.delete()
+            
             return "ADMIN_ACTION"
     except Exception as e:
         print(f"Error in manage_admin function.\n\nError Code -{e}")
@@ -275,7 +299,7 @@ async def take_gender(update:Update, content: ContextTypes.DEFAULT_TYPE):
         markup = InlineKeyboardMarkup(keyboard)
         msg = await update.message.reply_text("Select Your Gender: ", reply_markup=markup)
         await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tn_message_id"))
-        await update.message.delete()
+        
         content.user_data["tg_message_id"] = msg.message_id
         return "TR"
     except Exception as e:
@@ -311,13 +335,13 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
             msg = await update.message.reply_text("Invalid format. Try again with your full roll number.")
             content.user_data["tr_message_id"] = msg.message_id
             await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
-            await update.message.delete()
+            
             return ConversationHandler.END
         if not roll.startswith("2403"):
             msg = await update.message.reply_text("This bot is only available for CSE Section C of 24 series.")
             content.user_data["tr_message_id"] = msg.message_id
             await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
-            await update.message.delete()
+            
             return ConversationHandler.END
         else:
             try:
@@ -331,13 +355,13 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 msg = await update.message.reply_text("Invalid Roll Number.")
                 content.user_data["tr_message_id"] = msg.message_id
                 await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
-                await update.message.delete()
+                
                 return ConversationHandler.END
             if roll<2403120 or roll>2403180:
                 msg = await update.message.reply_text("Sorry you are not allowed to use this bot")
                 content.user_data["tr_message_id"] = msg.message_id
                 await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
-                await update.message.delete()
+                
                 return ConversationHandler.END
             else:
                 if roll in all_rolls:
@@ -352,7 +376,7 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 msg = await update.message.reply_text(help_data, reply_markup=markup, parse_mode="MarkdownV2")
                 content.user_data["ra_message_id"] = msg.message_id
                 await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
-                await update.message.delete()
+                
                 return "AH"
     except Exception as e:
         print(f"Error in roll_action function.\n\nError Code -{e}")
@@ -377,7 +401,7 @@ async def take_user_password(update:Update, content:ContextTypes.DEFAULT_TYPE) -
                 msg = await update.message.reply_text(help_data, reply_markup=markup, parse_mode="MarkdownV2")
             content.user_data["ra_message_id"] = msg.message_id
             await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
-            await update.message.delete()
+            
             content.user_data["guest"] = True
             return "AH"
         else:
@@ -416,7 +440,7 @@ async def handle_api_conv(update : Update, content : ContextTypes.DEFAULT_TYPE) 
         markup = InlineKeyboardMarkup(keyboard)
         try:
             client = genai.Client(api_key=user_api)
-            response = client.models.generate_content(
+            response = await asyncio.to_thread(client.models.generate_content,
                 model = gemini_model_list[1],
                 contents = "hi, respond in one word.",
             )
@@ -435,25 +459,25 @@ async def handle_api_conv(update : Update, content : ContextTypes.DEFAULT_TYPE) 
                 gemini_api_keys = await asyncio.to_thread(load_gemini_api)
                 content.user_data["user_api"] = user_api
                 await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ra_message_id"))
-                await update.message.delete()
+                
                 content.user_data["hac_message_id"] = msg.message_id
                 return "TP"
             elif user_api in gemini_api_keys:
                 msg = await update.message.reply_text("The API already exists, you are excused.\n Set your password:", reply_markup=markup)
                 content.user_data["user_api"] = None
                 await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ra_message_id"))
-                await update.message.delete()
+                
                 content.user_data["hac_message_id"] = msg.message_id
                 return "TP"
             else:
                 await update.message.reply_text("Sorry, This is an invalid or Duplicate API, try again with a valid API.")
                 await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ra_message_id"))
-                await update.message.delete()
+                
                 return ConversationHandler.END
         except Exception as e:
             await update.message.reply_text(f"Sorry, This doesn't seems like a valid API. Here's the error message:\n<pre>{html.escape(str(e))}</pre>", parse_mode="HTML")
             await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ra_message_id"))
-            await update.message.delete()
+            
             return ConversationHandler.END
     except Exception as e:
         print(f"Error in handling api. \n Error Code - {e}")
@@ -471,7 +495,7 @@ async def take_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
         content.user_data["password"] = password
         content.user_data["tp_message_id"] = msg.message_id
         await content.bot.delete_message(chat_id = update.effective_user.id, message_id=content.user_data.get("hac_message_id"))
-        await update.message.delete()
+        
         return "CP"
     except Exception as e:
         print(f"Error in take_password function.\n\nError Code -{e}")
@@ -560,7 +584,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 else:
                     await update.message.reply_text("Registration Seccessful. Now press /start", reply_markup=reply_markup)
                 await content.bot.delete_message(chat_id = update.effective_user.id, message_id=content.user_data.get("tp_message_id"))
-                await update.message.delete()
+                
             except Exception as e:
                 print(f"Error adding user.\n\nError code - {e}")
             if content.user_data.get("from_totp") == "true":
@@ -578,7 +602,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text("Passwords are not identical. Try again later.")
             await content.bot.delete_message(chat_id = update.effective_user.id, message_id=content.user_data.get("tp_message_id"))
-            await update.message.delete()
+            
     except Exception as e:
         print(f"Error in confirm_password function.\n\nError Code -{e}")
         await update.message.reply_text(f"Internal Error - {e}.\n\n. Please try again later or contact admin.")
@@ -614,12 +638,12 @@ async def take_temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
         except:
             await update.message.reply_text("Invalid Input. Try Again Later.")
             await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
-            await update.message.delete()
+            
             return ConversationHandler.END
         if data > 2.0 or data < 0.0:
             await update.message.reply_text("Invalid Input. Temperature should be between 0.0 to 1.0")
             await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
-            await update.message.delete()
+            
             return ConversationHandler.END
         else:
             conn = await aiosqlite.connect("data/settings/user_settings.db")
@@ -637,7 +661,7 @@ async def take_temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
             all_settings.update(new_settings)
             await update.message.reply_text(f"Temperature is successfully set to {data}.")
             await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
-            await update.message.delete()
+            
             return ConversationHandler.END
     except Exception as e:
         print(f"Error in take_temperature function.\n\nError Code -{e}")
@@ -673,12 +697,12 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
         except:
             await update.message.reply_text("Invalid Input. Try Again Later.")
             await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
-            await update.message.delete()
+            
             return ConversationHandler.END
         if data > 24576 or data < -1:
             await update.message.reply_text("Invalid Input. Temperature should be between 0 to 24576")
             await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
-            await update.message.delete()
+            
             return ConversationHandler.END
         else:
             settings = await get_settings(update.effective_user.id)
@@ -698,7 +722,7 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 all_settings.clear()
                 all_settings.update(new_settings)
                 await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
-                await update.message.delete()
+                
                 return ConversationHandler.END
             else:
                 data = data if data>=128 or data==-1 else 1024
@@ -712,7 +736,7 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 )
                 await update.message.reply_text(f"Thinking Budget is successfully set to {data}. Gemini 2.5 pro only works with thinking budget greater than 128.")
                 await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
-                await update.message.delete()
+                
                 return ConversationHandler.END
     except Exception as e:
         print(f"Error in take_thinking function.\n\nError Code -{e}")
@@ -751,7 +775,7 @@ async def take_model_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
             if data not in gemini_model_list:
                 try:
                     client = genai.Client(api_key=gemini_api_keys[-1])
-                    response = client.models.generate_content(
+                    response = await asyncio.to_thread(client.models.generate_content,
                     model = data,
                     contents = "hi, respond in one word.",
                     )
@@ -779,7 +803,7 @@ async def take_model_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 gemini_model_list = await asyncio.to_thread(load_gemini_model)
                 await update.message.reply_text(f"The model named {data} is deleted successfully")
         await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("mm_message_id"))
-        await update.message.delete()
+        
         return ConversationHandler.END
     except Exception as e:
         print(f"Error in take_model_name function.\n\nError Code -{e}")
