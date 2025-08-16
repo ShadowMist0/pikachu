@@ -39,6 +39,12 @@ async def home(request: Request):
     return templates.TemplateResponse("404.html", {"request": request}, status_code=200)
 
 
+@app.get("/status", status_code=status.HTTP_200_OK)
+async def status():
+    """A simple health check endpoint for uptime monitoring."""
+    return {"status": "ok"}
+
+
 
 
 #panel for admin
