@@ -70,7 +70,7 @@ async def main():
     try:
         bot_app = ApplicationBuilder().token(TOKEN).request(tg_request).concurrent_updates(True).build()
 
-        #await load_all_files()
+        await load_all_files()
         await populate_db_caches()
 
         # Add webhook handler to the FastAPI app
