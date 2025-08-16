@@ -22,6 +22,7 @@ import random, os
 from ext.user_content_tools import create_prompt
 from ai.gemini_schema import gemini_non_stream
 from utils.db import gemini_api_keys
+import aiofiles
 
 
 
@@ -51,7 +52,7 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
             await safe_send(update, content, message_to_send, msg_obj)
             count += 1
         if message.chat.type == "private":
-            await asyncio.to_thread(save_conversation, user_message, message_to_send, update.effective_user.id)
+            await save_conversation(user_message, message_to_send, update.effective_user.id)
         elif message.chat.type != "private":
             await asyncio.to_thread(save_group_conversation, update, user_message, message_to_send)
     except Exception as e:
@@ -66,10 +67,13 @@ user_locks = defaultdict(asyncio.Lock)
 queue = asyncio.Queue()
 async def handle_all_messages():
     while True:
-        update, content, bot_name = await queue.get()
-        user_id = update.effective_user.id
-        lock = user_locks[user_id]
+        item = await queue.get()
         try:
+            if item is None:
+                break
+            update, content, bot_name = item
+            user_id = update.effective_user.id
+            lock = user_locks[user_id]
             async with lock:
                 await user_message_handler(update, content, bot_name)
         finally:
@@ -77,8 +81,11 @@ async def handle_all_messages():
 
 #a function to add multiple workers to handle response
 async def run_workers(n):
+    tasks = []
     for _ in range(n):
-        asyncio.create_task(handle_all_messages())
+        task = asyncio.create_task(handle_all_messages())
+        tasks.append(task)
+    return tasks
 
 
 
@@ -116,7 +123,7 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
         if response[0] == None:
             await update.message.reply_text("Failed to get response from gemini. Your conversation history is erased.")
             if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
-                with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
+                async with aiofiles.pen(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
                     pass
         elif response != "false" and response[0] != None:
             await send_message(update, content, response[0], user_message, response[1])

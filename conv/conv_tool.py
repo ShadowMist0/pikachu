@@ -27,7 +27,9 @@ from utils.db import (
     load_gemini_api,
     load_all_user,
     load_gemini_model,
-    gemini_api_keys
+    gemini_api_keys,
+    load_all_user_info,
+    all_user_info
 )
 import sqlite3
 import aiosqlite
@@ -104,7 +106,7 @@ async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> No
                     {"$push" : {"gemini_api" : user_api}}
                 )
                 await update.message.reply_text("The API is saved successfully.")
-                gemini_api_keys = await asyncio.to_thread(load_gemini_api)
+                gemini_api_keys = await load_gemini_api()
                 return ConversationHandler.END
             else:
                 await update.message.reply_text("Sorry, This is an invalid or Duplicate API, try again with a valid API.")
@@ -239,7 +241,7 @@ async def add_or_delete_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) 
                     {"$push" : {"admin" : user_id}}
                 )
                 await update.message.reply_text(f"Successfully added {user_id} user_id as Admin.")
-                all_admins = await asyncio.to_thread(load_admin)
+                all_admins = await load_admin()
             else:
                 await update.message.reply_text(f"{user_id} is already an Admin.")
             return ConversationHandler.END
@@ -258,7 +260,7 @@ async def add_or_delete_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) 
                         {"$pull" : {"admin" : str(user_id)}}
                     )
                 await update.message.reply_text(f"Successfully deleted {user_id} from admin.")
-                all_admins = await asyncio.to_thread(load_admin)
+                all_admins = await load_admin()
             else:
                 await update.message.reply_text(f"{user_id} is not an Admin.")
             return ConversationHandler.END
@@ -456,7 +458,7 @@ async def handle_api_conv(update : Update, content : ContextTypes.DEFAULT_TYPE) 
                     {"$push" : {"gemini_api" : user_api}}
                 )
                 msg = await update.message.reply_text("The API is saved successfully.\nSet you password:", reply_markup=markup)
-                gemini_api_keys = await asyncio.to_thread(load_gemini_api)
+                gemini_api_keys = await load_gemini_api()
                 content.user_data["user_api"] = user_api
                 await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("ra_message_id"))
                 
@@ -506,6 +508,7 @@ async def take_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
 #function to confirm user password
 async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
+        global gemini_api_keys,all_user_info
         is_guest = content.user_data.get("guest")
         keyboard = [
             ["Routine", "CT"],
@@ -575,8 +578,9 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 await conn.close()
                 global all_users
                 global all_settings
-                all_users = await asyncio.to_thread(load_all_user)
-                new_settings = load_all_user_settings()
+                all_users = await load_all_user()
+                all_user_info = await load_all_user_info()
+                new_settings = await load_all_user_settings()
                 all_settings.clear()
                 all_settings.update(new_settings)
                 if user_info[3] == 0:
@@ -656,7 +660,7 @@ async def take_temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
                     {"$set" : {"settings.4":data}}
             )
             global all_settings
-            new_settings = load_all_user_settings()
+            new_settings = await load_all_user_settings()
             all_settings.clear()
             all_settings.update(new_settings)
             await update.message.reply_text(f"Temperature is successfully set to {data}.")
@@ -718,7 +722,7 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 )
                 await update.message.reply_text(f"Thinking Budget is successfully set to {data}.")
                 global all_settings
-                new_settings = load_all_user_settings()
+                new_settings = await load_all_user_settings()
                 all_settings.clear()
                 all_settings.update(new_settings)
                 await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
@@ -787,7 +791,7 @@ async def take_model_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text(f"{data} added successfully as a model.")
                 except Exception as e:
                     await update.message.reply_text(f"Invalid Model Name.\n\nError Code - {e}")
-                gemini_model_list = await asyncio.to_thread(load_gemini_model)
+                gemini_model_list = await load_gemini_model()
             elif data in gemini_model_list:
                 await update.message.reply_text("The model name is already registered.")
             else:
@@ -800,7 +804,7 @@ async def take_model_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
                         {"type" : "gemini_model_name"},
                         {"$pull" : {"model_name" : data}}
                     )
-                gemini_model_list = await asyncio.to_thread(load_gemini_model)
+                gemini_model_list = await load_gemini_model()
                 await update.message.reply_text(f"The model named {data} is deleted successfully")
         await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("mm_message_id"))
         

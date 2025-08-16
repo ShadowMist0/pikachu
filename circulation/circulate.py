@@ -67,8 +67,12 @@ async def get_ct_data():
 #function to inform all the student 
 async def inform_all(query, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        keyboard = [
+            ["Routine", "Schedule"],
+            ["⚙️Settings", "🔗Resources"]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
         await query.edit_message_text("please wait while the bot is sending the message to all user.")
-        all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
         ct_data = await get_ct_data()
         if ct_data == None:
             await query.message.reply_text("Couldn't Connect to FIREBASE URL. Try again later.")
@@ -126,7 +130,12 @@ async def inform_all(query, content:ContextTypes.DEFAULT_TYPE) -> None:
             async def send_ct_routine(user):
                 nonlocal failed, failed_list
                 try:
-                    await content.bot.send_message(chat_id=user, text="\n".join(message), parse_mode="HTML")
+                    await content.bot.send_message(
+                        chat_id=user,
+                        text="\n".join(message),
+                        parse_mode="HTML",
+                        reply_markup=reply_markup
+                    )
                     return True
                 except:
                     failed += 1
@@ -160,7 +169,6 @@ async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
  
         message_type = content.user_data.get("circulate_message_query")
-        all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
         message = update.message.text.strip()
         msg = await update.message.reply_text("Please wait while bot is circulating the message.")
         failed = 0
@@ -255,7 +263,6 @@ async def circulate_message(update : Update, content : ContextTypes.DEFAULT_TYPE
 #function to circulate routine among all users
 async def circulate_routine(query, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
         lab = lab_participant()
         if lab[0]:
             rt = "data/routine/rt1.png"
@@ -306,8 +313,6 @@ async def circulate_attendance(update:Update, content:ContextTypes.DEFAULT_TYPE,
         rmarkup = ReplyKeyboardMarkup(rkeyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
         await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("message_id"))
         message = await update.message.reply_text("The attendace circular has been circulated successfully. Please wait the time limit to end..", reply_markup=rmarkup)
-        all_student = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
-        all_students = all_users if len(all_users) > len(all_student) else all_student
         failed = 0
         tasks = []
         user_id = update.effective_user.id
@@ -338,7 +343,7 @@ async def circulate_attendance(update:Update, content:ContextTypes.DEFAULT_TYPE,
                 failed_list += f"{student}\n"
                 return False
             
-        for student in all_students:
+        for student in all_users:
             tasks.append(send_attendance(student))
             
         results = await asyncio.gather(*tasks)

@@ -23,7 +23,8 @@ import aiosqlite
 import re
 from utils.db import (
     gemini_model_list,
-    all_settings
+    all_settings,
+    all_persona
 )
 
 
@@ -152,9 +153,9 @@ async def get_settings(user_id):
 #loading persona
 def load_persona(settings):
     try:
-        with open(settings[6], "rb") as file:
-            persona = g_ciphers.decrypt(secret_nonce, file.read(), None).decode("utf-8")
-        return persona
+        persona = all_persona[settings[6]]
+        if persona:
+            return persona
     except Exception as e:
         print(f"Error in load_persona function. \n\n Error Code - {e}")
         return "none"

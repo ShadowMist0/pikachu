@@ -44,13 +44,6 @@ from ext.user_content_tools import(
     save_conversation,
     reset
 )
-import warnings
-
-
-
-
-
-warnings.filterwarnings("ignore", message=".*non-text parts.*")
 
 
 
@@ -65,18 +58,24 @@ media_user_locks = defaultdict(asyncio.Lock)
 
 async def media_worker():
     while True:
-        update, content = await media_queue.get()
-        user_id = update.effective_user.id
-        lock = media_user_locks[user_id]
+        item = await media_queue.get()
         try:
+            if item is None:
+                break
+            update, content = item
+            user_id = update.effective_user.id
+            lock = media_user_locks[user_id]
             async with lock:
                 await process_media_update(update, content)
         finally:
             media_queue.task_done()
 
 async def run_media_workers(n):
+    tasks = []
     for _ in range(n):
-        asyncio.create_task(media_worker())
+        task = asyncio.create_task(media_worker())
+        tasks.append(task)
+    return tasks
 
 valid_ext = [
     ".pdf", ".json", ".txt", ".docx", ".py", ".c", ".cpp",
@@ -95,9 +94,9 @@ async def save_media_conversation(update:Update, content:ContextTypes.DEFAULT_TY
     try:
         description = await media_description_generator(update,content, path, file_id)
         if description:
-            await asyncio.to_thread(save_conversation, f"<{file_type}>Type: {description[1]}, Path: {description[2]}, Size: {description[3]} MB</{file_type}>\n" + prompt + "\n", response.text, user_id)
+            await save_conversation(f"<{file_type}>Type: {description[1]}, Path: {description[2]}, Size: {description[3]} MB</{file_type}>\n" + prompt + "\n", response.text, user_id)
         else:
-            await asyncio.to_thread(save_conversation, f"<{file_type}>"+prompt, response.text, user_id)
+            await save_conversation(f"<{file_type}>"+prompt, response.text, user_id)
     except Exception as e:
         print(f"Error in save_media_conversation function.\n\nError Code -{e}")
 

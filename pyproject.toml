@@ -43,7 +43,8 @@ dependencies = [
     "aiofiles",
     "jinja2",
     "python-multipart",
-    "slowapi"
+    "slowapi",
+    "motor"
 ]
 
 [project.urls]

@@ -1,6 +1,5 @@
 import os
 import sys
-import io
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import asyncio
 import warnings
@@ -23,7 +22,7 @@ from utils.db import (
     all_settings
 )
 from utils.file_utils import load_all_files
-from utils.message_utils import run_workers, queue as message_queue
+from utils.message_utils import run_workers
 from bot.command_handler import(
     restart,
     start,
@@ -33,14 +32,8 @@ from bot.command_handler import(
 from bot.media_handler import(
     handle_media,
     handle_location,
-    run_media_workers,
-    media_queue
+    run_media_workers
 )
-
-
-#code to ignore warning about per_message in conv handler and increase poll size
-warnings.filterwarnings("ignore",category=PTBUserWarning)
-
 from conv.conv_tool import(
     api_conv_handler,
     register_conv,
@@ -55,13 +48,19 @@ from conv.conv_tool import(
 from bot.callback import button_handler
 from bot.echo import echo
 from fastapi import Request, Response
+
+
+
+
+#code to ignore warning about per_message in conv handler and increase poll size
+warnings.filterwarnings("ignore",category=PTBUserWarning)
 tg_request = HTTPXRequest(connection_pool_size=50, pool_timeout=30)
 
 
 # Setting this to your publicly accessible URL
 
-#WEBHOOK_URL = "https://25cd458b3705.ngrok-free.app"        #local testing
-WEBHOOK_URL = "https://pikachu-zhx7.onrender.com"               #original render url
+WEBHOOK_URL = "https://40cf9d48b77a.ngrok-free.app"              #local testing
+#WEBHOOK_URL = "https://pikachu-zhx7.onrender.com"               #original render url
 
 
 
@@ -69,8 +68,7 @@ WEBHOOK_URL = "https://pikachu-zhx7.onrender.com"               #original render
 async def main():
     try:
         bot_app = ApplicationBuilder().token(TOKEN).request(tg_request).concurrent_updates(True).build()
-
-        #await load_all_files()
+        await load_all_files()
         await populate_db_caches()
 
         # Add webhook handler to the FastAPI app
@@ -112,8 +110,8 @@ async def main():
         config = uvicorn.Config(web_app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), log_level="info")
         server = uvicorn.Server(config)
 
-        workers = await run_workers(12)
-        media_workers = await run_media_workers(6)
+        await run_workers(12)
+        await run_media_workers(6)
         
         # --- WEBHOOK MODE (Currently Active) ---
         # This runs the bot with webhooks.
@@ -126,15 +124,7 @@ async def main():
             )
             # Run the web server
             await server.serve()
-            
             # On shutdown, stop the bot and delete the webhook
-            for _ in workers:
-                await message_queue.put(None)
-            for _ in media_workers:
-                await media_queue.put(None)
-            
-            await asyncio.gather(*workers, *media_workers)
-
             await bot_app.bot.delete_webhook()
             await bot_app.stop()
 
@@ -153,46 +143,4 @@ async def main():
 
 
 if __name__=="__main__":
-    # import cProfile
-    # import pstats
-    # import atexit
-
-    # s = io.StringIO()
-
-    # print("Starting profiler...")
-    # profiler = cProfile.Profile()
-    # profiler.enable()
-
-    # def save_profiler_stats():
-    #     profiler.disable()
-    #     print("Saving profiler stats to profile.stats...")
-    #     profiler.dump_stats("Logs/profile.stats")
-    #     print("Profiler stats saved. ❤️")
-
-    #     s = io.StringIO()
-    #     stats = pstats.Stats("Logs/profile.stats", stream=s)
-
-    #     # Only include functions from your bot's files
-    #     # Replace "pikachu" with the unique part of your module/folder name
-    #     stats.sort_stats("cumulative")
-    #     s.write("--- Top 100 Functions by Cumulative Time ---\n")
-    #     stats.print_stats("pikachu")  # filters functions containing "pikachu" in path or name
-    #     s.write("\n\n")
-
-    #     stats.sort_stats("tottime")
-    #     s.write("--- Top 100 Functions by Total Time ---\n")
-    #     stats.print_stats("pikachu")  # same filter here
-
-    #     with open("Logs/log.txt", "w") as file:
-    #         file.write(s.getvalue())
-
-    #     os.remove("Logs/profile.stats")
-    #     print("Successfully saved the log file ✅")
-
-    # atexit.register(save_profiler_stats)
-
-
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\nCaught keyboard interrupt. Exiting.")
+    asyncio.run(main())

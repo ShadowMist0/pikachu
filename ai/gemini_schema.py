@@ -77,7 +77,7 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
             await safe_send(update,content, message_to_send, msg_obj)
             count += 1
         if message.chat.type == "private":
-            await asyncio.to_thread(save_conversation, user_message, message_to_send, update.effective_user.id)
+            await save_conversation(user_message, message_to_send, update.effective_user.id)
         elif message.chat.type != "private":
             await asyncio.to_thread(save_group_conversation, update, user_message, message_to_send)
     except Exception as e:
@@ -263,7 +263,7 @@ async def create_pdf(update: Update, content: ContextTypes.DEFAULT_TYPE, argumen
         except Exception as e:
             print(f"Error sending PDF: {e}")
         response = "\n".join(texts)
-        await asyncio.to_thread(save_conversation, None,  "\n<PDF CONTENT>\n" + response + "\n</PDF CONTENT>", user_id)
+        await save_conversation(None,  "\n<PDF CONTENT>\n" + response + "\n</PDF CONTENT>", user_id)
         return pdf_filename
     except Exception as e:
         print(f"Error in create_pdf function.\n\nError Code -{e}")
@@ -378,7 +378,7 @@ async def create_image(update:Update, content:ContextTypes.DEFAULT_TYPE, api, pr
         for part in response.candidates[0].content.parts:
             if hasattr(part, "text") and part.text is not None:
                 await msg.edit_text(part.text)
-                await asyncio.to_thread(save_conversation, None, part.text, update.effective_user.id)
+                await save_conversation(None, part.text, update.effective_user.id)
             elif hasattr(part, "inline_data") and part.inline_data is not None:
                 image = Image.open(BytesIO(part.inline_data.data))
                 bio = BytesIO()
@@ -420,6 +420,7 @@ async def add_memory_content(update:Update, content:ContextTypes.DEFAULT_TYPE, d
 #All the global function 
 async def analyze_media(update: Update, content: ContextTypes.DEFAULT_TYPE, media_list, prompt, settings, usr_msg, msg_obj):
     try:
+        print(media_list)
         user_id = update.effective_user.id
         if msg_obj:
             message = await msg_obj.edit_text("Analyzing all available file and media, please wait...")
@@ -479,8 +480,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
     try:
         tmsg = None
         user_id = update.effective_user.id
-        tools=[]
-        tools.append(types.Tool(function_declarations=func_list))
+        tools=[types.Tool(function_declarations=func_list)]
         if settings[2] == "gemini-2.5-pro" or settings[2] == "gemini-2.5-flash":
             if settings[3] != 0 and not tmsg:
                 tmsg = await update.message.reply_text("Thinking...")
@@ -506,8 +506,6 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
             contents = [user_message],
             config = config,
         )
-        with open("Main/response.txt", "w") as file:
-            json.dump(response.to_json_dict(), file, indent=2, ensure_ascii=False)
 
         if response.prompt_feedback and response.prompt_feedback.block_reason:
             await update.message.reply_text("Prohibited content detected. Conversation history will be deleted.")
@@ -549,7 +547,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                 for part in response.candidates[0].content.parts:
                     if hasattr(part, "text") and part.text is not None:
                         await update.message.reply_text(part.text)
-                await asyncio.to_thread(save_conversation,usr_msg, response.text, user_id)
+                await save_conversation(usr_msg, response.text, user_id)
                 prompt = function_call.args["prompt"]
                 await create_image(update,content, api, prompt, tmsg)
             
@@ -560,7 +558,7 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                             await tmsg.edit_text(part.text)
                         else:
                             await update.message.reply_text(part.text)
-                        await asyncio.to_thread(save_conversation,usr_msg, part.text + "\n <Routine Image>\n", user_id)
+                        await save_conversation(usr_msg, part.text + "\n <Routine Image>\n", user_id)
                 await routine_handler(update, content)
             
             elif function_call.name == "add_memory_content":
@@ -581,21 +579,21 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                         if type(markup) == str and markup:
                             text = response.text + markup
                             await update.message.reply_text(text, parse_mode="Markdown")
-                            await asyncio.to_thread(save_conversation, usr_msg, text, user_id)
+                            await save_conversation(usr_msg, text, user_id)
                         else:
                             text = part.text
                             await update.message.reply_text(text, reply_markup=markup, parse_mode="Markdown")
-                            await asyncio.to_thread(save_conversation, usr_msg, text, user_id)
+                            await save_conversation(usr_msg, text, user_id)
                             return "false"
                     else:
                         if type(markup) == str and markup:
                             text = markup
-                            await asyncio.to_thread(save_conversation, usr_msg,text, user_id)
+                            await save_conversation(usr_msg,text, user_id)
                             await update.message.reply_text(text, parse_mode="Markdown")
                             return "false"
                         else:
                             await update.message.reply_text("Click the button to see your requested data", reply_markup=markup)
-                            await asyncio.to_thread(save_conversation, usr_msg, "Click the button to see your requested data", user_id)
+                            await save_conversation(usr_msg, "Click the button to see your requested data", user_id)
                             return 'false'
             
             elif function_call.name == "fetch_media_content":

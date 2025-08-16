@@ -4,6 +4,12 @@ from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 from collections import defaultdict
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from motor.motor_asyncio import AsyncIOMotorClient
+
+
+
+
+
 
 decryption_key = os.getenv("decryption_key")
 mongo_pass = os.getenv("MDB_pass_shadow")
@@ -49,3 +55,9 @@ try:
     db = MongoClient(mongo_url, server_api=ServerApi("1"))["phantom_bot"]
 except:
     db = None
+
+
+try:
+    mdb = AsyncIOMotorClient(mongo_url)["phantom_bot"]
+except:
+    mdb = None

@@ -1,6 +1,7 @@
-import conv
+import time
 from utils.config import (
     db,
+    mongo_url,
     fernet,
     channel_id,
     g_ciphers,
@@ -28,7 +29,15 @@ from utils.utils import (
 import html
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from flask import request
+import aiofiles
+from motor.motor_asyncio import AsyncIOMotorClient
 
+
+
+
+
+
+mdb = AsyncIOMotorClient(mongo_url)["phantom_bot"]
 
 
 
@@ -205,6 +214,7 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
         bd_tz = pytz.timezone("Asia/Dhaka")
         now = datetime.now(bd_tz).strftime("%d-%m-%Y, %H:%M:%S")
         message = update.message or update.edited_message
+        
         if message.chat.type == "private":
             data = "***RULES***\n"
             data += (
@@ -212,10 +222,13 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 "Timestamp is only for you to understand the user better and provide more realistic response"
                 "So, You must not use timestamp in your response."
             )
-            with open("data/info/rules.shadow", "rb" ) as f:
-                data += g_ciphers.decrypt(secret_nonce, f.read(), None).decode("utf-8")
-            with open(f"data/memory/memory-{user_id}.shadow", "rb") as f:
-                mem_data = f.read()
+            async with aiofiles.open("data/info/rules.shadow", "rb" ) as f:
+                try:
+                    data += g_ciphers.decrypt(secret_nonce, await f.read(), None).decode("utf-8")
+                except:
+                    print("Failed to add rules in prompt")
+            async with aiofiles.open(f"data/memory/memory-{user_id}.shadow", "rb") as f:
+                mem_data = await f.read()
                 if mem_data:
                     try:
                         data += "\n\n***MEMORY***\n" + ciphers.decrypt(nonce, mem_data, None).decode("utf-8")
@@ -226,13 +239,12 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                             {"id" : user_id},
                             {"$set" : {"memory" : None}}
                         )
-            with open(f"data/Conversation/conversation-{user_id}.shadow", "rb") as f:
-                conv_data = f.read()
+            async with aiofiles.open(f"data/Conversation/conversation-{user_id}.shadow", "rb") as f:
+                conv_data = await f.read()
                 if conv_data:
                     try:
                         data += "\n\n***CONVERSATION HISTORY***\n\n" + ciphers.decrypt(nonce, conv_data, None).decode("utf-8") + f"\n[{now}] {all_user_info[user_id][1]}: " + user_message
-                        f.seek(0)
-                        if(ciphers.decrypt(nonce, f.read(), None).decode("utf-8").count("You: ")>30):
+                        if(data.count("You: ")>30):
                             await asyncio.create_task(background_memory_creation(update, content, user_id))
                     except:
                         data += f"\n[{now}] {all_user_info[user_id][1]}: " + user_message
@@ -245,19 +257,18 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                 return "Hi"
         if message.chat.type != "private":
             data = "***RULES***\n"
-            with open("data/info/group_rules.shadow", "rb") as f:
-                data += g_ciphers.decrypt(secret_nonce, f.read(), None).decode("utf-8") + "\n***END OF RULES***\n\n\n"
-            with open("data/info/group_training_data.shadow", "rb") as f:
+            async with aiofiles.open("data/info/group_rules.shadow", "rb") as f:
+                data += g_ciphers.decrypt(secret_nonce, await f.read(), None).decode("utf-8") + "\n***END OF RULES***\n\n\n"
+            async with aiofiles.open("data/info/group_training_data.shadow", "rb") as f:
                 try:
-                    data +=  "******TRAINING DATA******\n\n" + g_ciphers.decrypt(secret_nonce, f.read(), None).decode("utf-8") + "******END OF TRAINING DATA******\n\n"
+                    data +=  "******TRAINING DATA******\n\n" + g_ciphers.decrypt(secret_nonce, await f.read(), None).decode("utf-8") + "******END OF TRAINING DATA******\n\n"
                 except:
                     pass         
-            with open(f"data/memory/memory-group.txt", "r", encoding="utf-8") as f:
-                data += "***MEMORY***\n" + f.read() + "\n***END OF MEMORY***\n\n\n"
-            with open(f"data/Conversation/conversation-group.txt", "r", encoding="utf-8") as f:
-                data += "\n\n***CONVERSATION HISTORY***\n\n" + f.read() + "\nUser: " + user_message
-                f.seek(0)
-                if(f.read().count("You: ")>200):
+            async with aiofiles.open(f"data/memory/memory-group.txt", "r", encoding="utf-8") as f:
+                data += "***MEMORY***\n" + await f.read() + "\n***END OF MEMORY***\n\n\n"
+            async with aiofiles.open(f"data/Conversation/conversation-group.txt", "r", encoding="utf-8") as f:
+                data += "\n\n***CONVERSATION HISTORY***\n\n" + await f.read() + "\nUser: " + user_message
+                if(data.count("You: ")>200):
                     asyncio.create_task(background_memory_creation(update, content, user_id))
             if data:
                 return data
@@ -269,41 +280,38 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
 
 
 #function to save conversation
-def save_conversation(user_message : str , gemini_response:str , user_id:int) -> None:
+async def save_conversation(user_message : str , gemini_response:str , user_id:int) -> None:
     try:
         key = bytes.fromhex(all_user_info[user_id][6])
         nonce = bytes.fromhex(all_user_info[user_id][7])
         ciphers = AESGCM(key)
         bd_tz = pytz.timezone("Asia/Dhaka")
         now = datetime.now(bd_tz).strftime("%d-%m-%Y, %H:%M:%S")
-        conn = sqlite3.connect("data/info/user_data.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM users WHERE user_id = ?", (user_id,))
-        name = cursor.fetchone()[0]
+        name = all_user_info[user_id][1]
         
-        with open(f"data/Conversation/conversation-{user_id}.shadow", "rb") as f:
-            conv_data = f.read()
+        async with aiofiles.open(f"data/Conversation/conversation-{user_id}.shadow", "rb") as f:
+            conv_data = await f.read()
             if conv_data:
                 data = ciphers.decrypt(nonce,conv_data, None).decode("utf-8")
             else:
                 data = ""
-        with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
+        async with aiofiles.open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
             if user_message == None:
                 data += gemini_response + "\n"
                 data = ciphers.encrypt(nonce, data.encode("utf-8"), None)
-                f.write(data)
+                await f.write(data)
             else:
                 data += f"\n[{now}] {name}: {user_message}\nYou: {gemini_response}\n"
                 data = ciphers.encrypt(nonce, data.encode("utf-8"), None)
-                f.write(data)
-        db[f"{user_id}"].update_one(
+                await f.write(data)
+        await mdb[f"{user_id}"].update_one(
             {"id" : user_id},
             {"$set" : {"conversation" : data}}
         )
     except Exception as e:
-        with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
+        async with aiofiles.open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
             pass
-        db[f"{user_id}"].update_one(
+        await mdb[f"{user_id}"].update_one(
             {"id" : user_id},
             {"$set" : {"conversation" : None}}
         )

@@ -1,49 +1,50 @@
-from utils.config import db
-import sqlite3
+from utils.config import g_ciphers, secret_nonce, db, mongo_url
+import aiofiles
+import aiosqlite
+from glob import glob
+import asyncio
+from motor.motor_asyncio import AsyncIOMotorClient
 
+
+
+
+mdb = AsyncIOMotorClient(mongo_url)["phantom_bot"]
 
 
 
 
 
 #loading the bot api
-def get_token():
+async def get_token():
     try:
-        TOKENs = db["API"].find()[0]["bot_api"]
+        TOKENs = (await mdb["API"].find_one({}))["bot_api"]
         return TOKENs
     except Exception as e:
         print(f"Error Code -{e}")
 
 
 #all registered user
-def load_all_user():
+async def load_all_user():
     try:
-        users = tuple(int(user) for user in db.list_collection_names() if user.isdigit())
-        all_users = tuple(db["all_user"].find_one({"type":"all_user"})["users"])
-        for user in users:
-            if user not in all_users:
-                db["all_user"].update_one(
-                    {"type" : "all_user"},
-                    {"$push" : {"users" : user}}
-                )
+        users = tuple(int(user) for user in (await mdb.list_collection_names()) if user.isdigit())
         return users
     except Exception as e:
         print(f"Error in load_all_user fnction.\n\n Error code -{e}")
 
 
 #function to load all admin
-def load_admin():
+async def load_admin():
     try:
-        admins = tuple(int(admin) for admin in db["admin"].find()[0]["admin"])
+        admins = tuple(int(admin) for admin in (await mdb["admin"].find_one({}))["admin"])
         return admins
     except Exception as e:
         print(f"Error in load_admin function.\n\nError Code - {e}")
 
 
 #function to load all gemini model
-def load_gemini_model():
+async def load_gemini_model():
     try:
-        models = tuple(db["ai_model"].find()[0]["model_name"])
+        models = tuple((await mdb["ai_model"].find_one({}))["model_name"])
         return models
     except Exception as e:
         print(f"Error Loading Gemini Model.\n\nError Code -{e}")
@@ -51,65 +52,95 @@ def load_gemini_model():
     
 
 #fucntion to load gemini_api
-def load_gemini_api():
+async def load_gemini_api():
     try:
-        api_list = tuple(db["API"].find()[0]["gemini_api"])
+        api_list = (await mdb["API"].find_one({}))["gemini_api"]
+        api_list = tuple(api_list)
         return api_list
     except Exception as e:
         print(f"Error lading gemini API. \n\nError Code -{e}")
 
 
 #function to load all user settings as dictionary
-def load_all_user_settings():
+async def load_all_user_settings():
     try:
         user_settings = {}
-        conn = sqlite3.connect("data/settings/user_settings.db")
-        c = conn.cursor()
-        c.execute("select * from user_settings")
-        for settings in c.fetchall():
+        conn = await aiosqlite.connect("data/settings/user_settings.db")
+        c = await conn.execute("select * from user_settings")
+        for settings in await c.fetchall():
             user_settings[settings[0]] = settings
-        conn.close()
+        await conn.close()
         return user_settings
     except Exception as e:
         print(f"Error in load_all_user_settings function.\n\nError Code - {e}")
 
 
 #function to load all users info
-def load_all_user_info():
+async def load_all_user_info():
     try:
         user_info = {}
-        conn = sqlite3.connect("data/info/user_data.db")
-        c = conn.cursor()
-        c.execute("select * from users")
-        for info in c.fetchall():
+        conn = await aiosqlite.connect("data/info/user_data.db")
+        c = await conn.execute("select * from users")
+        for info in await c.fetchall():
             user_info[info[0]] = info
-        conn.close()
+        await conn.close()
         return user_info
     except Exception as e:
         print(f"Error in load_all_user_info function.\n\nError Code - {e}")
 
 
+#function to load all persona in dictionary for faster access
+async def load_all_persona():
+    try:
+        all_persona = {}
+        persons_link = sorted(glob("data/persona/*shadow"))
+        for link in persons_link:
+            async with aiofiles.open(link, "rb") as f:
+                persona = g_ciphers.decrypt(secret_nonce, await f.read(), None).decode("utf-8")
+                all_persona[link] = persona
+        return all_persona
+    except Exception as e:
+        print(f"Error in load_all_persona function.\n\nError Code - {e}")
+                
 
-premium_users = ("5888166321", "6226239719")  # Example premium user IDs
-gemini_api_keys = list(load_gemini_api())
-gemini_model_list = load_gemini_model()
-all_users = load_all_user()
-all_admins = load_admin()
-all_settings = {}
-all_user_info = {}
 
-def populate_db_caches():
+
+
+async def initialize_bot():
+    global premium_users, gemini_api_keys, gemini_model_list, all_users, all_admins, all_persona, all_settings, all_user_info, TOKEN
+    premium_users = ("5888166321", "6226239719")  # Example premium user IDs
+    gemini_api_keys = list(await load_gemini_api())
+    gemini_model_list = await load_gemini_model()
+    all_users = await load_all_user()
+    all_admins = await load_admin()
+    all_persona = {}
+    all_settings = {}
+    all_user_info = {}
+    TOKEN = (await get_token())[2]
+
+
+
+
+
+async def populate_db_caches():
     """Populates the global settings and user info dictionaries from the database files."""
-    global all_settings, all_user_info
+    global all_settings, all_user_info, all_persona
     
-    settings_from_db = load_all_user_settings()
+    settings_from_db = await load_all_user_settings()
     if settings_from_db:
         all_settings.clear()
         all_settings.update(settings_from_db)
         
-    user_info_from_db = load_all_user_info()
+    user_info_from_db = await load_all_user_info()
     if user_info_from_db:
         all_user_info.clear()
         all_user_info.update(user_info_from_db)
 
-TOKEN = get_token()[2]
+    all_persona_from_db = await load_all_persona()
+    if all_persona_from_db:
+        all_persona.clear()
+        all_persona.update(all_persona_from_db)
+
+
+
+asyncio.run(initialize_bot())
