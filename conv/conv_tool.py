@@ -18,6 +18,7 @@ import asyncio, html
 from utils.config import (
     fernet,
     db,
+    mdb,
     channel_id,
     g_ciphers,
     secret_nonce
@@ -390,12 +391,17 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
 #function to take user password for login or confidential report
 async def take_user_password(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        print("take_user_password function started")
         user_password = update.message.text.strip()
+        print(f"user_password: {user_password}")
         conn = await aiosqlite.connect("data/info/user_data.db")
+        print("Connected to database")
         cursor = await conn.execute("SELECT password FROM users WHERE roll = ?", (content.user_data.get("roll"),))
-        password = await cursor.fetchone()[0]
+        password = (await cursor.fetchone())[0]
+        print(f"password: {password}")
         await conn.close()
         if user_password == password:
+            print("Passwords matched")
             keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
             markup = InlineKeyboardMarkup(keyboard)
             with open("data/info/getting_api.shadow", "rb") as file:
@@ -405,13 +411,18 @@ async def take_user_password(update:Update, content:ContextTypes.DEFAULT_TYPE) -
             await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
             
             content.user_data["guest"] = True
+            print("Returning AH")
             return "AH"
         else:
+            print("Passwords did not match")
             await update.message.reply_text("Wrong Password..\n\nIf you are having problem contact admin. Or mail here: shadow_mist0@proton.me")
+            print("Returning END")
             return ConversationHandler.END
     except Exception as e:
         print(f"Error in take_user_password function.\n\nError Code - {e}")
+        print("Exception occurred")
         await update.message.reply_text("Internal Error. Please contact admin or Try Again later.")
+        print("Returning END")
 
 
 #function to handler skip
@@ -508,6 +519,7 @@ async def take_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
 #function to confirm user password
 async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
+        user_id = update.effective_user.id
         global gemini_api_keys,all_user_info
         is_guest = content.user_data.get("guest")
         keyboard = [
@@ -525,7 +537,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 conn = await aiosqlite.connect("data/info/user_data.db")
                 if is_guest:
                     user_info = [
-                        update.effective_user.id,
+                        user_id,
                         content.user_data.get("user_name"),
                         content.user_data.get("gender"),
                         0,
@@ -536,7 +548,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                     ]
                 else:
                     user_info = [
-                        update.effective_user.id,
+                        user_id,
                         content.user_data.get("user_name"),
                         content.user_data.get("gender"),
                         content.user_data.get("roll"),
@@ -551,7 +563,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 """,
                 tuple(info for info in user_info)
                 )
-                persona = "data/persona/pikachu.shadow"
+                persona = "data/persona/Pikachu.shadow"
                 data = {
                     "id" : user_info[0],
                     "name" : user_info[1],
@@ -576,13 +588,32 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 )
                 await conn.commit()
                 await conn.close()
+
                 global all_users
                 global all_settings
-                all_users = await load_all_user()
-                all_user_info = await load_all_user_info()
-                new_settings = await load_all_user_settings()
+                print(len(all_users))
+
+                all_users_local = await load_all_user()
+                all_settings_local = await load_all_user_settings()
+                all_user_info_local = await load_all_user_info()
+
+                all_users.clear()
+                all_user_info.clear()
                 all_settings.clear()
-                all_settings.update(new_settings)
+
+                all_users[:] = all_users_local
+                print(len(all_users))
+                all_settings.update(all_settings_local)
+                all_user_info.update(all_user_info_local)
+
+                if not os.path.exists(f"data/Conversation/conversatioon-{user_id}.shadow"):
+                    with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
+                        pass
+                
+                if not os.path.exists(f"data/memory/memory-{user_id}.shadow"):
+                    with open(f"data/memory/memory-{user_id}.shadow", "wb") as f:
+                        pass
+                
                 if user_info[3] == 0:
                     await update.message.reply_text("You have been registered as a guest with limited functionality.", reply_markup=reply_markup)
                 else:
@@ -606,6 +637,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text("Passwords are not identical. Try again later.")
             await content.bot.delete_message(chat_id = update.effective_user.id, message_id=content.user_data.get("tp_message_id"))
+            return ConversationHandler.END
             
     except Exception as e:
         print(f"Error in confirm_password function.\n\nError Code -{e}")

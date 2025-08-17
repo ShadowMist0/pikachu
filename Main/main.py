@@ -16,12 +16,7 @@ from telegram.ext import(
     CallbackQueryHandler,
 )
 from routes.web_panel_fastapi import app as web_app
-from utils.db import (
-    TOKEN,
-    populate_db_caches,
-    all_user_info,
-    all_settings
-)
+import utils.db as db_utils
 from utils.file_utils import load_all_files
 from utils.message_utils import run_workers, queue as message_queue
 from bot.command_handler import(
@@ -65,16 +60,16 @@ WEBHOOK_URL = "https://pikachu-zhx7.onrender.com"               #original render
 
 
 
-
 async def main():
     try:
-        bot_app = ApplicationBuilder().token(TOKEN).request(tg_request).concurrent_updates(True).build()
-
+        await db_utils.initialize_bot()
         await load_all_files()
-        await populate_db_caches()
+        await db_utils.populate_db_caches()
+
+        bot_app = ApplicationBuilder().token(db_utils.TOKEN).request(tg_request).concurrent_updates(True).build()
 
         # Add webhook handler to the FastAPI app
-        @web_app.post(f"/{TOKEN}")
+        @web_app.post(f"/{db_utils.TOKEN}")
         async def telegram_webhook(request: Request):
             """Handle incoming telegram updates"""
             update_data = await request.json()
@@ -121,7 +116,7 @@ async def main():
             await bot_app.start()
             # Set webhook
             await bot_app.bot.set_webhook(
-                url=f"{WEBHOOK_URL}/{TOKEN}",
+                url=f"{WEBHOOK_URL}/{db_utils.TOKEN}",
                 allowed_updates=Update.ALL_TYPES
             )
             # Run the web server

@@ -7,10 +7,19 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 
 
-
 mdb = AsyncIOMotorClient(mongo_url)["phantom_bot"]
 
 
+# Global variables
+TOKEN: str | None = None
+premium_users: tuple = ()
+gemini_api_keys: list = []
+gemini_model_list: list = []
+all_users: list = []
+all_admins: list = []
+all_persona: dict = {}
+all_settings: dict = {}
+all_user_info: dict = {}
 
 
 
@@ -30,6 +39,7 @@ async def load_all_user():
         return users
     except Exception as e:
         print(f"Error in load_all_user fnction.\n\n Error code -{e}")
+        return ()
 
 
 #function to load all admin
@@ -39,6 +49,7 @@ async def load_admin():
         return admins
     except Exception as e:
         print(f"Error in load_admin function.\n\nError Code - {e}")
+        return ()
 
 
 #function to load all gemini model
@@ -59,6 +70,7 @@ async def load_gemini_api():
         return api_list
     except Exception as e:
         print(f"Error lading gemini API. \n\nError Code -{e}")
+        return ()
 
 
 #function to load all user settings as dictionary
@@ -73,6 +85,7 @@ async def load_all_user_settings():
         return user_settings
     except Exception as e:
         print(f"Error in load_all_user_settings function.\n\nError Code - {e}")
+        return {}
 
 
 #function to load all users info
@@ -87,37 +100,55 @@ async def load_all_user_info():
         return user_info
     except Exception as e:
         print(f"Error in load_all_user_info function.\n\nError Code - {e}")
+        return {}
 
 
 #function to load all persona in dictionary for faster access
 async def load_all_persona():
     try:
-        all_persona = {}
+        all_persona_local = {}
         persons_link = sorted(glob("data/persona/*shadow"))
         for link in persons_link:
             async with aiofiles.open(link, "rb") as f:
                 persona = g_ciphers.decrypt(secret_nonce, await f.read(), None).decode("utf-8")
-                all_persona[link] = persona
-        return all_persona
+                all_persona_local[link] = persona
+        print(f"There are {len(all_persona_local)} persona loaded.")
+        return all_persona_local
     except Exception as e:
         print(f"Error in load_all_persona function.\n\nError Code - {e}")
+        return {}
                 
 
 
 
 
 async def initialize_bot():
-    global premium_users, gemini_api_keys, gemini_model_list, all_users, all_admins, all_persona, all_settings, all_user_info, TOKEN
-    premium_users = ("5888166321", "6226239719")  # Example premium user IDs
-    gemini_api_keys = list(await load_gemini_api())
-    gemini_model_list = await load_gemini_model()
-    all_users = await load_all_user()
-    all_admins = await load_admin()
-    all_persona = {}
-    all_settings = {}
-    all_user_info = {}
-    TOKEN = (await get_token())[2]
+    global premium_users, gemini_api_keys, gemini_model_list, all_users, all_admins, TOKEN
+    premium_users = ("5888166321", "6226239719")
+    
+    loaded_gemini_api_keys = await load_gemini_api()
+    gemini_api_keys.clear()
+    if loaded_gemini_api_keys:
+        gemini_api_keys.extend(loaded_gemini_api_keys)
 
+    loaded_gemini_model_list = await load_gemini_model()
+    gemini_model_list.clear()
+    if loaded_gemini_model_list:
+        gemini_model_list.extend(loaded_gemini_model_list)
+
+    loaded_all_users = await load_all_user()
+    all_users.clear()
+    if loaded_all_users:
+        all_users.extend(loaded_all_users)
+
+    loaded_all_admins = await load_admin()
+    all_admins.clear()
+    if loaded_all_admins:
+        all_admins.extend(loaded_all_admins)
+        
+    tokens = await get_token()
+    if tokens:
+        TOKEN = tokens[2]
 
 
 
@@ -127,20 +158,13 @@ async def populate_db_caches():
     global all_settings, all_user_info, all_persona
     
     settings_from_db = await load_all_user_settings()
-    if settings_from_db:
-        all_settings.clear()
-        all_settings.update(settings_from_db)
+    all_settings.clear()
+    all_settings.update(settings_from_db)
         
     user_info_from_db = await load_all_user_info()
-    if user_info_from_db:
-        all_user_info.clear()
-        all_user_info.update(user_info_from_db)
+    all_user_info.clear()
+    all_user_info.update(user_info_from_db)
 
     all_persona_from_db = await load_all_persona()
-    if all_persona_from_db:
-        all_persona.clear()
-        all_persona.update(all_persona_from_db)
-
-
-
-asyncio.run(initialize_bot())
+    all_persona.clear()
+    all_persona.update(all_persona_from_db)

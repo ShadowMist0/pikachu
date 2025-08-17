@@ -29,6 +29,7 @@ from utils.message_utils import queue
 #function for all other messager that are directly send to bot without any command
 async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        print(len(all_users))
         bot_name_obj = await content.bot.get_my_name()
         bot_name = bot_name_obj.name.lower()
         user_id = update.effective_user.id
