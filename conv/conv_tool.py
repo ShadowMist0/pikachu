@@ -274,6 +274,10 @@ async def add_or_delete_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) 
 #function to register a new user
 async def take_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
+        user_id = update.callback_query.from_user.id if update.callback_query else update.effective_user.id
+        if user_id in all_users:
+            await update.message.reply_text("You are already registered.")
+            return ConversationHandler.END
         keyboard = [[InlineKeyboardButton("Cancel", callback_data="cancel_conv")]]
         markup = InlineKeyboardMarkup(keyboard)
         if update.callback_query:
@@ -391,17 +395,12 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
 #function to take user password for login or confidential report
 async def take_user_password(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        print("take_user_password function started")
         user_password = update.message.text.strip()
-        print(f"user_password: {user_password}")
         conn = await aiosqlite.connect("data/info/user_data.db")
-        print("Connected to database")
         cursor = await conn.execute("SELECT password FROM users WHERE roll = ?", (content.user_data.get("roll"),))
         password = (await cursor.fetchone())[0]
-        print(f"password: {password}")
         await conn.close()
         if user_password == password:
-            print("Passwords matched")
             keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
             markup = InlineKeyboardMarkup(keyboard)
             with open("data/info/getting_api.shadow", "rb") as file:
@@ -411,18 +410,14 @@ async def take_user_password(update:Update, content:ContextTypes.DEFAULT_TYPE) -
             await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
             
             content.user_data["guest"] = True
-            print("Returning AH")
             return "AH"
         else:
-            print("Passwords did not match")
             await update.message.reply_text("Wrong Password..\n\nIf you are having problem contact admin. Or mail here: shadow_mist0@proton.me")
-            print("Returning END")
             return ConversationHandler.END
     except Exception as e:
         print(f"Error in take_user_password function.\n\nError Code - {e}")
-        print("Exception occurred")
         await update.message.reply_text("Internal Error. Please contact admin or Try Again later.")
-        print("Returning END")
+        return ConversationHandler.END
 
 
 #function to handler skip

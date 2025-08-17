@@ -18,6 +18,8 @@ from bot.info_handler import(
 from utils.db import all_users
 from utils.config import channel_id
 from utils.message_utils import queue
+import time
+
 
 
 
@@ -65,6 +67,8 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             if ddos:
                 return
             #await user_message_handler(update, content, bot_name)
+            global start_time
+            start_time = time.time()
             await queue.put((update, content, bot_name))
     except Exception as e:
         print(f"Error in echo function.\n\n Error Code - {e}")

@@ -112,7 +112,6 @@ async def load_all_persona():
             async with aiofiles.open(link, "rb") as f:
                 persona = g_ciphers.decrypt(secret_nonce, await f.read(), None).decode("utf-8")
                 all_persona_local[link] = persona
-        print(f"There are {len(all_persona_local)} persona loaded.")
         return all_persona_local
     except Exception as e:
         print(f"Error in load_all_persona function.\n\nError Code - {e}")

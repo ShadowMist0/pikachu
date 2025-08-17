@@ -23,7 +23,7 @@ from ext.user_content_tools import create_prompt
 from ai.gemini_schema import gemini_non_stream
 from utils.db import gemini_api_keys
 import aiofiles
-
+import time
 
 
 
@@ -127,6 +127,9 @@ async def user_message_handler(update:Update, content:ContextTypes.DEFAULT_TYPE,
                     pass
         elif response != "false" and response[0] != None:
             await send_message(update, content, response[0], user_message, response[1])
+            from bot.echo import start_time
+            end_time = time.time()
+            print(f"Response time - {end_time - start_time}")
     except Exception as e:
         await update.message.reply_text(f"Telegram Limit hit, need to wait {e.retry_after} seconds.")
         await send_to_channel(update, content, channel_id, f"Telegram Limit hit for user {user_id}, He need to wait {e.retry_after} seconds.")
