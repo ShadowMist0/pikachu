@@ -48,13 +48,13 @@ async def echo(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
                     await message.chat.send_action(action = ChatAction.TYPING)
         except:
             pass
-        if user_message == "Routine" and message.chat.type == "private":
+        if user_message == "Routine":
             await routine_handler(update, content)
             return
         elif user_message == "⚙️Settings" and message.chat.type == "private":
             await handle_settings(update, content)
             return
-        elif user_message == "Schedule" and message.chat.type == "private":
+        elif user_message == "Schedule":
             await handle_ct(update, content)
             return
         elif user_message == "🔗Resources" and message.chat.type == "private":

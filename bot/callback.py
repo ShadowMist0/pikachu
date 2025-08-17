@@ -135,7 +135,7 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                 all_settings.clear()
                 all_settings.update(new_settings)
             elif model == "gemini-2.5-pro":
-                await conn.execute("UPDATE user_settings SET model = ?, thinking_budget = ? WHERE id = ? AND thinking_budget < 128", (model, 1024, user_id))
+                await conn.execute("UPDATE user_settings SET model = ?, thinking_budget = ? WHERE id = ?", (model, -1, user_id))
                 await conn.commit()
                 await conn.close()
                 await asyncio.to_thread(
@@ -144,6 +144,9 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                         {"$set" : {"settings.2":model, "settings.3" : 1024}}
                 )
                 await query.edit_message_text(f"AI model is successfully changed to {model}.")
+                new_settings = await load_all_user_settings()
+                all_settings.clear()
+                all_settings.update(new_settings)
 
         elif query.data in personas:
             conn = await aiosqlite.connect("data/settings/user_settings.db")
