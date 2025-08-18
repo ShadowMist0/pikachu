@@ -77,6 +77,8 @@ async def run_media_workers(n):
         tasks.append(task)
     return tasks
 
+
+
 valid_ext = [
     ".pdf", ".json", ".txt", ".docx", ".py", ".c", ".cpp",
     ".cxx", ".html", ".htm", ".js" , ".java", ".css", ".xml",
@@ -195,6 +197,8 @@ async def handle_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"Error in handle_location function. \n\nError code - {e}")
 
+
+#function to put media request in a queue
 async def handle_media(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
         if await is_ddos(update, content, update.effective_user.id):
@@ -204,6 +208,8 @@ async def handle_media(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None
         print(f"Error in handle_media function. \n\nError code - {e}")
 
 
+
+#function to process media updates
 async def process_media_update(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
     try:
         global gemini_api_keys, valid_ext

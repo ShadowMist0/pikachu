@@ -34,6 +34,7 @@ from utils.db import (
 )
 import sqlite3
 import aiosqlite
+import aiofiles
 from utils.utils import get_settings
 from utils.utils import (
     add_escape_character,

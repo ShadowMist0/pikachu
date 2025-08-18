@@ -22,11 +22,13 @@ from utils.db import(
 )
 from utils.config import(
     db,
+    mdb,
     fernet,
     g_ciphers,
     secret_nonce
 )
 import sqlite3
+import aiofiles
 import aiosqlite
 import asyncio
 from circulation.circulate import(
@@ -125,24 +127,27 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                 await conn.execute("UPDATE user_settings SET model = ? WHERE id = ?", (model, user_id))
                 await conn.commit()
                 await conn.close()
-                await asyncio.to_thread(
-                db[f"{user_id}"].update_one,
-                        {"id" : user_id},
-                        {"$set" : {"settings.2":model}}
+
+                await mdb[f"{user_id}"].update_one(
+                    {"id": user_id},
+                    {"$set": {"settings.2": model}}
                 )
+
                 await query.edit_message_text(f"AI model is successfully changed to {model}.")
                 new_settings = await load_all_user_settings()
                 all_settings.clear()
                 all_settings.update(new_settings)
+
             elif model == "gemini-2.5-pro":
                 await conn.execute("UPDATE user_settings SET model = ?, thinking_budget = ? WHERE id = ?", (model, -1, user_id))
                 await conn.commit()
                 await conn.close()
-                await asyncio.to_thread(
-                db[f"{user_id}"].update_one,
-                        {"id" : user_id},
-                        {"$set" : {"settings.2":model, "settings.3" : 1024}}
+
+                await mdb[f"{user_id}"].update_one(
+                    {"id": user_id},
+                    {"$set": {"settings.2": model, "settings.3": -1}}
                 )
+
                 await query.edit_message_text(f"AI model is successfully changed to {model}.")
                 new_settings = await load_all_user_settings()
                 all_settings.clear()
@@ -155,11 +160,12 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await conn.commit()
             await conn.close()
             await reset(update, content, query)
-            await asyncio.to_thread(
-                db[f"{user_id}"].update_one,
-                    {"id" : user_id},
-                    {"$set" : {"settings.6":persona}}
+
+            await mdb[f"{user_id}"].update_one(
+                {"id": user_id},
+                {"$set": {"settings.6": persona}}
             )
+
             personas = sorted(glob("data/persona/*shadow"))
             await query.edit_message_text(f"Persona is successfully changed to {os.path.splitext(os.path.basename(persona))[0]}.")
             new_settings = await load_all_user_settings()
@@ -190,14 +196,14 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
             await query.edit_message_text("Are you sure you want to toggle the routine?", reply_markup=tr_markup)
 
         elif query.data == "c_tr_sure":
-            with open("data/routine/lab_routine.txt", "r+", encoding="utf-8") as f:
-                active = f.read()
-                f.seek(0)
-                f.truncate(0)
+            async with aiofiles.open("data/routine/lab_routine.txt", "r+", encoding="utf-8") as f:
+                active = await f.read()
+                await f.seek(0)
+                await f.truncate(0)
                 if active == "first":
-                    f.write("second")
+                    await f.write("second")
                 elif active=="second":
-                    f.write("first")
+                    await f.write("first")
                 await query.edit_message_text("Routine Succesfully Toggled.")
 
         elif query.data == "c_tr_cancel":
@@ -222,8 +228,8 @@ async def button_handler(update:Update, content:ContextTypes.DEFAULT_TYPE) -> No
                         [InlineKeyboardButton("Cancel", callback_data="cancel")]
                 ]
                 markup = InlineKeyboardMarkup(keyboard)
-                with open("data/info/admin_help.shadow", "rb") as file:
-                    help_data = g_ciphers.decrypt(secret_nonce, file.read(), None).decode("utf-8")
+                async with aiofiles.open("data/info/admin_help.shadow", "rb") as file:
+                    help_data = g_ciphers.decrypt(secret_nonce, await file.read(), None).decode("utf-8")
                     help_data = help_data if help_data else "Sorry no document. Try again later."
                 await query.edit_message_text(help_data, reply_markup=markup)
             else:

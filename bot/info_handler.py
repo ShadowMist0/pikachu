@@ -16,7 +16,7 @@ from utils.config import(
 )
 import httpx
 from telegram.constants import ChatAction
-
+import aiofiles
 
 
 
@@ -27,9 +27,9 @@ from telegram.constants import ChatAction
 
 
 #function to identify it is lab for 1st 30 or 2nd 30
-def lab_participant():
-    with open("data/routine/lab_routine.txt", "r", encoding="utf-8") as f:
-        data = f.read()
+async def lab_participant():
+    async with aiofiles.open("data/routine/lab_routine.txt", "r", encoding="utf-8") as f:
+        data = await f.read()
     lab = [0, '0']
     start_date = datetime.strptime("3-7-2025", "%d-%m-%Y")
     today = datetime.now()
@@ -57,7 +57,7 @@ def lab_participant():
 
 async def routine_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        lab = lab_participant()
+        lab = await lab_participant()
         if lab[0]:
             rt = "data/routine/rt1.png"
         else:
@@ -66,7 +66,8 @@ async def routine_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) 
             [InlineKeyboardButton("Live Routine", url="https://routine-c.vercel.app")]
         ]
         routine_markup = InlineKeyboardMarkup(keyboard)
-        with open(rt, "rb") as photo:
+        async with aiofiles.open(rt, "rb") as photo:
+            photo = await photo.read()
             await content.bot.send_photo(update.effective_chat.id, photo, caption = f"This routine is applicable from {lab[1]}.", reply_markup=routine_markup)
     except Exception as e:
         print(f"Error in routine_handler function.\n\n Error Code -{e}")

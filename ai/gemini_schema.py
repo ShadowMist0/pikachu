@@ -38,7 +38,8 @@ from utils.db import(
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from ext.user_content_tools import reset
 from types import SimpleNamespace
-
+import aiosqlite
+import aiofiles
 
 
 
@@ -90,9 +91,10 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
 
 async def search_online(user_message, api, settings):
     try:
-        tools=[]
-        tools.append(types.Tool(google_search=types.GoogleSearch))
-        tools.append(types.Tool(url_context=types.UrlContext))
+        tools=[
+            types.Tool(google_search=types.GoogleSearch),
+            types.Tool(url_context=types.UrlContext)
+        ]
         
         if settings[2] == "gemini-2.5-pro" or settings[2] == "gemini-2.5-flash":
             config = types.GenerateContentConfig(
@@ -277,13 +279,15 @@ async def get_group_data(update:Update, content:ContextTypes.DEFAULT_TYPE, user_
             msg = await msg_obj.edit_text("Analyzing huge chunk of data, please wait...")
         else:
             msg = await update.message.reply_text("Analyzing huge chunk of data, please wait...")
-        tools=[]
-        tools.append(types.Tool(google_search=types.GoogleSearch))
-        tools.append(types.Tool(url_context=types.UrlContext))
+        tools=[
+            types.Tool(google_search=types.GoogleSearch),
+            types.Tool(url_context=types.UrlContext)
+        ]
+        
         if func_name == "get_group_data":
             data = "****TRAINING DATA****\n\n"
-            with open("data/info/group_training_data.shadow", "rb") as f:
-                data += g_ciphers.decrypt(secret_nonce, f.read(), None).decode("utf-8")
+            async with asyncio.open("data/info/group_training_data.shadow", "rb") as f:
+                data += g_ciphers.decrypt(secret_nonce, await f.read(), None).decode("utf-8")
             data += "\n\n****END OF TRAINIG DATA****\n\n"
             data += user_message
         elif func_name == "get_ct_data":
@@ -401,16 +405,16 @@ async def add_memory_content(update:Update, content:ContextTypes.DEFAULT_TYPE, d
         nonce = bytes.fromhex(all_user_info[user_id][7])
         ciphers = AESGCM(key)
         if os.path.exists(f"data/memory/memory-{user_id}.shadow"):
-            with open(f"data/memory/memory-{user_id}.shadow", "rb") as file:
-                mem_data = file.read()
+            async with aiofiles.open(f"data/memory/memory-{user_id}.shadow", "rb") as file:
+                mem_data = await file.read()
                 if mem_data:
                     pre_mem = ciphers.decrypt(nonce, mem_data, None).decode("utf-8")
                 else:
                     pre_mem = ""
             mem = pre_mem + data
             mem = ciphers.encrypt(nonce, mem.encode("utf-8"), None)
-            with open(f"data/memory/memory-{user_id}.shadow", "wb") as file:
-                file.write(mem)
+            async with aiofiles.open(f"data/memory/memory-{user_id}.shadow", "wb") as file:
+                await file.write(mem)
     except Exception as e:
         print(f"Error in add_memory_content function.\n\nError Code - {e}")
 
@@ -527,11 +531,16 @@ async def gemini_non_stream(update:Update, content:ContextTypes.DEFAULT_TYPE, us
                     if hasattr(part, "text") and part.text is not None:
                         if tmsg:
                             await tmsg.edit_text(part.text)
+                            tmsg = None
                         else:
                             await update.message.reply_text(part.text)
                     if hasattr(part, "function_call") and part.function_call is not None:
-                        tmsg = await update.message.reply_text("Searching...")
-                        response = await search_online(function_call.args["query"], api, settings)
+                        if not tmsg:
+                            tmsg = await update.message.reply_text("Searching...")
+                        else:
+                            tmsg = await tmsg.edit_text("Searching...")
+                        query = user_message + f"[!COMMAND: Search online and collect all the necessary information to provide a accurate and helpful response. Specially search with this query: {function_call.args['query']}]"
+                        response = await search_online(query, api, settings)
                         if response.text is not None:
                             await send_message(update, content, response, usr_msg, tmsg)
 

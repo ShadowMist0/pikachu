@@ -22,7 +22,7 @@ from utils.config import(
     g_ciphers,
     secret_nonce
 )
-
+import aiofiles
 
 
 
@@ -57,7 +57,7 @@ async def start(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
 
         for path in paths:
             if not os.path.exists(path):
-                with open(path, "wb", encoding = "utf-8") as f:
+                async with aiofiles.open(path, "wb", encoding = "utf-8") as f:
                     pass
         if user_id in all_users:
             await update.message.reply_text("Hi there, I am your personal assistant. If you need any help feel free to ask me.", reply_markup=reply_markup)
@@ -83,8 +83,8 @@ async def help(update: Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             [InlineKeyboardButton("Read Documentation", url = "https://github.com/sifat1996120/Phantom_bot")]
         ]
         help_markup = InlineKeyboardMarkup(keyboard)
-        with open("data/info/help.shadow", "rb") as file:
-            await update.message.reply_text(g_ciphers.decrypt(secret_nonce, file.read(), None).decode("utf-8"), reply_markup=help_markup)
+        async with aiofiles.open("data/info/help.shadow", "rb") as file:
+            await update.message.reply_text(g_ciphers.decrypt(secret_nonce, await file.read(), None).decode("utf-8"), reply_markup=help_markup)
     except Exception as e:
         print(f"Error in help function. \n\n Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in help function. \n\n Error Code - {e}")
@@ -108,7 +108,6 @@ async def admin_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) ->
             ]
             admin_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text("Given operation will circulate among all registered user.", parse_mode="Markdown", reply_markup=admin_markup)
-            await update.message.delete()
         else:
             await update.message.reply_text("Sorry you are not an Admin.")
     except Exception as e:
