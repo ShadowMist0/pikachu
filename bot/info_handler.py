@@ -111,7 +111,8 @@ async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
                             'date': ct_date,
                             'days_left': days_left,
                             'teacher': ct.get('teacher', 'Not specified'),
-                            'syllabus': ct.get('syllabus', 'No syllabus')
+                            'syllabus': ct.get('syllabus', 'No syllabus'),
+                            'type': ct.get('type','CT')
                         })
                 except (KeyError, ValueError) as e:
                     print(f"Skipping malformed CT {ct_id}: {e}")
@@ -124,7 +125,6 @@ async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
             upcoming.sort(key=lambda x: x['date'])
 
             # Format message
-            stype = "CT"
             
             message = ["📅 <b> Current Schedule </b>"]
             for i, ct in enumerate(upcoming):
@@ -136,14 +136,10 @@ async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
                 else:
                     message.append(f"\n📅 {ct['subject']}")
                 
-                try:
-                    stype = ct['type']
-                except Exception as e:
-                    stype = "CT"
 
                 message.append(
                     f"🗓️ {date_str} ({days_text})\n"
-                    f"🎉 {stype}\n"
+                    f"🎉 {ct['type']}\n"
                     f"👨‍🏫 {ct['teacher']}\n"
                     f"📖 {ct['syllabus']}"
                 )
