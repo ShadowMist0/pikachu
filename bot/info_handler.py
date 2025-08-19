@@ -124,6 +124,8 @@ async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
             upcoming.sort(key=lambda x: x['date'])
 
             # Format message
+            stype = "CT"
+            
             message = ["📅 <b> Current Schedule </b>"]
             for i, ct in enumerate(upcoming):
                 days_text = f"{ct['days_left']+1} days"
@@ -133,10 +135,13 @@ async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
                     message.append(f"\n⏰ <b>NEXT:</b> {ct['subject']}")
                 else:
                     message.append(f"\n📅 {ct['subject']}")
+                
+                if ct['type']:
+                    stype = ct['type']
 
                 message.append(
                     f"🗓️ {date_str} ({days_text})\n"
-                    f"🎉 {ct['type']}\n"
+                    f"🎉 {stype}\n"
                     f"👨‍🏫 {ct['teacher']}\n"
                     f"📖 {ct['syllabus']}"
                 )
