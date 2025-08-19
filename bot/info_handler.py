@@ -136,8 +136,10 @@ async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
                 else:
                     message.append(f"\n📅 {ct['subject']}")
                 
-                if ct['type']:
+                try:
                     stype = ct['type']
+                except Exception as e:
+                    stype = "CT"
 
                 message.append(
                     f"🗓️ {date_str} ({days_text})\n"
