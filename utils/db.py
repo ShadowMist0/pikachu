@@ -147,7 +147,7 @@ async def initialize_bot():
         
     tokens = await get_token()
     if tokens:
-        TOKEN = tokens[2]
+        TOKEN = tokens[0]
 
 
 

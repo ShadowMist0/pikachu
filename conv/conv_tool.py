@@ -61,7 +61,7 @@ from utils.db import (
     load_all_user_settings
 )
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
+import aiofiles
 
 
 
@@ -74,8 +74,8 @@ async def api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> None:
             return
         keyboard = [[InlineKeyboardButton("cancel", callback_data="cancel_conv")]]
         markup = InlineKeyboardMarkup(keyboard)
-        with open("data/info/getting_api.shadow", "rb") as f:
-            data = g_ciphers.decrypt(secret_nonce, f.read(), None).decode("utf-8")
+        async with aiofiles.open("data/info/getting_api.shadow", "rb") as f:
+            data = g_ciphers.decrypt(secret_nonce, await f.read(), None).decode("utf-8")
             await update.message.reply_text(data, reply_markup=markup)
         return 1
     except Exception as e:
@@ -103,7 +103,7 @@ async def handle_api(update : Update, content : ContextTypes.DEFAULT_TYPE) -> No
                 and len(user_api) >= 39
                 and chunk
             ):
-                await asyncio.to_thread(db["API"].update_one,
+                await mdb["API"].update_one(
                     {"type" : "api"},
                     {"$push" : {"gemini_api" : user_api}}
                 )
@@ -174,8 +174,8 @@ async def manage_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None
         except:
             pass
         given_password = update.message.text.strip()
-        with open("data/admin/admin_password.shadow", "rb") as file:
-            password = fernet.decrypt(file.read().strip()).decode("utf-8")
+        async with aiofiles.open("data/admin/admin_password.shadow", "rb") as file:
+            password = fernet.decrypt(await file.read().strip()).decode("utf-8")
         if password != given_password:
             await update.message.reply_text("Wrong Password.")
             return ConversationHandler.END
@@ -237,8 +237,7 @@ async def add_or_delete_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) 
         global all_admins
         if action == "add_admin":
             if user_id not in all_admins:
-                await asyncio.to_thread(
-                    db["admin"].update_one, 
+                await mdb["admin"].update_one(
                     {"type" : "admin"},
                     {"$push" : {"admin" : user_id}}
                 )
@@ -250,14 +249,12 @@ async def add_or_delete_admin(update:Update, content:ContextTypes.DEFAULT_TYPE) 
         elif action == "delete_admin":
             if user_id in all_admins or str(user_id) in all_admins:
                 try:
-                    await asyncio.to_thread(
-                        db["admin"].update_one, 
+                    await mdb["admin"].update_one(
                         {"type" : "admin"},
                         {"$pull" : {"admin" : user_id}}
                     )
                 except:
-                    await asyncio.to_thread(
-                        db["admin"].update_one, 
+                    await mdb["admin"].update_one(
                         {"type" : "admin"},
                         {"$pull" : {"admin" : str(user_id)}}
                     )
@@ -379,8 +376,8 @@ async def roll_action(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 content.user_data["roll"] = roll
                 keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
                 markup = InlineKeyboardMarkup(keyboard)
-                with open("data/info/getting_api.shadow", "rb") as file:
-                    help_data = add_escape_character(g_ciphers.decrypt(secret_nonce, file.read(), None).decode("utf-8"))
+                async with aiofiles.open("data/info/getting_api.shadow", "rb") as file:
+                    help_data = add_escape_character(g_ciphers.decrypt(secret_nonce, await file.read(), None).decode("utf-8"))
                 msg = await update.message.reply_text(help_data, reply_markup=markup, parse_mode="MarkdownV2")
                 content.user_data["ra_message_id"] = msg.message_id
                 await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
@@ -404,8 +401,8 @@ async def take_user_password(update:Update, content:ContextTypes.DEFAULT_TYPE) -
         if user_password == password:
             keyboard = [[InlineKeyboardButton("Skip", callback_data="c_skip"),InlineKeyboardButton("Cancel",callback_data="cancel_conv")]]
             markup = InlineKeyboardMarkup(keyboard)
-            with open("data/info/getting_api.shadow", "rb") as file:
-                help_data = add_escape_character(g_ciphers.decrypt(secret_nonce, file.read(), None).decode("utf-8"))
+            async with aiofiles.open("data/info/getting_api.shadow", "rb") as file:
+                help_data = add_escape_character(g_ciphers.decrypt(secret_nonce, await file.read(), None).decode("utf-8"))
                 msg = await update.message.reply_text(help_data, reply_markup=markup, parse_mode="MarkdownV2")
             content.user_data["ra_message_id"] = msg.message_id
             await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("tg_message_id"))
@@ -460,7 +457,7 @@ async def handle_api_conv(update : Update, content : ContextTypes.DEFAULT_TYPE) 
                 and len(user_api) >= 39
                 and response.text
             ):
-                await asyncio.to_thread(db["API"].update_one,
+                await mdb["API"].update_one(
                     {"type" : "api"},
                     {"$push" : {"gemini_api" : user_api}}
                 )
@@ -519,7 +516,7 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
         global gemini_api_keys,all_user_info
         is_guest = content.user_data.get("guest")
         keyboard = [
-            ["Routine", "CT"],
+            ["Routine", "Schedule"],
             ["⚙️Settings", "🔗Resources"]
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
@@ -602,12 +599,12 @@ async def confirm_password(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 all_settings.update(all_settings_local)
                 all_user_info.update(all_user_info_local)
 
-                if not os.path.exists(f"data/Conversation/conversatioon-{user_id}.shadow"):
-                    with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
+                if not os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
+                    async with aiofiles.open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
                         pass
                 
                 if not os.path.exists(f"data/memory/memory-{user_id}.shadow"):
-                    with open(f"data/memory/memory-{user_id}.shadow", "wb") as f:
+                    async with aiofiles.open(f"data/memory/memory-{user_id}.shadow", "wb") as f:
                         pass
                 
                 if user_info[3] == 0:
@@ -682,10 +679,9 @@ async def take_temperature(update:Update, content:ContextTypes.DEFAULT_TYPE):
             await conn.execute("UPDATE user_settings SET temperature = ? WHERE id = ?", (data, user_id))
             await conn.commit()
             await conn.close()
-            await asyncio.to_thread(
-                db[f"{user_id}"].update_one,
-                    {"id" : user_id},
-                    {"$set" : {"settings.4":data}}
+            await mdb[f"{user_id}"].update_one(
+                {"id" : user_id},
+                {"$set" : {"settings.4":data}}
             )
             global all_settings
             new_settings = await load_all_user_settings()
@@ -743,10 +739,9 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 await conn.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
                 await conn.commit()
                 await conn.close()
-                await asyncio.to_thread(
-                    db[f"{user_id}"].update_one,
-                        {"id" : user_id},
-                        {"$set" : {"settings.3":data}}
+                await mdb[f"{user_id}"].update_one(
+                    {"id" : user_id},
+                    {"$set" : {"settings.3":data}}
                 )
                 await update.message.reply_text(f"Thinking Budget is successfully set to {data}.")
                 global all_settings
@@ -761,10 +756,9 @@ async def take_thinking(update:Update, content:ContextTypes.DEFAULT_TYPE):
                 await conn.execute("UPDATE user_settings SET thinking_budget = ? WHERE id = ?", (data, user_id))
                 await conn.commit()
                 await conn.close()
-                await asyncio.to_thread(
-                db[f"{user_id}"].update_one,
-                        {"id" : user_id},
-                        {"$set" : {"settings.3":data}}
+                await mdb[f"{user_id}"].update_one(
+                    {"id" : user_id},
+                    {"$set" : {"settings.3":data}}
                 )
                 await update.message.reply_text(f"Thinking Budget is successfully set to {data}. Gemini 2.5 pro only works with thinking budget greater than 128.")
                 await content.bot.delete_message(chat_id=user_id, message_id=content.user_data.get("t_message_id"))
@@ -812,7 +806,7 @@ async def take_model_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
                     contents = "hi, respond in one word.",
                     )
                     response.text
-                    await asyncio.to_thread(db["ai_model"].update_one,
+                    await mdb["ai_model"].update_one(
                         {"type" : "gemini_model_name"},
                         {"$push" : {"model_name" : data}}
                     )
@@ -828,7 +822,7 @@ async def take_model_name(update:Update, content:ContextTypes.DEFAULT_TYPE):
             if data not in gemini_model_list:
                 await update.message.reply_text(f"Sorry there is no model named {data}")
             else:
-                await asyncio.to_thread(db["ai_model"].update_one,
+                await mdb["ai_model"].update_one(
                         {"type" : "gemini_model_name"},
                         {"$pull" : {"model_name" : data}}
                     )
@@ -934,7 +928,7 @@ async def take_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
         message = update.message or update.edited_message
         keyboard = [
-            ["Routine", "CT"],
+            ["Routine", "Schedule"],
             ["⚙️Settings", "🔗Resources"]
         ]
         markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
@@ -961,10 +955,10 @@ async def take_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
             "absent" : [],
             "distance" : []
         }
-        with open(f"data/info/location-{date}-{subject}.txt", "w") as f:
-            f.write(f"{location.latitude}\n{location.longitude}")
-        with open("data/info/active_attendance.txt", "w") as f:
-            f.write(f"{subject}-{teacher}")
+        async with aiofiles.open(f"data/info/location-{date}-{subject}.txt", "w") as f:
+            await f.write(f"{location.latitude}\n{location.longitude}")
+        async with aiofiles.open("data/info/active_attendance.txt", "w") as f:
+            await f.write(f"{subject}-{teacher}")
         collection.insert_one(data)
         content.user_data["message_id"] = msg.message_id
         asyncio.create_task(circulate_attendance(update, content, teacher, subject, limit))
@@ -1000,8 +994,9 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
         os.makedirs("data/media", exist_ok=True)
         all_rolls = [roll for roll in range(2403121, 2403181)]
         date = datetime.today().strftime("%d-%m-%Y")
-        with open("data/info/active_attendance.txt", "r") as f:
-            list = f.read().split("-")
+        async with aiofiles.open("data/info/active_attendance.txt", "r") as f:
+            file_content = await f.read()
+            list = file_content.split("-")
         present_students = tuple(db[f"Attendance-{date}"].find_one({"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"})["present"])
         student_data = db["names"].find_one({"type" : "official_data"})["data"]
         pdf = FPDF()
@@ -1049,8 +1044,8 @@ async def process_attendance_data(update:Update, content:ContextTypes.DEFAULT_TY
         pdf.cell(25, 6, "Absent", border=1 , align="C")
         pdf.cell(70, 6, f"{60 - len(present_students)}      ({round(((60 - len(present_students))/60)*100, 2)}%)", border=1, align="C")
         pdf.output(f"data/media/attendance-{date}-{list[0]}.pdf")
-        with open(f"data/media/attendance-{date}-{list[0]}.pdf", "rb") as f:
-            pdf_file = BytesIO(f.read())
+        async with aiofiles.open(f"data/media/attendance-{date}-{list[0]}.pdf", "rb") as f:
+            pdf_file = BytesIO(await f.read())
             pdf_file.name = f"attendance-{date}-{list[0]}.pdf"
         for admin in all_admins:
             try:
@@ -1123,36 +1118,38 @@ async def take_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
 async def verify_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE):
     try:
         date = datetime.today().strftime("%d-%m-%Y")
-        with open("data/info/active_attendance.txt", "r") as f:
-            list = f.read().split("-")
+        async with aiofiles.open("data/info/active_attendance.txt", "r") as f:
+            file_content = await f.read()
+            list = file_content.split("-")
         try:
-            with open(f"data/info/location-{date}-{list[0]}.txt") as file:
-                cr_location = (loc.strip() for loc in file.readlines())
+            async with aiofiles.open(f"data/info/location-{date}-{list[0]}.txt") as file:
+                cr_location_lines = await file.readlines()
+                cr_location = tuple(float(loc.strip()) for loc in cr_location_lines)
         except Exception as e:
             print("The location file may not exists")
             return ConversationHandler.END
         message = update.message or update.edited_message
-        if not message.location:
-            await message.reply_text("Enter your location not some random message.")
+        if not message or not message.location:
+            await message.reply_text("Enter your location, not some random message.")
             if os.path.exists(f"data/info/location-{date}-{list[0]}.txt"):
                 return "VL"
             else:
-                await message.reply_text("Time limit exceded, Contact CR if you are facing problem.")
+                await message.reply_text("Time limit exceeded, Contact CR if you are facing problem.")
                 return ConversationHandler.END
-        elif not message.location.live_period:
-            await message.reply_text("Sorry static location will not work, give a live location.")
+        elif not getattr(message.location, 'live_period', None):
+            await message.reply_text("Sorry, static location will not work, give a live location.")
             if os.path.exists(f"data/info/location-{date}-{list[0]}.txt"):
                 return "VL"
             else:
-                await message.reply_text("Time limit exceded, Contact CR if you are facing problem.")
+                await message.reply_text("Time limit exceeded, Contact CR if you are facing problem.")
                 return ConversationHandler.END
-        if message.location and message.location.live_period:
+        if message.location and getattr(message.location, 'live_period', None):
             location = message.location
             message_time = message.date.replace(tzinfo=timezone.utc)
             now = datetime.now(timezone.utc)
             message_age = (now - message_time).total_seconds()
             if message_age > 20:
-                await message.reply_text("Sorry scammig is not allowed. Your location is not fresh. If there is an acitve live location sharing stop it and try again.")
+                await message.reply_text("Sorry, scamming is not allowed. Your location is not fresh. If there is an active live location sharing, stop it and try again.")
                 return "VL"
             user_location = (location.latitude, location.longitude)
             user_id = update.effective_user.id
@@ -1161,24 +1158,22 @@ async def verify_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE)
             info = await cursor.fetchone()
             user_roll = info[1]
             await conn.close()
-            
-
-            #logic to handle the location difference
+            # logic to handle the location difference
             allowed_distance = 200
             distance = geodesic(cr_location, user_location).meters
             if distance >= allowed_distance:
-                await message.reply_text(f"You are not allowed to take the attendance as you are {distance} meters away from CR. If you are facing problem contact admin")
+                await message.reply_text(f"You are not allowed to take the attendance as you are {distance:.2f} meters away from CR. If you are facing problem contact admin")
                 return ConversationHandler.END
             elif user_roll == 0:
-                await message.reply_text(f"Guest member are not allowed to take attendance.")
+                await message.reply_text(f"Guest members are not allowed to take attendance.")
                 return ConversationHandler.END
             else:
-                collection = db[f"Attendance-{date}"]
-                collection.update_one(
+                collection = mdb[f"Attendance-{date}"]
+                await collection.update_one(
                     {"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"},
                     {"$push" : {"present" : user_roll}}
                 )
-                collection.update_one(
+                await collection.update_one(
                     {"type" : f"attendance-{date}", "teacher" : f"{list[1]}", "subject" : f"{list[0]}"},
                     {"$push" : {"distance" : {f"{user_roll}" : distance}}}
                 )
@@ -1187,7 +1182,7 @@ async def verify_user_location(update:Update, content:ContextTypes.DEFAULT_TYPE)
         else:
             return ConversationHandler.END
     except Exception as e:
-        print(f"Error in verify_user_location functin.\n\n Error Code - {e}")
+        print(f"Error in verify_user_location function.\n\nError Code - {e}")
         return ConversationHandler.END
 
 

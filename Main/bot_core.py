@@ -80,9 +80,11 @@ async def main():
         await load_all_files()                              #loading all the files
         await db_utils.populate_db_caches()                 #Loading all data into ram
 
+        TOKENs = await db_utils.get_token()                   #getting the bot token
+        TOKEN = TOKENs[2]
 
         #Initializing the main telegram bot application
-        bot_app = ApplicationBuilder().token(db_utils.TOKEN).request(tg_request).concurrent_updates(True).build()
+        bot_app = ApplicationBuilder().token(TOKEN).request(tg_request).concurrent_updates(True).build()
 
         # Add webhook handler to the FastAPI app
         @web_app.post(f"/{db_utils.TOKEN}")

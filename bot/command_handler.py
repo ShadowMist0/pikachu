@@ -101,9 +101,8 @@ async def admin_handler(update : Update, content : ContextTypes.DEFAULT_TYPE) ->
         if user_id in all_admins:
             keyboard = [
                 [InlineKeyboardButton("Circulate CT Routine", callback_data="c_circulate_ct"), InlineKeyboardButton("Take Attendance", callback_data="c_take_attendance")],
-                [InlineKeyboardButton("Circulate Message", callback_data="c_circulate_message"), InlineKeyboardButton("Show All User", callback_data="c_show_all_user")],
-                [InlineKeyboardButton("Circulate Routine", callback_data="c_circulate_routine"), InlineKeyboardButton("Toggle Routine", callback_data="c_toggle_routine")],
-                [InlineKeyboardButton("Manage Admin", callback_data="c_manage_admin"), InlineKeyboardButton("Manage AI Model", callback_data="c_manage_ai_model")],
+                [InlineKeyboardButton("Circulate Message", callback_data="c_circulate_message"), InlineKeyboardButton("Circulate Routine", callback_data="c_circulate_routine")],
+                [InlineKeyboardButton("Toggle Routine", callback_data="c_toggle_routine"), InlineKeyboardButton("Edit Schedule", url="https://routine-c.vercel.app/ct")],
                 [InlineKeyboardButton("cancel", callback_data="cancel")]
             ]
             admin_markup = InlineKeyboardMarkup(keyboard)

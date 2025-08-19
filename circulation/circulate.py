@@ -21,6 +21,8 @@ import asyncio
 from utils.utils import add_escape_character
 from utils.db import all_users
 import httpx
+import aiofiles
+import os
 
 
 
@@ -274,11 +276,14 @@ async def circulate_routine(query, content:ContextTypes.DEFAULT_TYPE) -> None:
         tasks = []
         failed_list = "Failed to send routine to those user:\n"
 
+        if os.path.exists(rt):
+            async with aiofiles.open(rt, "rb") as photo:
+                photo = await photo.read()
+
         async def send_ct_routine(user):
                 nonlocal failed, failed_list
                 try:
-                    with open(rt,"rb") as photo:
-                        await content.bot.send_photo(chat_id=user, photo=photo, caption="Renewed Routine")
+                    await content.bot.send_photo(chat_id=user, photo=photo, caption="Renewed Routine")
                     return True
                 except:
                     failed += 1
@@ -314,7 +319,7 @@ async def circulate_attendance(update:Update, content:ContextTypes.DEFAULT_TYPE,
         ]
         rmarkup = ReplyKeyboardMarkup(rkeyboard, resize_keyboard=True, one_time_keyboard=False, selective=False, is_persistent=True)
         await content.bot.delete_message(chat_id=update.effective_user.id, message_id=content.user_data.get("message_id"))
-        message = await update.message.reply_text("The attendace circular has been circulated successfully. Please wait the time limit to end..", reply_markup=rmarkup)
+        await update.message.reply_text("The attendace circular has been circulated successfully. Please wait the time limit to end..", reply_markup=rmarkup)
         failed = 0
         tasks = []
         user_id = update.effective_user.id
@@ -354,7 +359,7 @@ async def circulate_attendance(update:Update, content:ContextTypes.DEFAULT_TYPE,
                 f"📋 Attendance Circular sent to {sent} users\n"
                 f"⚠️ Failed to send to {failed} users\n"
             )
-        await message.edit_text(report, reply_markup=rmarkup)
+        await update.message.reply_text(report, reply_markup=rmarkup)
         if failed != 0:
             await update.message.reply_text(failed_list)
             msg = await update.message.reply_text(data, reply_markup=markup, parse_mode="Markdown")

@@ -54,7 +54,7 @@ async def send_message(update : Update, content : ContextTypes.DEFAULT_TYPE, res
         if message.chat.type == "private":
             await save_conversation(user_message, message_to_send, update.effective_user.id)
         elif message.chat.type != "private":
-            await asyncio.to_thread(save_group_conversation, update, user_message, message_to_send)
+            await save_group_conversation(update, user_message, message_to_send)
     except Exception as e:
         print(f"Error in send_message function Error Code - {e}")
         await send_to_channel(update, content, channel_id, f"Error in send_message function \n\nError Code -{e}")

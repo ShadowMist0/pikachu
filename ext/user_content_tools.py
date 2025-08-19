@@ -1,6 +1,7 @@
 import time
 from utils.config import (
     db,
+    mdb,
     mongo_url,
     fernet,
     channel_id,
@@ -31,7 +32,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from flask import request
 import aiofiles
 from motor.motor_asyncio import AsyncIOMotorClient
-
+import aiosqlite
 
 
 
@@ -42,42 +43,41 @@ mdb = AsyncIOMotorClient(mongo_url)["phantom_bot"]
 
 
 #A function to delete n times convo from conversation history
-def delete_n_convo(user_id, n):
+async def delete_n_convo(user_id, n):
     try:
         key = bytes.fromhex(all_user_info[user_id][6])
         nonce = bytes.fromhex(all_user_info[user_id][7])
         ciphers = AESGCM(key)
-        conn = sqlite3.connect("user_media/user_media.db")
-        c = conn.cursor()
-        c.execute("select media_path from user_media where user_id = ?", (user_id,))
-        paths = c.fetchall()
+        conn = await aiosqlite.connect("user_media/user_media.db")
+        c = await conn.execute("select media_path from user_media where user_id = ?", (user_id,))
+        paths = await c.fetchall()
         if user_id < 0:
-            with open(f"data/Conversation/conversation-group.txt", "r+", encoding="utf-8") as f:
-                data = f.read()
+            async with aiofiles.open(f"data/Conversation/conversation-group.txt", "r+", encoding="utf-8") as f:
+                data = await f.read()
                 data = data.split("You: ")
                 if len(data) >= n+1:
                     data = data[n:]
-                    f.seek(0)
-                    f.truncate(0)
+                    await f.seek(0)
+                    await f.truncate(0)
                     data =  "You: ".join(data)
-                    f.write(data)
-                    db[f"group"].update_one(
+                    await f.write(data)
+                    await mdb[f"group"].update_one(
                         {"id" : "group"},
                         {"$set" : {"conversation" : data}}
                     )
                 elif len(data)-n > n:
                     data = data[-n:]
-                    f.seek(0)
-                    f.truncate(0)
+                    await f.seek(0)
+                    await f.truncate(0)
                     data = "You: ".join(data)
-                    f.write(data)
-                    db[f"group"].update_one(
+                    await f.write(data)
+                    await mdb[f"group"].update_one(
                         {"id" : "group"},
                         {"$set" : {"conversation" : data}}
                     )
             return
-        with open(f"data/Conversation/conversation-{user_id}.shadow", "rb") as f:
-            data = ciphers.decrypt(nonce, f.read(), None).decode("utf-8")
+        async with aiofiles.open(f"data/Conversation/conversation-{user_id}.shadow", "rb") as f:
+            data = ciphers.decrypt(nonce, await f.read(), None).decode("utf-8")
             data = data.split("You: ")
 
             if len(data) >= n+1 and len(data)-n < n:
@@ -88,26 +88,26 @@ def delete_n_convo(user_id, n):
             data = "You: ".join(data)
             data = ciphers.encrypt(nonce, data.encode("utf-8"), None)
 
-            with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
-                f.write(data)
-            
-            db[f"{user_id}"].update_one(
+            async with aiofiles.open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
+                await f.write(data)
+
+            await mdb[f"{user_id}"].update_one(
                 {"id" : user_id},
                 {"$set" : {"conversation" : data}}
             )
 
-        with open(f"data/Conversation/conversation-{user_id}.txt", "rb") as file:
-            conv_data = ciphers.decrypt(nonce, file.read(), None).decode("utf-8")
+        async with aiofiles.open(f"data/Conversation/conversation-{user_id}.txt", "rb") as file:
+            conv_data = ciphers.decrypt(nonce, await file.read(), None).decode("utf-8")
             if not paths:
                 return
             for path in paths:
                 path = path[0]
                 if path not in conv_data:
-                    c.execute("delete from user_media where media_path = ?", (path,))
+                    await conn.execute("delete from user_media where media_path = ?", (path,))
                     if os.path.exists(path):
                         os.remove(path)
-        conn.commit()
-        conn.close()
+        await conn.commit()
+        await conn.close()
     except Exception as e:
         print(f"Failed to delete conversation history \n Error Code - {e}")
 
@@ -121,34 +121,34 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
         message = update.message or update.edited_message
         settings = await get_settings(update.effective_user.id)
         if user_id > 0:
-            with open("data/persona/memory_persona.shadow", "rb") as f:
-                instruction = g_ciphers.decrypt(secret_nonce, f.read(), None).decode("utf-8")
+            async with aiofiles.open("data/persona/memory_persona.shadow", "rb") as f:
+                instruction = g_ciphers.decrypt(secret_nonce, await f.read(), None).decode("utf-8")
             data = ""
-            with open(f"data/memory/memory-{user_id}.shadow", "rb", encoding = "utf-8") as f:
-                pre_mem = f.read()
+            async with aiofiles.open(f"data/memory/memory-{user_id}.shadow", "rb", encoding = "utf-8") as f:
+                pre_mem = await f.read()
                 if pre_mem:
                     try:
                         data += "***PREVIOUS MEMORY***\n\n" + ciphers.decrypt(nonce, pre_mem, None).decode("utf-8") + "\n\n***END OF MEMORY***\n\n"
                     except:
-                        with open(f"data/memory/memory-{user_id}.shadow", "wb") as f:
+                        async with aiofiles.open(f"data/memory/memory-{user_id}.shadow", "wb") as f:
                             pass
-                        db[f"{user_id}"].update_one(
+                        await mdb[f"{user_id}"].update_one(
                             {"id" : user_id},
                             {"$set" : {"memory" : None}}
                         )
-            with open(f"data/Conversation/conversation-{user_id}.shadow", "rb") as f:
+            async with aiofiles.open(f"data/Conversation/conversation-{user_id}.shadow", "rb") as f:
                 try:
-                    data += "\n\n***CONVERSATION HISTORY***\n\n" + ciphers.decrypt(nonce, f.read(), None).decode("utf-8") +  "\n\n***END OF CONVERSATION***\n\n"
+                    data += "\n\n***CONVERSATION HISTORY***\n\n" + ciphers.decrypt(nonce, await f.read(), None).decode("utf-8") +  "\n\n***END OF CONVERSATION***\n\n"
                 except:
                     await reset(update, content, None)
         elif user_id < 0:
             group_id = user_id
-            with open("data/persona/memory_persona.txt", "rb") as f:
-                instruction = g_ciphers.decrypt(secret_nonce, f.read(), None).decode("utf-8")
-            with open(f"data/memory/memory-group.txt", "r", encoding = "utf-8") as f:
-                data = "***PREVIOUS MEMORY***\n\n" + f.read() + "\n\n***END OF MEMORY***\n\n"
-            with open(f"data/Conversation/conversation-group.txt", "r", encoding = "utf-8") as f:
-                data += "\n\n***CONVERSATION HISTORY***\n\n" + f.read() + "\n\n***END OF CONVERSATION***\n\n" 
+            async with aiofiles.open("data/persona/memory_persona.txt", "rb") as f:
+                instruction = g_ciphers.decrypt(secret_nonce, await f.read(), None).decode("utf-8")
+            async with aiofiles.open(f"data/memory/memory-group.txt", "r", encoding = "utf-8") as f:
+                data = "***PREVIOUS MEMORY***\n\n" + await f.read() + "\n\n***END OF MEMORY***\n\n"
+            async with aiofiles.open(f"data/Conversation/conversation-group.txt", "r", encoding = "utf-8") as f:
+                data += "\n\n***CONVERSATION HISTORY***\n\n" + await f.read() + "\n\n***END OF CONVERSATION***\n\n"
         client = genai.Client(api_key=api)
         prompt = (
                 "\n\n Make memory based on the above data."
@@ -157,7 +157,7 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
                 "And cut out unnecessary information like timestamp, media description etc."
                 "And cut out unnecessary info in previous memory and conversation history."
             )
-        response = await asyncio.to_thread(client.models.generate_content,
+        response = await client.aio.models.generate_content(
             model = "gemini-2.5-flash",
             contents = data + prompt,
             config = types.GenerateContentConfig(
@@ -173,25 +173,25 @@ async def create_memory(update:Update, content:ContextTypes.DEFAULT_TYPE, api, u
             return True
         if response.text is not None:
             if user_id > 0:
-                with open(f"data/memory/memory-{user_id}.shadow", "wb") as f:
+                async with aiofiles.open(f"data/memory/memory-{user_id}.shadow", "wb") as f:
                     memory = ciphers.encrypt(nonce, response.text.encode("utf-8"), None)
-                    f.write(memory)
-                await asyncio.to_thread(db[f"{user_id}"].update_one,
-                    {"id" : user_id},
-                    {"$set" : {"memory" : memory}}
+                    await f.write(memory)
+                await mdb[f"{user_id}"].update_one(
+                    {"id": user_id},
+                    {"$set": {"memory": memory}}
                 )
-                await asyncio.to_thread(delete_n_convo, user_id, 15)
+                await delete_n_convo(user_id, 15)
             elif user_id < 0:
                 group_id = user_id
-                with open(f"data/memory/memory-group.txt", "a+", encoding="utf-8") as f:
-                    f.write(response.text)
-                    f.seek(0)
-                    memory = f.read()
-                await asyncio.to_thread(db[f"group"].update_one,
-                    {"id" : "group"},
-                    {"$set" : {"memory" : memory}}
+                async with aiofiles.open(f"data/memory/memory-group.txt", "a+", encoding="utf-8") as f:
+                    await f.write(response.text)
+                    await f.seek(0)
+                    memory = await f.read()
+                await mdb[f"group"].update_one(
+                    {"id": "group"},
+                    {"$set": {"memory": memory}}
                 )
-                await asyncio.to_thread(delete_n_convo, group_id,100)
+                await delete_n_convo(group_id, 100)
             return True
         else:
             if (gemini_api_keys.index(api) > len(gemini_api_keys)-3):
@@ -233,11 +233,11 @@ async def create_prompt(update:Update, content:ContextTypes.DEFAULT_TYPE, user_m
                     try:
                         data += "\n\n***MEMORY***\n" + ciphers.decrypt(nonce, mem_data, None).decode("utf-8")
                     except:
-                        with open(f"data/memory/memory-{user_id}.shadow", "wb") as f:
+                        async with aiofiles.open(f"data/memory/memory-{user_id}.shadow", "wb") as f:
                             pass
-                        db[f"{user_id}"].update_one(
-                            {"id" : user_id},
-                            {"$set" : {"memory" : None}}
+                        await mdb[f"{user_id}"].update_one(
+                            {"id": user_id},
+                            {"$set": {"memory": None}}
                         )
             async with aiofiles.open(f"data/Conversation/conversation-{user_id}.shadow", "rb") as f:
                 conv_data = await f.read()
@@ -319,16 +319,16 @@ async def save_conversation(user_message : str , gemini_response:str , user_id:i
 
 
 #function to save group conversation
-def save_group_conversation(update : Update,user_message, gemini_response):
+async def save_group_conversation(update : Update,user_message, gemini_response):
     try:
         name = update.effective_user.first_name or "X" +" "+ update.effective_user.last_name or "X"
-        with open(f"data/Conversation/conversation-group.txt", "a+", encoding="utf-8") as f:
-            f.write(f"\n{name}: {user_message}\nYou: {gemini_response}\n")
-            f.seek(0)
-            data = f.read()
-        db["group"].update_one(
-            {"id" : "group"},
-            {"$set" : {"conversation" : data}}
+        async with aiofiles.open(f"data/Conversation/conversation-group.txt", "a+", encoding="utf-8") as f:
+            await f.write(f"\n{name}: {user_message}\nYou: {gemini_response}\n")
+            await f.seek(0)
+            data = await f.read()
+        await mdb["group"].update_one(
+            {"id": "group"},
+            {"$set": {"conversation": data}}
         )
     except Exception as e:
         print(f"Error in saving conversation. \n\n Error Code - {e}")
@@ -359,11 +359,11 @@ async def background_memory_creation(update: Update,content,user_id):
 async def delete_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> None:
     try:
         user_id = update.effective_chat.id
-        with open(f"data/memory/memory-{update.callback_query.from_user.id}.shadow", "wb") as f:
+        async with aiofiles.open(f"data/memory/memory-{update.callback_query.from_user.id}.shadow", "wb") as f:
             pass
-        await asyncio.to_thread(db[f"{user_id}"].update_one,
-            {"id" : user_id},
-            {"$set" : {"memory" : None}}
+        await mdb[f"{user_id}"].update_one(
+            {"id": user_id},
+            {"$set": {"memory": None}}
         )
         await query.edit_message_text("You cleared my memory about you, It really makes me sad.")
     except Exception as e:
@@ -384,11 +384,11 @@ async def reset(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> 
             except:
                 pass
             if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
-                with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
+                async with aiofiles.open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
                     pass
-                await asyncio.to_thread(db[f"{user_id}"].update_one,
-                    {"id" : user_id},
-                    {"$set" : {"conversation" : None}}
+                await mdb[f"{user_id}"].update_one(
+                    {"id": user_id},
+                    {"$set": {"conversation": None}}
                 )
                 await query.edit_message_text("All clear, Now we are starting fresh.")
             else:
@@ -414,11 +414,11 @@ async def reset(update : Update, content : ContextTypes.DEFAULT_TYPE, query) -> 
             except:
                 pass
             if os.path.exists(f"data/Conversation/conversation-{user_id}.shadow"):
-                with open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
+                async with aiofiles.open(f"data/Conversation/conversation-{user_id}.shadow", "wb") as f:
                     pass
-                await asyncio.to_thread(db[f"{user_id}"].update_one,
-                    {"id" : user_id},
-                    {"$set" : {"conversation" : None}}
+                await mdb[f"{user_id}"].update_one(
+                    {"id": user_id},
+                    {"$set": {"conversation": None}}
                 )
                 await update.message.reply_text("All clear, Now we are starting fresh.")
             else:
@@ -456,10 +456,10 @@ async def see_memory(update : Update, content : ContextTypes.DEFAULT_TYPE, query
                 return
         except:
             pass
-        with open(f"data/memory/memory-{user_id}.shadow", "rb") as f:
-            mem_data = f.read()
+        async with aiofiles.open(f"data/memory/memory-{user_id}.shadow", "rb") as f:
+            mem_data = await f.read()
             if mem_data:
-                data = ciphers.decrypt(nonce, f.read(), None).decode("utf-8")
+                data = ciphers.decrypt(nonce, mem_data, None).decode("utf-8")
                 await query.edit_message_text("Here is my Diary about you:")
             
                 if len(data) > 4080:
