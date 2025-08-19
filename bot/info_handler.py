@@ -124,7 +124,7 @@ async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
             upcoming.sort(key=lambda x: x['date'])
 
             # Format message
-            message = ["📚 <b>Upcoming CTs</b>"]
+            message = ["📅 <b> Current Schedule </b>"]
             for i, ct in enumerate(upcoming):
                 days_text = f"{ct['days_left']+1} days"
                 date_str = ct['date'].strftime("%a, %d %b")
