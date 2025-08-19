@@ -138,7 +138,7 @@ async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
                 
 
                 message.append(
-                    f"❓ <u>``{ct['type']}``</u>\n"
+                    f"❓ <u>{ct['type']}</u>\n"
                     f"🗓️ {date_str} ({days_text})\n"
                     f"👨‍🏫 {ct['teacher']}\n"
                     f"📖 {ct['syllabus']}"
