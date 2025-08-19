@@ -132,7 +132,7 @@ async def handle_ct(update:Update, content:ContextTypes.DEFAULT_TYPE) -> None:
                 date_str = ct['date'].strftime("%a, %d %b")
 
                 if i == 0:
-                    message.append(f"\n⏰ <b>NEXT:</b><br><b> {ct['subject']}</b>")
+                    message.append(f"\n⏰ <b>NEXT:</b>\n<b> {ct['subject']}</b>")
                 else:
                     message.append(f"\n📅 <b>{ct['subject']}</b>")
                 
