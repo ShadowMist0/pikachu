@@ -94,7 +94,8 @@ async def inform_all(query, content:ContextTypes.DEFAULT_TYPE) -> None:
                             'date': ct_date,
                             'days_left': days_left,
                             'teacher': ct.get('teacher', 'Not specified'),
-                            'syllabus': ct.get('syllabus', 'No syllabus')
+                            'syllabus': ct.get('syllabus', 'No syllabus'),
+                            'type' : ct.get('type', 'CT')
                         })
                 except (KeyError, ValueError) as e:
                     print(f"Skipping malformed CT {ct_id}: {e}")
@@ -118,6 +119,7 @@ async def inform_all(query, content:ContextTypes.DEFAULT_TYPE) -> None:
                     message.append(f"\n📅 {ct['subject']}")
 
                 message.append(
+                    f"❓ <u>{ct['type']}</u>\n"
                     f"🗓️ {date_str} ({days_text})\n"
                     f"👨‍🏫 {ct['teacher']}\n"
                     f"📖 {ct['syllabus']}"
